@@ -1,8 +1,19 @@
 {
+	"type": "module",
+	"scripts": {
+		"start": "tsx src/mainLoop.ts",
+		"dev": "tsx watch src/mainLoop.ts",
+		"typecheck": "tsc -p tsconfig.json"
+	},
 	"dependencies": {
 		"@langchain/core": "^1.1.48",
 		"@langchain/langgraph": "^1.3.7",
 		"@langchain/openrouter": "^0.3.0",
 		"zod": "^4.4.3"
+	},
+	"devDependencies": {
+		"@types/node": "^25.9.2",
+		"tsx": "^4.22.4",
+		"typescript": "^6.0.3"
 	}
 }
