@@ -1,4 +1,5 @@
 import {
+    AIMessageChunk,
     HumanMessage,
     SystemMessage,
 } from "@langchain/core/messages";
@@ -27,11 +28,20 @@ const MessageState = new StateSchema({
 });
 
 const llm: GraphNode<typeof MessageState> = async (state) => {
-    const resp = await model.invoke(state.messages)
-    // const resp = new AIMessage(`mock llm resp: ${state.llmCalls}`);
-    console.log(resp)
+    const resp = await model.stream(state.messages)
+    let final = new AIMessageChunk({});
+    for await (const c of resp) {
+        if (c.additional_kwargs.reasoning_content) {
+            process.stdout.write(c.additional_kwargs.reasoning_content.toString());
+        }
+        final = final.concat(c)
+    }
+    process.stdout.write('\n ai: ')
+    for (const {text} of final.content as [{type:string,text:string}]) {
+        process.stdout.write(text)
+    }
     return {
-        messages: [resp],
+        messages: [final],
         llmCalls: 1,
     };
 };
@@ -42,8 +52,9 @@ const userInput: GraphNode<typeof MessageState> = async (state) => {
     rl.close()
     const messages = []
     if (state.messages.length === 0) messages.push(new SystemMessage("you are an LLM chat application, named as deepsleep"))
+    messages.push(line)
     return {
-        messages: [new HumanMessage(line)],
+        messages: messages,
     };
 };
 
@@ -65,5 +76,3 @@ const chat = new StateGraph(MessageState)
     .compile();
 
 const resp = await chat.invoke({})
-console.log(resp)
-console.log()
