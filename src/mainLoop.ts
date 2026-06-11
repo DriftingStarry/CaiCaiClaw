@@ -58,7 +58,7 @@ const userInput: GraphNode<typeof MessageState> = async (state) => {
     const messages = [];
     if (state.messages.length === 0)
         messages.push(new SystemMessage(localAgentPrompt));
-    messages.push(line);
+    messages.push(new HumanMessage(line));
     return {
         messages: messages,
     };
