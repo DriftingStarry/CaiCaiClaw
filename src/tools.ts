@@ -21,3 +21,10 @@ export const execTool = tool(
         })
     }
 )
+
+
+export const toolsByName = {
+    [execTool.name]:execTool
+}
+
+export const tools = Object.values(toolsByName)
