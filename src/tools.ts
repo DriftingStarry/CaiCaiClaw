@@ -32,4 +32,3 @@ export const toolsByName: Record<string, DynamicStructuredTool> = {
 
 export const tools = Object.values(toolsByName);
 
-console.log(tools);
