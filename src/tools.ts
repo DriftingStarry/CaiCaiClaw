@@ -1,4 +1,4 @@
-import { tool } from "@langchain/core/tools"
+import { DynamicStructuredTool, DynamicTool, Tool, tool } from "@langchain/core/tools"
 import {z} from 'zod/v4'
 import util from 'node:util';
 import child_process from 'node:child_process';
@@ -23,8 +23,10 @@ export const execTool = tool(
 )
 
 
-export const toolsByName = {
+export const toolsByName:Record<string, DynamicStructuredTool> = {
     [execTool.name]:execTool
 }
 
-export const tools = Object.values(toolsByName)
+export const tools= Object.values(toolsByName)
+
+console.log(tools)
