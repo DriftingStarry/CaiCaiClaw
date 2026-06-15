@@ -9,11 +9,18 @@ const exec = util.promisify(child_process.exec);
 
 export const execTool = tool(
     async ({ cmd }) => {
-        const { stdout, stderr } = await exec(cmd);
-        return {
-            stdout: stdout,
-            stderr: stderr,
-        };
+        try {
+            const { stdout, stderr } = await exec(cmd);
+            return {
+                stdout: stdout,
+                stderr: stderr,
+            };
+        } catch (e) {
+            return {
+                stdout: 'tool exec failed',
+                stderr: e
+            }
+        }
     },
     {
         name: "execTool",
@@ -21,7 +28,7 @@ export const execTool = tool(
         schema: z.object({
             cmd: z
                 .string()
-                .describe("command to execute, returns cmd stdout and stderr"),
+                .describe("command to execute, returns cmd stdout and stderr, or exec failaure info"),
         }),
     },
 );
