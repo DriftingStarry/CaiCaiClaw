@@ -1,6 +1,5 @@
 import {
     AIMessage,
-    AIMessageChunk,
     HumanMessage,
     SystemMessage,
 } from "@langchain/core/messages";
@@ -16,10 +15,13 @@ import {
     GraphNode,
 } from "@langchain/langgraph";
 import { z } from "zod";
-import { createInterface } from "readline/promises";
-import { stdin as input, stdout as output } from "process";
 import { tools, toolsByName } from "./tools.js";
 import { localAgentPrompt } from "./prompts.js";
+import { ConsoleIO } from "./io/consoleIO.js";
+import { createStreamRuntime } from "./stream.js";
+
+const io = new ConsoleIO();
+const streamRuntime = createStreamRuntime(io);
 
 const model = getOpenrouterModel().bindTools(tools);
 
@@ -31,30 +33,15 @@ const MessageState = new StateSchema({
 });
 
 const llm: GraphNode<typeof MessageState> = async (state) => {
-    const resp = await model.stream(state.messages);
-    let final = new AIMessageChunk({});
-    for await (const c of resp) {
-        if (c.additional_kwargs.reasoning_content) {
-            process.stdout.write(
-                c.additional_kwargs.reasoning_content.toString(),
-            );
-        }
-        final = final.concat(c);
-    }
-    process.stdout.write("\n ai: ");
-    for (const { text } of final.content as [{ type: string; text: string }]) {
-        process.stdout.write(text);
-    }
+    const resp = await model.invoke(state.messages);
     return {
-        messages: [final],
+        messages: [new AIMessage(resp)],
         llmCalls: 1,
     };
 };
 
 const userInput: GraphNode<typeof MessageState> = async (state) => {
-    const rl = createInterface({ input, output });
-    const line = await rl.question("prompt:");
-    rl.close();
+    const line = await streamRuntime.readUserInput("prompt:");
     const messages = [];
     if (state.messages.length === 0)
         messages.push(new SystemMessage(localAgentPrompt));
@@ -121,5 +108,6 @@ const chat = new StateGraph(MessageState)
     .addEdge("toolNode", "llm") // tool results to llm
     .compile();
 
-const resp = await chat.invoke({});
-console.log(resp);
+const resp = await chat.stream({}, { streamMode: "messages" });
+
+await streamRuntime.consumeMessageStream(resp);
