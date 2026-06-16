@@ -1,10 +1,8 @@
-import {
-    DynamicStructuredTool,
-    tool,
-} from "@langchain/core/tools";
-import { z } from "zod/v4";
-import util from "node:util";
+import { tool } from "@langchain/core/tools";
 import child_process from "node:child_process";
+import util from "node:util";
+import { z } from "zod/v4";
+
 const exec = util.promisify(child_process.exec);
 
 export const execTool = tool(
@@ -12,14 +10,14 @@ export const execTool = tool(
         try {
             const { stdout, stderr } = await exec(cmd);
             return {
-                stdout: stdout,
-                stderr: stderr,
+                stdout,
+                stderr,
             };
         } catch (e) {
             return {
-                stdout: 'tool exec failed',
-                stderr: e
-            }
+                stdout: "tool exec failed",
+                stderr: e,
+            };
         }
     },
     {
@@ -32,10 +30,3 @@ export const execTool = tool(
         }),
     },
 );
-
-export const toolsByName: Record<string, DynamicStructuredTool> = {
-    [execTool.name]: execTool,
-};
-
-export const tools = Object.values(toolsByName);
-

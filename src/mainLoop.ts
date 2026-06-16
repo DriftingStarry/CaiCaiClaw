@@ -15,7 +15,7 @@ import {
     GraphNode,
 } from "@langchain/langgraph";
 import { z } from "zod";
-import { tools, toolsByName } from "./tools.js";
+import { tools, toolsByName } from "./tools/index.js";
 import { localAgentPrompt } from "./prompts.js";
 import { ConsoleIO } from "./io/consoleIO.js";
 import { createStreamRuntime } from "./stream.js";
