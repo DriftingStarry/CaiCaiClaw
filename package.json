@@ -2,7 +2,7 @@
 	"type": "module",
 	"scripts": {
 		"start": "tsx src/mainLoop.ts",
-		"dev": "tsx watch src/mainLoop.ts",
+		"dev": "tsx watch src/main.ts",
 		"typecheck": "tsc -p tsconfig.json"
 	},
 	"dependencies": {
