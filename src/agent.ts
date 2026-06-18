@@ -127,7 +127,6 @@ export const getAgent = (config:GetAgentConfig) => {
         .addNode("userInput", userInput)
         .addEdge(START, "userInput") // start from user input
         .addConditionalEdges("userInput", humanRouter, ["llm", END]) // based on input to decide whether continue loop
-        // .addEdge('llm','userInput')
         .addNode("toolNode", toolNode)
         .addConditionalEdges("llm", toolRouter, ["userInput", "toolNode"]) // llm calls toolNode or returns to human
         .addEdge("toolNode", "llm") // tool results to llm
