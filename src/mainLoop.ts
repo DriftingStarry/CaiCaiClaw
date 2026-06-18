@@ -98,7 +98,7 @@ const toolRouter: ConditionalEdgeRouter<
     if (
         !lastMessage ||
         !AIMessage.isInstance(lastMessage) ||
-        lastMessage.tool_calls?.length === 0 ||
+        !lastMessage.tool_calls?.length ||
         state.llmCalls >= MAX_STEP_LIMIT
     ) {
         // last message do not from llm or have not tool call, return human input
