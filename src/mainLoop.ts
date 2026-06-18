@@ -20,6 +20,9 @@ import { localAgentPrompt } from "./prompts.js";
 import { ConsoleIO } from "./io/consoleIO.js";
 import { createStreamRuntime } from "./stream.js";
 
+const MAX_STEP_LIMIT = 3;
+const LOOP_WARNING_LENGTH = 1;
+
 const io = new ConsoleIO();
 const streamRuntime = createStreamRuntime(io);
 
@@ -33,7 +36,13 @@ const MessageState = new StateSchema({
 });
 
 const llm: GraphNode<typeof MessageState> = async (state) => {
-    const resp = await model.invoke(state.messages);
+    const context = [...state.messages]
+    const { llmCalls } = state
+    if (MAX_STEP_LIMIT - llmCalls <= LOOP_WARNING_LENGTH) {
+        // is going to max loop recursion
+        context.push(new SystemMessage(`warning: is going to max step limit, now step is: ${llmCalls+1}, max loop limit is ${MAX_STEP_LIMIT}`))
+    } // inject a loop warning
+    const resp = await model.invoke(context);
     return {
         messages: [new AIMessage(resp)],
         llmCalls: 1,
@@ -48,6 +57,7 @@ const userInput: GraphNode<typeof MessageState> = async (state) => {
     messages.push(new HumanMessage(line));
     return {
         messages: messages,
+        llmCalls: -state.llmCalls //reset llmCalls
     };
 };
 
@@ -88,12 +98,13 @@ const toolRouter: ConditionalEdgeRouter<
     if (
         !lastMessage ||
         !AIMessage.isInstance(lastMessage) ||
-        lastMessage.tool_calls?.length === 0
+        lastMessage.tool_calls?.length === 0 ||
+        state.llmCalls >= MAX_STEP_LIMIT
     ) {
         // last message do not from llm or have not tool call, return human input
+        // or exceed max loop recursion
         return "userInput";
     }
-
     return "toolNode";
 };
 
