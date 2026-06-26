@@ -27,22 +27,22 @@ export interface GetAgentConfig {
     systemPrompt:string
 }
 
+const MessageState = new StateSchema({
+    messages: MessagesValue,
+    llmCalls: new ReducedValue(z.number().default(0), {
+        reducer: (x, y) => x + y,
+    }),
+});
+
 export const getAgent = (config:GetAgentConfig) => {
     const {
         MAX_STEP_LIMIT,
         LOOP_WARNING_LENGTH,
         tools,
         toolsByName,
-        streamRuntime,
         systemPrompt
     } = config
     const model = getOpenrouterModel().bindTools(tools);
-    const MessageState = new StateSchema({
-        messages: MessagesValue,
-        llmCalls: new ReducedValue(z.number().default(0), {
-            reducer: (x, y) => x + y,
-        }),
-    });
 
     const llm: GraphNode<typeof MessageState> = async (state) => {
         const context = [...state.messages];
@@ -63,27 +63,6 @@ export const getAgent = (config:GetAgentConfig) => {
             messages: [new AIMessage(resp)],
             llmCalls: 1,
         };
-    };
-
-    const userInput: GraphNode<typeof MessageState> = async (state) => {
-        const line = await streamRuntime.readUserInput("prompt:");
-        const messages = [];
-        messages.push(new HumanMessage(line));
-        return {
-            messages: messages,
-            llmCalls: -state.llmCalls, //reset llmCalls
-        };
-    };
-
-    const humanRouter: ConditionalEdgeRouter<typeof MessageState, {}, "llm"> = (
-        state,
-    ) => {
-        const lastMessage = state.messages.at(-1);
-        if (!lastMessage || lastMessage?.content === "exit") {
-            console.log("to exit");
-            return END;
-        }
-        return "llm";
     };
 
     const toolNode: GraphNode<typeof MessageState> = async (state) => {
@@ -117,18 +96,16 @@ export const getAgent = (config:GetAgentConfig) => {
         ) {
             // last message do not from llm or have not tool call, return human input
             // or exceed max loop recursion
-            return "userInput";
+            return END;
         }
         return "toolNode";
     };
 
     const agent = new StateGraph(MessageState)
         .addNode("llm", llm)
-        .addNode("userInput", userInput)
-        .addEdge(START, "userInput") // start from user input
-        .addConditionalEdges("userInput", humanRouter, ["llm", END]) // based on input to decide whether continue loop
+        .addEdge(START, "llm") // directly to llm
         .addNode("toolNode", toolNode)
-        .addConditionalEdges("llm", toolRouter, ["userInput", "toolNode"]) // llm calls toolNode or returns to human
+        .addConditionalEdges("llm", toolRouter, [END, "toolNode"]) // llm calls toolNode or end
         .addEdge("toolNode", "llm") // tool results to llm
         .compile();
     return agent
