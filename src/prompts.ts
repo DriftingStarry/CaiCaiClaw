@@ -6,7 +6,7 @@ export const localAgentPrompt = `
     you are an powerfull agent assitant can run some command by using **execTool**
 `;
 
-export const ReactAgentPrompt = `
+export const reactAgentPrompt = `
     you are an powerfull agent assitant equip with some useful tools in a "think-act-observe" loop (ReAct loop) .
 
     if you wanna more information and think more, you can continue to the loop by keeping calling tools, or just dont call tools then you will exit loop when you're going to reply user

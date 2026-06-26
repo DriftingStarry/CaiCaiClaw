@@ -1,7 +1,7 @@
 import { ConsoleIO } from "./io/consoleIO.js";
 import { createStreamRuntime } from "./stream.js";
 import { getAgent, GetAgentConfig } from "./agent.js";
-import { ragAgentPrompt } from "./prompts.js";
+import { reactAgentPrompt } from "./prompts.js";
 import { tools, toolsByName } from "./tools/index.js";
 
 const MAX_STEP_LIMIT = 3;
@@ -10,7 +10,7 @@ const io = new ConsoleIO();
 const streamRuntime = createStreamRuntime(io);
 
 const config:GetAgentConfig = {
-    systemPrompt:ragAgentPrompt,
+    systemPrompt:reactAgentPrompt,
     MAX_STEP_LIMIT:MAX_STEP_LIMIT,
     LOOP_WARNING_LENGTH:LOOP_WARNING_LENGTH,
     streamRuntime:streamRuntime,
