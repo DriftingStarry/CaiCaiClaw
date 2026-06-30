@@ -1,25 +1,30 @@
 import { ConsoleIO } from "./io/consoleIO.js";
-import { createStreamRuntime } from "./stream.js";
-import { getAgent, GetAgentConfig } from "./agent.js";
+import { GetAgentConfig } from "./agent.js";
 import { reactAgentPrompt } from "./prompts.js";
 import { tools, toolsByName } from "./tools/index.js";
+import { AgentRuntime } from "./runtime.js";
 
 const MAX_STEP_LIMIT = 3;
 const LOOP_WARNING_LENGTH = 1;
 const io = new ConsoleIO();
-const streamRuntime = createStreamRuntime(io);
 
 const config:GetAgentConfig = {
     systemPrompt:reactAgentPrompt,
     MAX_STEP_LIMIT:MAX_STEP_LIMIT,
     LOOP_WARNING_LENGTH:LOOP_WARNING_LENGTH,
-    streamRuntime:streamRuntime,
     tools:tools,
     toolsByName:toolsByName
 }
 
-const ragAgent = getAgent(config)
+const runtime = new AgentRuntime(config)
+runtime.addOutput(io)
+runtime.run()
 
-const resp = await ragAgent.stream({}, { streamMode: "messages" });
-
-await streamRuntime.consumeMessageStream(resp);
+while (1) {
+    const line = await io.readUserInput('prompt:')
+    runtime.enqueue({
+        text:line,
+        source:'manual',
+        createdAt:Date.now()
+    })
+}

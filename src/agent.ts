@@ -16,14 +16,12 @@ import {
 } from "@langchain/langgraph";
 import { DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
-import { StreamRuntime } from "./stream.js";
 
 export interface GetAgentConfig {
     MAX_STEP_LIMIT:number
     LOOP_WARNING_LENGTH:number
     tools:DynamicStructuredTool[]
     toolsByName:Record<string, DynamicStructuredTool>
-    streamRuntime:StreamRuntime
     systemPrompt:string
 }
 
