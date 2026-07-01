@@ -1,6 +1,6 @@
 import { BaseMessage, StoredMessage } from "@langchain/core/messages";
 import { z } from "zod/v4";
-import { RuntimeOutputEvent } from "../runtime.js";
+import { RuntimeOutputEvent } from "../core/index.js";
 
 export const WS_PROTOCOL_VERSION = 1;
 

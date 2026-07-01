@@ -1,28 +1,24 @@
+import { AIMessage, SystemMessage } from "@langchain/core/messages";
+import { DynamicStructuredTool } from "@langchain/core/tools";
 import {
-    AIMessage,
-    HumanMessage,
-    SystemMessage,
-} from "@langchain/core/messages";
-import { getOpenrouterModel } from "./modelProvider.js";
-import {
-    START,
-    END,
     ConditionalEdgeRouter,
-    StateGraph,
-    StateSchema,
+    END,
+    GraphNode,
     MessagesValue,
     ReducedValue,
-    GraphNode,
+    START,
+    StateGraph,
+    StateSchema,
 } from "@langchain/langgraph";
-import { DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
+import { getOpenrouterModel } from "./modelProvider.js";
 
-export interface GetAgentConfig {
-    MAX_STEP_LIMIT:number
-    LOOP_WARNING_LENGTH:number
-    tools:DynamicStructuredTool[]
-    toolsByName:Record<string, DynamicStructuredTool>
-    systemPrompt:string
+export interface AgentConfig {
+    maxStepLimit: number;
+    loopWarningLength: number;
+    tools: DynamicStructuredTool[];
+    toolsByName: Record<string, DynamicStructuredTool>;
+    systemPrompt: string;
 }
 
 const MessageState = new StateSchema({
@@ -32,30 +28,26 @@ const MessageState = new StateSchema({
     }),
 });
 
-export const getAgent = (config:GetAgentConfig) => {
-    const {
-        MAX_STEP_LIMIT,
-        LOOP_WARNING_LENGTH,
-        tools,
-        toolsByName,
-        systemPrompt
-    } = config
+export const getAgent = (config: AgentConfig) => {
+    const { maxStepLimit, loopWarningLength, tools, toolsByName, systemPrompt } = config;
     const model = getOpenrouterModel().bindTools(tools);
 
     const llm: GraphNode<typeof MessageState> = async (state) => {
         const context = [...state.messages];
         const { llmCalls } = state;
         if (systemPrompt) {
-            context.unshift(new SystemMessage(systemPrompt))
-        } // inject system prompt if have
-        if (MAX_STEP_LIMIT - llmCalls <= LOOP_WARNING_LENGTH) {
+            context.unshift(new SystemMessage(systemPrompt));
+        }
+
+        if (maxStepLimit - llmCalls <= loopWarningLength) {
             // is going to max loop recursion
             context.push(
                 new SystemMessage(
-                    `warning: is going to max step limit, now step is: ${llmCalls + 1}, max loop limit is ${MAX_STEP_LIMIT}`,
+                    `warning: is going to max step limit, now step is: ${llmCalls + 1}, max loop limit is ${maxStepLimit}`,
                 ),
             );
-        } // inject a loop warning
+        }
+
         const resp = await model.invoke(context);
         return {
             messages: [new AIMessage(resp)],
@@ -90,7 +82,7 @@ export const getAgent = (config:GetAgentConfig) => {
             !lastMessage ||
             !AIMessage.isInstance(lastMessage) ||
             !lastMessage.tool_calls?.length ||
-            state.llmCalls >= MAX_STEP_LIMIT
+            state.llmCalls >= maxStepLimit
         ) {
             // last message do not from llm or have not tool call, return human input
             // or exceed max loop recursion
@@ -106,5 +98,5 @@ export const getAgent = (config:GetAgentConfig) => {
         .addConditionalEdges("llm", toolRouter, [END, "toolNode"]) // llm calls toolNode or end
         .addEdge("toolNode", "llm") // tool results to llm
         .compile();
-    return agent
+    return agent;
 };

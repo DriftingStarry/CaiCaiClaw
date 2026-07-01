@@ -1,9 +1,9 @@
 {
 	"type": "module",
 	"scripts": {
-		"start": "tsx src/mainLoop.ts",
-		"dev": "tsx watch src/main.ts",
-		"server": "tsx src/server.ts",
+		"start": "tsx src/ws/server.ts",
+		"dev": "tsx watch src/ws/server.ts",
+		"server": "tsx src/ws/server.ts",
 		"typecheck": "tsc -p tsconfig.json"
 	},
 	"dependencies": {

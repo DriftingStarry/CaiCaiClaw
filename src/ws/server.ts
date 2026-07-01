@@ -1,8 +1,5 @@
 import { WebSocket, WebSocketServer } from "ws";
-import { GetAgentConfig } from "../agent.js";
-import { reactAgentPrompt } from "../prompts.js";
-import { AgentRuntime } from "../runtime.js";
-import { tools, toolsByName } from "../tools/index.js";
+import { AgentConfig, AgentRuntime, reactAgentPrompt, tools, toolsByName } from "../core/index.js";
 import {
     errorToMessage,
     parseClientMessage,
@@ -17,10 +14,10 @@ const LOOP_WARNING_LENGTH = 1;
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 8787;
 
-const config: GetAgentConfig = {
+const config: AgentConfig = {
     systemPrompt: reactAgentPrompt,
-    MAX_STEP_LIMIT,
-    LOOP_WARNING_LENGTH,
+    maxStepLimit: MAX_STEP_LIMIT,
+    loopWarningLength: LOOP_WARNING_LENGTH,
     tools,
     toolsByName,
 };

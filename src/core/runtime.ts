@@ -1,6 +1,6 @@
 import { BaseMessage, HumanMessage } from "@langchain/core/messages";
 import { CompiledStateGraph } from "@langchain/langgraph";
-import { getAgent, GetAgentConfig } from "./agent.js";
+import { AgentConfig, getAgent } from "./agent.js";
 
 export type MaybePromise<T> = T | Promise<T>;
 
@@ -48,7 +48,7 @@ export class AgentRuntime {
     private readonly heartbeatMs: number;
     private readonly onOutput?: (event: RuntimeOutputEvent) => MaybePromise<void>;
 
-    constructor(config: GetAgentConfig, options?: AgentRuntimeOptions) {
+    constructor(config: AgentConfig, options?: AgentRuntimeOptions) {
         this.agent = getAgent(config);
         this.heartbeatMs = options?.heartbeatMs ?? 30_000;
         this.onOutput = options?.onOutput;
@@ -138,7 +138,7 @@ export class AgentRuntime {
         const finalState = await this.runAgentStream(inputState);
 
         this.state = {
-            messages: (finalState?.messages ?? inputState.messages),
+            messages: finalState?.messages ?? inputState.messages,
             llmCalls: 0,
         };
     }
@@ -151,9 +151,7 @@ export class AgentRuntime {
         await this.onOutput?.(event);
     }
 
-    private async runAgentStream(
-        inputState: RuntimeState,
-    ): Promise<RuntimeState | undefined> {
+    private async runAgentStream(inputState: RuntimeState): Promise<RuntimeState | undefined> {
         const stream = await this.agent.stream(inputState, {
             streamMode: ["messages", "values"],
         });
