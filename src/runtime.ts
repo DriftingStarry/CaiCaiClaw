@@ -1,7 +1,8 @@
 import { BaseMessage, HumanMessage } from "@langchain/core/messages";
 import { CompiledStateGraph } from "@langchain/langgraph";
 import { getAgent, GetAgentConfig } from "./agent.js";
-import type { AgentIO, AgentIOEvent, MessageStreamChunk } from "./io/types.js";
+
+export type MaybePromise<T> = T | Promise<T>;
 
 export type InboundEvent = {
     text: string;
@@ -10,6 +11,29 @@ export type InboundEvent = {
 };
 
 export type RuntimeState = { messages: BaseMessage[]; llmCalls: number };
+
+export type MessageStreamChunk = readonly [
+    message: BaseMessage,
+    metadata: Record<string, unknown>,
+];
+
+export type RuntimeOutputEvent =
+    | {
+          readonly type: "message";
+          readonly chunk: MessageStreamChunk;
+      }
+    | {
+          readonly type: "done";
+      }
+    | {
+          readonly type: "error";
+          readonly error: unknown;
+      };
+
+export type AgentRuntimeOptions = {
+    heartbeatMs?: number;
+    onOutput?: (event: RuntimeOutputEvent) => MaybePromise<void>;
+};
 
 type LangGraphMultiStreamChunk =
     | readonly ["messages", MessageStreamChunk]
@@ -20,13 +44,14 @@ export class AgentRuntime {
     private waiters: Array<(events: InboundEvent[]) => void> = [];
     private state: RuntimeState = { messages: [], llmCalls: 0 };
     private readonly agent: CompiledStateGraph<any, any, any, any, any>;
-    private readonly outputs = new Set<AgentIO>();
     private running = false;
     private readonly heartbeatMs: number;
+    private readonly onOutput?: (event: RuntimeOutputEvent) => MaybePromise<void>;
 
-    constructor(config: GetAgentConfig, options?: { heartbeatMs?: number }) {
+    constructor(config: GetAgentConfig, options?: AgentRuntimeOptions) {
         this.agent = getAgent(config);
         this.heartbeatMs = options?.heartbeatMs ?? 30_000;
+        this.onOutput = options?.onOutput;
     }
 
     public enqueue(evt: InboundEvent) {
@@ -35,26 +60,6 @@ export class AgentRuntime {
         const waiter = this.waiters.shift();
         if (waiter) {
             waiter(this.drain());
-        }
-    }
-
-    public addOutput(output: AgentIO): () => void {
-        this.outputs.add(output);
-        return () => {
-            this.outputs.delete(output);
-        };
-    }
-
-    public async emit(event: AgentIOEvent): Promise<void> {
-        const results = await Promise.allSettled(
-            [...this.outputs].map((output) => output.emit(event)),
-        );
-
-        for (const result of results) {
-            if (result.status === "rejected") {
-                console.error("runtime output emit failed:", result.reason);
-                throw new Error(`runtime output emit failed: ${result.reason}`)
-            }
         }
     }
 
@@ -142,6 +147,10 @@ export class AgentRuntime {
         // P0 keeps heartbeat as a scheduling extension point.
     }
 
+    private async emitOutput(event: RuntimeOutputEvent): Promise<void> {
+        await this.onOutput?.(event);
+    }
+
     private async runAgentStream(
         inputState: RuntimeState,
     ): Promise<RuntimeState | undefined> {
@@ -155,17 +164,17 @@ export class AgentRuntime {
                 const [mode, payload] = chunk;
 
                 if (mode === "messages") {
-                    await this.emit({ type: "message", chunk: payload });
+                    await this.emitOutput({ type: "message", chunk: payload });
                     continue;
                 }
 
                 finalState = payload;
             }
 
-            await this.emit({ type: "done" });
+            await this.emitOutput({ type: "done" });
             return finalState;
         } catch (error) {
-            await this.emit({ type: "error", error });
+            await this.emitOutput({ type: "error", error });
             throw error;
         }
     }

@@ -16,8 +16,9 @@ const config:GetAgentConfig = {
     toolsByName:toolsByName
 }
 
-const runtime = new AgentRuntime(config)
-runtime.addOutput(io)
+const runtime = new AgentRuntime(config, {
+    onOutput: (event) => io.emit(event),
+})
 runtime.run()
 
 while (1) {
