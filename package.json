@@ -3,6 +3,7 @@
 	"scripts": {
 		"start": "tsx src/mainLoop.ts",
 		"dev": "tsx watch src/main.ts",
+		"server": "tsx src/server.ts",
 		"typecheck": "tsc -p tsconfig.json"
 	},
 	"dependencies": {
@@ -11,11 +12,13 @@
 		"@langchain/openrouter": "^0.3.0",
 		"ink": "^7.0.6",
 		"react": "^19.2.7",
+		"ws": "^8.21.0",
 		"zod": "^4.4.3"
 	},
 	"devDependencies": {
 		"@types/node": "^25.9.2",
 		"@types/react": "^19.2.17",
+		"@types/ws": "^8.18.1",
 		"tsx": "^4.22.4",
 		"typescript": "^6.0.3"
 	}
