@@ -1,4 +1,3 @@
-import { ConsoleIO } from "./io/consoleIO.js";
 import { GetAgentConfig } from "./agent.js";
 import { reactAgentPrompt } from "./prompts.js";
 import { tools, toolsByName } from "./tools/index.js";
@@ -6,7 +5,6 @@ import { AgentRuntime } from "./runtime.js";
 
 const MAX_STEP_LIMIT = 3;
 const LOOP_WARNING_LENGTH = 1;
-const io = new ConsoleIO();
 
 const config:GetAgentConfig = {
     systemPrompt:reactAgentPrompt,
@@ -14,18 +12,4 @@ const config:GetAgentConfig = {
     LOOP_WARNING_LENGTH:LOOP_WARNING_LENGTH,
     tools:tools,
     toolsByName:toolsByName
-}
-
-const runtime = new AgentRuntime(config, {
-    onOutput: (event) => io.emit(event),
-})
-runtime.run()
-
-while (1) {
-    const line = await io.readUserInput('prompt:')
-    runtime.enqueue({
-        text:line,
-        source:'manual',
-        createdAt:Date.now()
-    })
 }
