@@ -2,8 +2,8 @@
 
 import { initialClientState, reduceClientState, ClientState } from "@caicaiclaw/client-core";
 import { create } from "zustand";
-import { getWsUrl } from "../adapters/ws/config.js";
-import { CaiCaiWsClient } from "../adapters/ws/wsClient.js";
+import { getWsUrl } from "../adapters/ws/config";
+import { CaiCaiWsClient } from "../adapters/ws/wsClient";
 
 export type AgentClientStore = ClientState & {
     connect: () => void;
@@ -16,10 +16,15 @@ let wsClient: CaiCaiWsClient | undefined;
 export const useAgentClientStore = create<AgentClientStore>((set) => ({
     ...initialClientState,
     connect: () => {
+        if (wsClient) return;
+
         set((state) => reduceClientState(state, { type: "connection_status", status: "connecting" }));
         wsClient = new CaiCaiWsClient(getWsUrl(), {
             onOpen: () => set((state) => reduceClientState(state, { type: "connection_status", status: "connected" })),
-            onClose: () => set((state) => reduceClientState(state, { type: "connection_status", status: "closed" })),
+            onClose: () => {
+                wsClient = undefined;
+                set((state) => reduceClientState(state, { type: "connection_status", status: "closed" }));
+            },
             onError: () =>
                 set((state) => ({
                     ...state,
@@ -37,6 +42,13 @@ export const useAgentClientStore = create<AgentClientStore>((set) => ({
     sendInput: (text: string) => {
         const requestId = crypto.randomUUID();
         set((state) => reduceClientState(state, { type: "local_input", requestId, text, createdAt: Date.now() }));
-        wsClient?.send({ type: "input", text, source: "web", requestId });
+        try {
+            wsClient?.send({ type: "input", text, source: "web", requestId });
+        } catch (error) {
+            set((state) => ({
+                ...state,
+                errors: [...state.errors, error instanceof Error ? error.message : String(error)],
+            }));
+        }
     },
 }));
