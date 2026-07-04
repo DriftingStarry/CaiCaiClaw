@@ -1,5 +1,6 @@
 import { AIMessage, SystemMessage } from "@langchain/core/messages";
 import { DynamicStructuredTool } from "@langchain/core/tools";
+import { JsonObject, JsonValue } from "@caicaiclaw/protocol";
 import {
     ConditionalEdgeRouter,
     END,
@@ -19,7 +20,26 @@ export interface AgentConfig {
     tools: DynamicStructuredTool[];
     toolsByName: Record<string, DynamicStructuredTool>;
     systemPrompt: string;
+    onToolStart?: (event: ToolStartEvent) => MaybePromise<void>;
+    onToolResult?: (event: ToolResultEvent) => MaybePromise<void>;
 }
+
+export type MaybePromise<T> = T | Promise<T>;
+
+export type ToolStartEvent = {
+    toolCallId: string;
+    name: string;
+    args: JsonObject;
+    createdAt: number;
+};
+
+export type ToolResultEvent = {
+    toolCallId: string;
+    name: string;
+    status: "success" | "error";
+    result: JsonValue;
+    createdAt: number;
+};
 
 const MessageState = new StateSchema({
     messages: MessagesValue,
@@ -29,7 +49,7 @@ const MessageState = new StateSchema({
 });
 
 export const getAgent = (config: AgentConfig) => {
-    const { maxStepLimit, loopWarningLength, tools, toolsByName, systemPrompt } = config;
+    const { maxStepLimit, loopWarningLength, tools, toolsByName, systemPrompt, onToolStart, onToolResult } = config;
     const model = getOpenrouterModel().bindTools(tools);
 
     const llm: GraphNode<typeof MessageState> = async (state) => {
@@ -65,8 +85,35 @@ export const getAgent = (config: AgentConfig) => {
         const res = [];
         for (const call of lastMessage.tool_calls || []) {
             const tool = toolsByName[call.name];
-            const tool_res = await tool.invoke(call);
-            res.push(tool_res);
+            const toolCallId = call.id ?? `${call.name}:${Date.now()}`;
+
+            await onToolStart?.({
+                toolCallId,
+                name: call.name,
+                args: toJsonObject(call.args),
+                createdAt: Date.now(),
+            });
+
+            try {
+                const tool_res = await tool.invoke(call);
+                await onToolResult?.({
+                    toolCallId,
+                    name: call.name,
+                    status: "success",
+                    result: toJsonValue(tool_res),
+                    createdAt: Date.now(),
+                });
+                res.push(tool_res);
+            } catch (error) {
+                await onToolResult?.({
+                    toolCallId,
+                    name: call.name,
+                    status: "error",
+                    result: error instanceof Error ? error.message : String(error),
+                    createdAt: Date.now(),
+                });
+                throw error;
+            }
         }
         return { messages: res };
     };
@@ -100,3 +147,31 @@ export const getAgent = (config: AgentConfig) => {
         .compile();
     return agent;
 };
+
+function toJsonObject(value: unknown): JsonObject {
+    const jsonValue = toJsonValue(value);
+    return isJsonObject(jsonValue) ? jsonValue : {};
+}
+
+function toJsonValue(value: unknown): JsonValue {
+    if (value === null) return null;
+
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+        return Number.isFinite(value) || typeof value !== "number" ? value : String(value);
+    }
+
+    if (Array.isArray(value)) {
+        return value.map((item) => toJsonValue(item));
+    }
+
+    if (typeof value === "object") {
+        const entries = Object.entries(value).map(([key, entryValue]) => [key, toJsonValue(entryValue)]);
+        return Object.fromEntries(entries) as JsonObject;
+    }
+
+    return String(value);
+}
+
+function isJsonObject(value: JsonValue): value is JsonObject {
+    return value !== null && typeof value === "object" && !Array.isArray(value);
+}

@@ -3,7 +3,7 @@ import { AgentConfig, AgentRuntime, reactAgentPrompt, tools, toolsByName } from 
 import {
     errorToMessage,
     parseClientMessage,
-    runtimeOutputToServerMessage,
+    runtimeOutputToServerMessages,
     serializeServerMessage,
     ServerMessage,
     WS_PROTOCOL_VERSION,
@@ -27,7 +27,9 @@ let nextClientId = 1;
 
 const runtime = new AgentRuntime(config, {
     onOutput: async (event) => {
-        broadcast(runtimeOutputToServerMessage(event));
+        for (const message of runtimeOutputToServerMessages(event)) {
+            broadcast(message);
+        }
     },
 });
 
