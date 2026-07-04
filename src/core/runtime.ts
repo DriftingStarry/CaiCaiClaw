@@ -258,6 +258,17 @@ export class AgentRuntime {
         const [message, metadata] = chunk;
         if (!AIMessage.isInstance(message) && !AIMessageChunk.isInstance(message)) return;
 
+        const normalizedMetadata = toJsonObject(metadata);
+        const reasoningText = extractReasoningContent(message);
+        if (reasoningText) {
+            await this.emitOutput({
+                type: "reasoning_delta",
+                turnId,
+                text: reasoningText,
+                metadata: normalizedMetadata,
+            });
+        }
+
         const text = extractTextContent(message.content);
         if (!text) return;
 
@@ -265,7 +276,7 @@ export class AgentRuntime {
             type: "assistant_delta",
             turnId,
             text,
-            metadata: toJsonObject(metadata),
+            metadata: normalizedMetadata,
         });
     }
 
@@ -318,4 +329,38 @@ function extractTextContent(content: unknown): string {
             return "";
         })
         .join("");
+}
+
+function extractReasoningContent(message: BaseMessage): string {
+    const additionalKwargs = getAdditionalKwargs(message);
+    const reasoningContent = additionalKwargs.reasoning_content;
+    if (typeof reasoningContent === "string" && reasoningContent.length > 0) {
+        return reasoningContent;
+    }
+
+    const reasoningDetails = additionalKwargs.reasoning_details;
+    if (!Array.isArray(reasoningDetails)) return "";
+
+    return reasoningDetails
+        .map((detail) => {
+            if (!detail || typeof detail !== "object" || !("text" in detail)) return "";
+            const text = (detail as { text?: unknown }).text;
+            return typeof text === "string" ? text : "";
+        })
+        .filter((text) => text.length > 0)
+        .join("");
+}
+
+function getAdditionalKwargs(message: BaseMessage): Record<string, unknown> {
+    const direct = (message as { additional_kwargs?: unknown }).additional_kwargs;
+    if (direct && typeof direct === "object" && !Array.isArray(direct)) {
+        return direct as Record<string, unknown>;
+    }
+
+    const nested = (message as { lc_kwargs?: { additional_kwargs?: unknown } }).lc_kwargs?.additional_kwargs;
+    if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+        return nested as Record<string, unknown>;
+    }
+
+    return {};
 }
