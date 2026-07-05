@@ -2,7 +2,8 @@
 
 import { initialClientState, reduceClientState, ClientState } from "@caicaiclaw/client-core";
 import { create } from "zustand";
-import { getWsUrl } from "../adapters/ws/config";
+import { getOrCreateClientId, setStoredClientId } from "../adapters/ws/clientIdentity";
+import { buildWsUrl } from "../adapters/ws/config";
 import { CaiCaiWsClient } from "../adapters/ws/wsClient";
 
 export type AgentClientStore = ClientState & {
@@ -19,7 +20,7 @@ export const useAgentClientStore = create<AgentClientStore>((set) => ({
         if (wsClient) return;
 
         set((state) => reduceClientState(state, { type: "connection_status", status: "connecting" }));
-        wsClient = new CaiCaiWsClient(getWsUrl(), {
+        wsClient = new CaiCaiWsClient(buildWsUrl(getOrCreateClientId()), {
             onOpen: () => set((state) => reduceClientState(state, { type: "connection_status", status: "connected" })),
             onClose: () => {
                 wsClient = undefined;
@@ -30,7 +31,13 @@ export const useAgentClientStore = create<AgentClientStore>((set) => ({
                     ...state,
                     errors: [...state.errors, "WebSocket connection error"],
                 })),
-            onMessage: (message) => set((state) => reduceClientState(state, { type: "server_message", message })),
+            onMessage: (message) => {
+                if (message.type === "hello") {
+                    setStoredClientId(message.clientId);
+                }
+
+                set((state) => reduceClientState(state, { type: "server_message", message }));
+            },
         });
         wsClient.connect();
     },
