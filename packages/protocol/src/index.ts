@@ -1,6 +1,8 @@
 import { z } from "zod/v4";
 
 export const WS_PROTOCOL_VERSION = 2;
+export const MAX_CLIENT_ID_LENGTH = 64;
+export const CLIENT_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonObject | JsonArray;
@@ -8,6 +10,7 @@ export type JsonObject = { [key: string]: JsonValue };
 export type JsonArray = JsonValue[];
 
 export const requestIdSchema = z.string().min(1).optional();
+export const clientIdSchema = z.string().min(1).max(MAX_CLIENT_ID_LENGTH).regex(CLIENT_ID_PATTERN);
 
 export const clientInputMessageSchema = z.object({
     type: z.literal("input"),
@@ -140,6 +143,10 @@ export function serializeClientMessage(message: ClientMessage): string {
 
 export function serializeServerMessage(message: ServerMessage): string {
     return JSON.stringify(message);
+}
+
+export function isValidClientId(value: unknown): value is string {
+    return clientIdSchema.safeParse(value).success;
 }
 
 export function toJsonObject(value: unknown): JsonObject {

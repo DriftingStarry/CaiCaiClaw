@@ -1,6 +1,8 @@
 import { BaseMessage } from "@langchain/core/messages";
 import {
+    clientIdSchema,
     errorToMessage,
+    isValidClientId,
     JsonObject,
     parseClientMessage,
     ServerMessage,
@@ -11,7 +13,9 @@ import {
 import { RuntimeOutputEvent } from "../core/index.js";
 
 export {
+    clientIdSchema,
     errorToMessage,
+    isValidClientId,
     parseClientMessage,
     serializeServerMessage,
     type ServerMessage,

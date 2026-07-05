@@ -2,6 +2,7 @@ import { WebSocket, WebSocketServer } from "ws";
 import { AgentConfig, AgentRuntime, reactAgentPrompt, tools, toolsByName } from "../core/index.js";
 import {
     errorToMessage,
+    isValidClientId,
     parseClientMessage,
     runtimeOutputToServerMessages,
     serializeServerMessage,
@@ -22,7 +23,13 @@ const config: AgentConfig = {
     toolsByName,
 };
 
-const clients = new Map<string, WebSocket>();
+type ClientConnection = {
+    clientId: string;
+    socket: WebSocket;
+};
+
+const clients = new Map<string, ClientConnection>();
+let nextConnectionId = 1;
 let nextClientId = 1;
 
 const runtime = new AgentRuntime(config, {
@@ -49,9 +56,10 @@ runtimeTask.catch((error: unknown) => {
 
 const server = new WebSocketServer({ host, port });
 
-server.on("connection", (socket) => {
-    const clientId = createClientId();
-    clients.set(clientId, socket);
+server.on("connection", (socket, request) => {
+    const connectionId = createConnectionId();
+    const clientId = resolveClientId(request.url);
+    clients.set(connectionId, { clientId, socket });
 
     send(socket, {
         type: "hello",
@@ -85,12 +93,14 @@ server.on("connection", (socket) => {
     });
 
     socket.on("close", () => {
-        clients.delete(clientId);
+        clients.delete(connectionId);
     });
 
     socket.on("error", (error) => {
-        console.error(`[ws:${clientId}] ${errorToMessage(error)}`);
+        console.error(`[ws:${clientId}/${connectionId}] ${errorToMessage(error)}`);
     });
+
+    console.log(`[ws:${clientId}/${connectionId}] connected`);
 });
 
 server.on("listening", () => {
@@ -107,15 +117,46 @@ function createClientId(): string {
     return id;
 }
 
+function createConnectionId(): string {
+    const id = `connection-${nextConnectionId}`;
+    nextConnectionId += 1;
+    return id;
+}
+
+function resolveClientId(rawUrl?: string): string {
+    const clientId = getRequestedClientId(rawUrl);
+
+    if (!clientId) {
+        return createClientId();
+    }
+
+    if (isValidClientId(clientId)) {
+        return clientId;
+    }
+
+    console.warn(`[ws] ignoring invalid clientId: ${JSON.stringify(clientId)}`);
+    return createClientId();
+}
+
+function getRequestedClientId(rawUrl?: string): string | undefined {
+    if (!rawUrl) {
+        return undefined;
+    }
+
+    const url = new URL(rawUrl, "ws://localhost");
+    const clientId = url.searchParams.get("clientId")?.trim();
+    return clientId ? clientId : undefined;
+}
+
 function makeSource(clientId: string, source?: string): string {
     return source ? `ws:${clientId}/${source}` : `ws:${clientId}`;
 }
 
 function broadcast(message: ServerMessage): void {
     const payload = serializeServerMessage(message);
-    for (const socket of clients.values()) {
-        if (socket.readyState === WebSocket.OPEN) {
-            socket.send(payload);
+    for (const connection of clients.values()) {
+        if (connection.socket.readyState === WebSocket.OPEN) {
+            connection.socket.send(payload);
         }
     }
 }
