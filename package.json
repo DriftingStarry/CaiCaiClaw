@@ -1,9 +1,8 @@
 {
 	"type": "module",
 	"scripts": {
-		"start": "tsx src/ws/server.ts",
-		"dev": "tsx watch src/ws/server.ts",
-		"server": "tsx src/ws/server.ts",
+		"dev": "set -a && { [ ! -f .env ] || . ./.env; } && set +a && tsx watch src/ws/server.ts",
+		"server": "set -a && { [ ! -f .env ] || . ./.env; } && set +a && tsx src/ws/server.ts",
 		"typecheck": "tsc -p tsconfig.json"
 	},
 	"dependencies": {
