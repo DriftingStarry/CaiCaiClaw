@@ -31,6 +31,10 @@ The frontend is split into UI, client state, transport, and shared domain logic:
 
 The Web app connects directly to the WS server through
 `NEXT_PUBLIC_CAICAI_WS_URL`, for example `ws://127.0.0.1:8787`.
+To keep the displayed client identity stable across refreshes, the Web app may
+append a browser-scoped anonymous `clientId` in the connection URL query, for
+example `ws://127.0.0.1:8787?clientId=web-...`. The WS server treats this value
+as an observational identifier only, not an authenticated user identity.
 
 ## WS Event Contract
 
@@ -42,6 +46,8 @@ Client messages:
 Server messages:
 
 - `hello`: connection accepted and client id assigned.
+  The server returns the final accepted `clientId`, which may differ from the
+  requested query value if the request omits it or provides an invalid ID.
 - `ack`: client request accepted by the WS server.
 - `input_accepted`: user input entered the shared runtime and is visible to all
   clients.
@@ -94,4 +100,3 @@ pnpm typecheck
 pnpm --filter @caicaiclaw/web typecheck
 pnpm --filter @caicaiclaw/web build
 ```
-
