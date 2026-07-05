@@ -55,9 +55,6 @@ export const getAgent = (config: AgentConfig) => {
     const llm: GraphNode<typeof MessageState> = async (state) => {
         const context = [...state.messages];
         const { llmCalls } = state;
-        if (systemPrompt) {
-            context.unshift(new SystemMessage(systemPrompt));
-        }
 
         if (maxStepLimit - llmCalls <= loopWarningLength) {
             // is going to max loop recursion

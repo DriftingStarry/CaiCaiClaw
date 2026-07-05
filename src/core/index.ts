@@ -9,5 +9,5 @@ export {
     type MessageStreamChunk,
     type RuntimeOutputEvent,
     type RuntimeState,
-} from "./runtime.js";
+} from "./runtime/index.js";
 export { execTool, fileEditTool, fileReadTool, fileWriteTool, tools, toolsByName } from "./tools/index.js";

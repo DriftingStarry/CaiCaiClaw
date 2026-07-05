@@ -54,7 +54,7 @@
 
 - **core**
   - `agent.ts` —— LangGraph `StateGraph` 的 ReAct 循环（`llm` ↔ `toolNode`）；纯聊天回复即**单次模型调用后 `END`**，不强制多跳。
-  - `runtime.ts` —— `AgentRuntime`：单实例、事件队列（`enqueue` / `drainWithin`）、心跳骨架（`onHeartbeat` 空扩展点）、流式输出。
+  - `runtime/` —— `AgentRuntime` 目录模块：主 runtime 编排（`agentRuntime.ts`）、事件队列与等待唤醒（`eventQueue.ts`）、LangGraph stream 消费（`agentStream.ts`）、message content 提取（`messageContent.ts`）、公共类型（`types.ts`）。
   - `modelProvider.ts` —— 模型接入层。 `prompts.ts` —— 提示词。 `tools/` —— `exec` / `fileRead` / `fileEdit` / `fileWrite` + 注册入口（`toolsByName`）。
 - **ws**
   - `protocol.ts` —— Zod 校验的协议与序列化。 `server.ts` —— 单 agent 的 `WebSocketServer`。
