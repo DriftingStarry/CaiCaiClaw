@@ -1,4 +1,4 @@
-import { HumanMessage } from "@langchain/core/messages";
+import { BaseMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { CompiledStateGraph } from "@langchain/langgraph";
 import { AgentConfig, getAgent, ToolResultEvent, ToolStartEvent } from "../agent.js";
 import { runAgentStream } from "./agentStream.js";
@@ -20,6 +20,7 @@ export class AgentRuntime {
     private readonly onOutput?: RuntimeOutputEmitter;
     private activeTurnId?: string;
     private nextTurnNumber = 1;
+    private systemPrompt: string;
 
     constructor(config: AgentConfig, options?: AgentRuntimeOptions) {
         this.agent = getAgent({
@@ -35,6 +36,7 @@ export class AgentRuntime {
         });
         this.heartbeatMs = options?.heartbeatMs ?? 30_000;
         this.onOutput = options?.onOutput;
+        this.systemPrompt = config.systemPrompt;
     }
 
     public enqueue(event: InboundEvent) {
@@ -70,6 +72,12 @@ export class AgentRuntime {
         await this.handleEvents(events);
     }
 
+    //todo 需要注意对工具调用输出的处理
+    // todo 更好的上下文构建策略和更多可配置的参数 (如滑窗长度)
+    private buildContext(inputMessages:BaseMessage[]) {
+        return [new SystemMessage(this.systemPrompt), ...this.state.messages.slice(1,).slice(-30,) ,...inputMessages]
+    }
+
     private async handleEvents(events: InboundEvent[]) {
         const turnId = events[0]?.turnId ?? this.createTurnId();
         this.activeTurnId = turnId;
@@ -92,7 +100,7 @@ export class AgentRuntime {
         });
 
         const inputState: RuntimeState = {
-            messages: [...this.state.messages, ...inputMessages],
+            messages: this.buildContext(inputMessages),
             llmCalls: 0,
         };
 
