@@ -1,7 +1,6 @@
 export { getAgent } from "./agent.js";
 export type { AgentConfig } from "./agent.js";
 export { getOpenrouterModel } from "./modelProvider.js";
-export { chatAppDeepSleepPrompt, localAgentPrompt, reactAgentPrompt } from "./prompts.js";
 export {
     AgentRuntime,
     type AgentRuntimeOptions,

@@ -19,7 +19,7 @@ export interface AgentConfig {
     loopWarningLength: number;
     tools: DynamicStructuredTool[];
     toolsByName: Record<string, DynamicStructuredTool>;
-    systemPrompt: string;
+    systemPromptPath: string;
     onToolStart?: (event: ToolStartEvent) => MaybePromise<void>;
     onToolResult?: (event: ToolResultEvent) => MaybePromise<void>;
 }
@@ -49,7 +49,7 @@ const MessageState = new StateSchema({
 });
 
 export const getAgent = (config: AgentConfig) => {
-    const { maxStepLimit, loopWarningLength, tools, toolsByName, systemPrompt, onToolStart, onToolResult } = config;
+    const { maxStepLimit, loopWarningLength, tools, toolsByName, onToolStart, onToolResult } = config;
     const model = getOpenrouterModel().bindTools(tools);
 
     const llm: GraphNode<typeof MessageState> = async (state) => {

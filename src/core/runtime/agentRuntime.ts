@@ -10,6 +10,7 @@ import {
     RuntimeOutputEvent,
     RuntimeState,
 } from "./types.js";
+import {readFileSync } from "node:fs";
 
 export class AgentRuntime {
     private readonly queue = new EventQueue();
@@ -20,7 +21,7 @@ export class AgentRuntime {
     private readonly onOutput?: RuntimeOutputEmitter;
     private activeTurnId?: string;
     private nextTurnNumber = 1;
-    private systemPrompt: string;
+    private systemPromptPath: string;
 
     constructor(config: AgentConfig, options?: AgentRuntimeOptions) {
         this.agent = getAgent({
@@ -36,7 +37,7 @@ export class AgentRuntime {
         });
         this.heartbeatMs = options?.heartbeatMs ?? 30_000;
         this.onOutput = options?.onOutput;
-        this.systemPrompt = config.systemPrompt;
+        this.systemPromptPath = config.systemPromptPath;
     }
 
     public enqueue(event: InboundEvent) {
@@ -72,10 +73,19 @@ export class AgentRuntime {
         await this.handleEvents(events);
     }
 
+    //todo 更健壮的处理, 文件存在检查, 特殊符号处理, 编码问题, etc..
+    private getSystemPrompt() {
+        try {
+            const systemPrompt = readFileSync(this.systemPromptPath, 'utf-8')
+            return systemPrompt
+        } catch (e) {
+            throw Error(`${e}`)
+        }
+    }
     //todo 需要注意对工具调用输出的处理
     // todo 更好的上下文构建策略和更多可配置的参数 (如滑窗长度)
     private buildContext(inputMessages:BaseMessage[]) {
-        return [new SystemMessage(this.systemPrompt), ...this.state.messages.slice(1,).slice(-30,) ,...inputMessages]
+        return [new SystemMessage(this.getSystemPrompt()), ...this.state.messages.slice(1,).slice(-30,) ,...inputMessages]
     }
 
     private async handleEvents(events: InboundEvent[]) {
