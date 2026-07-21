@@ -1,5 +1,5 @@
 import { WebSocket, WebSocketServer } from "ws";
-import { AgentConfig, AgentRuntime, reactAgentPrompt, tools, toolsByName } from "../core/index.js";
+import { AgentConfig, AgentRuntime, tools, toolsByName } from "../core/index.js";
 import {
     errorToMessage,
     isValidClientId,
@@ -10,13 +10,17 @@ import {
     WS_PROTOCOL_VERSION,
 } from "./protocol.js";
 
+import { homedir } from "node:os";
+import { join } from 'node:path'
+
 const MAX_STEP_LIMIT = 3;
 const LOOP_WARNING_LENGTH = 1;
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 8787;
+const DEFAULT_SYSTEM_PROMPT_PATH = join(homedir(), '.caicaiclaw/SYSTEM.md')
 
 const config: AgentConfig = {
-    systemPrompt: reactAgentPrompt,
+    systemPromptPath: process.env.CAICAI_SYSTEM_PROMPT_PATH ?? DEFAULT_SYSTEM_PROMPT_PATH,
     maxStepLimit: MAX_STEP_LIMIT,
     loopWarningLength: LOOP_WARNING_LENGTH,
     tools,
