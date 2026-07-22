@@ -55,16 +55,16 @@
 - **core**
   - `agent.ts` —— LangGraph `StateGraph` 的 ReAct 循环（`llm` ↔ `toolNode`）；纯聊天回复即**单次模型调用后 `END`**，不强制多跳。
   - `runtime/` —— `AgentRuntime` 目录模块：主 runtime 编排（`agentRuntime.ts`）、事件队列与等待唤醒（`eventQueue.ts`）、LangGraph stream 消费（`agentStream.ts`）、message content 提取（`messageContent.ts`）、公共类型（`types.ts`）。
-  - `modelProvider.ts` —— 模型接入层。 `prompts.ts` —— 提示词。 `tools/` —— `exec` / `fileRead` / `fileEdit` / `fileWrite` + 注册入口（`toolsByName`）。
+  - `modelProvider.ts` —— 模型接入层。系统 prompt 从上层指定的 Markdown 路径加载。 `tools/` —— `exec` / `fileRead` / `fileEdit` / `fileWrite` + 注册入口（`toolsByName`）。
 - **ws**
   - `protocol.ts` —— Zod 校验的协议与序列化。 `server.ts` —— 单 agent 的 `WebSocketServer`。
-- **关键性质**：`this.agent`（编译出的图）与 `this.state`（messages）已分离——这正是核心不变式的雏形，M3 的 `reload` 因此几乎是加法。
+- **关键性质**：`this.agent`（编译出的图）、`rawHistoryState`（可回放的完整历史）与 `executionState`（单轮上下文）已分离——这正是核心不变式的雏形，M3 的 `reload` 因此几乎是加法。
 
 ## M1 · 最小可运行版本（MVP）
 
 **目标**：一个能长期运行的单 agent，配 tui + 极简 web 两个前端，**共享同一个 runtime 实例**（经 WS）。先 make it run。
 
-> 当前进度：shared runtime、WS 广播链路、Web observer、client-side activity/message 状态收敛已落地；`buildContext(state)` 抽离、prompt Markdown 文件化、jsonl 事件日志回放恢复、TUI 端仍未完成。
+> 当前进度：shared runtime、WS 广播链路、Web observer、client-side activity/message 状态收敛、`buildContext` 抽离、prompt Markdown 文件化、JSONL 事件日志回放恢复已落地；TUI 端仍未完成。
 
 **关键决策**
 
@@ -73,11 +73,26 @@
 
 **第一刀（先打地基，务实优先）**
 
-1. **抽出上下文构建函数** `buildContext(state) -> messages[]`：把现在埋在 `agent.ts` `llm` 节点里的「拼 system + 历史」逻辑独立出来。MVP 内实现 = **「system + 最近 N 条」滑动窗口**；它就是 M2 换 compaction、M3 换可替换钩子的那道缝。
+1. **抽出上下文构建函数** `buildContext(state) -> messages[]`：从完整 raw history 按完整 turn 选择约最近 30 条消息，再拼 system 与当前输入；execution state 只服务于当前 LangGraph 调用。
 2. **人格 / prompt 文件化**：以 Markdown 存储、运行时读取，**不 inline** 进代码（人格本质是角色扮演）。
-3. **事件日志落 jsonl**：inbound 事件与产出消息 append 到 jsonl，启动时回放恢复。这是「长期运行 agent」与「聊天 demo」的分界线，也是 M2 后台、M3 `reload` 的共同依赖。
+3. **事件日志落 jsonl**：使用 version 1 的 append-only 领域事件记录 input、turn、tool 审计和完整输出消息，启动时严格校验并回放恢复；未完成轮次标记 interrupted，不自动重试。这是「长期运行 agent」与「聊天 demo」的分界线，也是 M2 后台、M3 `reload` 的共同依赖。
 
 **明确不做**：`reload`、语义记忆 / 检索、多子图、概率唤醒、后台管理 UI。tools 保持现有静态 `toolsByName`（已集中，日后改扫目录是局部改动）。
+
+### M1-3 · 事件记录与恢复
+
+`AgentRuntime` 构造时必须由调用方传入准确的 `rawHistoryPath`。runtime 不推导路径、不读取环境变量，也不设置路径默认值；server 等上层负责这些配置语义。指定文件不存在时 runtime 只在该路径初始化空 JSONL，并可创建父目录。
+
+runtime 内部状态分为两层：
+
+- `rawHistoryState` 是 JSONL 回放得到的完整 projection，包含按 turn 分组的 committed messages、未完成 / interrupted inputs、active / failed / interrupted turn 状态、tool 审计和最后应用的 sequence。
+- `executionState` 是单轮 LangGraph 调用状态。每轮由 committed turns 按完整 turn 选取约 30 条消息，再拼接 System Prompt 和当前输入；窗口不会截断一个 turn，最新完整 turn 即使超出预算也保留。`RuntimeState` 仍作为兼容别名。
+
+JSONL 每行是 version 1 event envelope：`input.accepted`、`turn.started`、`tool.started`、`tool.completed`、`turn.output_committed`、`turn.failed`。消息 payload 使用 LangChain `StoredMessage`，只持久化完整 Human / AI / Tool 消息和工具审计；System Prompt、循环警告、`llmCalls`、stream delta、reasoning 不写入历史。
+
+启动回放会校验 JSON、事件 schema、版本、连续 sequence、eventId、消息反序列化和状态转换，并在错误中报告行号。空文件和空行允许；损坏的非空行会阻止启动。回放结束仍未 terminal 的 turn / input 只标记为 interrupted，不进入上下文且不自动重试。所有追加通过同一 Promise chain 串行化；写入失败时不更新 projection，runtime 进入 fatal 状态并拒绝后续输入。
+
+手动验收重点：首次启动创建指定 history 文件；重启后延续对话；超过 30 条消息仍保留完整旧日志；工具调用 turn 重启后结构完整；快速输入能按 drain 批次共享 turn；ACK 只在 `input.accepted` 成功追加后返回；中止进程后的未完成 turn 不会自动重试；任意非空损坏行会报告行号并阻止启动；更换 `rawHistoryPath` 后 runtime 严格使用新路径。
 
 ## M2 · 上下文精进 + Web 后台管理
 
@@ -85,7 +100,7 @@
 
 **关键点**
 
-- **后台几乎是白送**：= M1 那份 jsonl 事件日志 + 当前 `state` 的**只读视图**（事件溯源的红利）。
+- **后台几乎是白送**：= M1 那份 jsonl 事件日志 + 当前 raw history projection 的**只读视图**（事件溯源的红利）。
 - **compaction 只改 `buildContext` 内部**，不碰主循环；参考 Pi 的 custom compaction（按主题 / 代码感知 / 换小模型摘要）。
 - **记忆两类**：情景记忆（= 事件日志，已有）+ 开始做语义记忆（摘要 / 事实，**文件式**）。
 
