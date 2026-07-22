@@ -18,6 +18,7 @@ const LOOP_WARNING_LENGTH = 1;
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 8787;
 const DEFAULT_SYSTEM_PROMPT_PATH = join(homedir(), '.caicaiclaw/SYSTEM.md')
+const DEFAULT_RAW_HISTORY_PATH = join(homedir(), '.caicaiclaw/history.jsonl')
 
 const config: AgentConfig = {
     systemPromptPath: process.env.CAICAI_SYSTEM_PROMPT_PATH ?? DEFAULT_SYSTEM_PROMPT_PATH,
@@ -37,6 +38,7 @@ let nextConnectionId = 1;
 let nextClientId = 1;
 
 const runtime = new AgentRuntime(config, {
+    rawHistoryPath: process.env.CAICAI_RAW_HISTORY_PATH ?? DEFAULT_RAW_HISTORY_PATH,
     onOutput: async (event) => {
         for (const message of runtimeOutputToServerMessages(event)) {
             broadcast(message);
@@ -71,18 +73,20 @@ server.on("connection", (socket, request) => {
         clientId,
     });
 
-    socket.on("message", (data) => {
+    socket.on("message", async (data) => {
         const raw = data.toString("utf8");
+        let requestId: string | undefined;
 
         try {
             const message = parseClientMessage(raw);
+            requestId = message.requestId;
 
             if (message.type === "ping") {
                 send(socket, { type: "pong", requestId: message.requestId });
                 return;
             }
 
-            runtime.enqueue({
+            await runtime.enqueue({
                 text: message.text,
                 source: makeSource(clientId, message.source),
                 createdAt: Date.now(),
@@ -92,6 +96,7 @@ server.on("connection", (socket, request) => {
             send(socket, {
                 type: "error",
                 message: errorToMessage(error),
+                requestId,
             });
         }
     });

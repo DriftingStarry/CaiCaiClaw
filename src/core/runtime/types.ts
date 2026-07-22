@@ -7,10 +7,13 @@ export type InboundEvent = {
     text: string;
     source?: string;
     createdAt?: number;
-    turnId?: string;
+    inputId?: string;
 };
 
-export type RuntimeState = { messages: BaseMessage[]; llmCalls: number };
+export type ExecutionState = { messages: BaseMessage[]; llmCalls: number };
+
+/** Compatibility alias for the LangGraph invocation state. */
+export type RuntimeState = ExecutionState;
 
 export type MessageStreamChunk = readonly [
     message: BaseMessage,
@@ -75,9 +78,9 @@ export type RuntimeOutputEvent =
       };
 
 export type AgentRuntimeOptions = {
+    rawHistoryPath: string;
     heartbeatMs?: number;
     onOutput?: (event: RuntimeOutputEvent) => MaybePromise<void>;
 };
 
 export type RuntimeOutputEmitter = (event: RuntimeOutputEvent) => MaybePromise<void>;
-

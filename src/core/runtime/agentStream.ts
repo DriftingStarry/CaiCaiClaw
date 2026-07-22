@@ -32,10 +32,8 @@ export async function runAgentStream(
             finalState = payload;
         }
 
-        await emitOutput({ type: "done", turnId });
         return finalState;
     } catch (error) {
-        await emitOutput({ type: "error", turnId, error });
         throw error;
     }
 }
@@ -69,4 +67,3 @@ async function emitMessageDelta(
         metadata: normalizedMetadata,
     });
 }
-

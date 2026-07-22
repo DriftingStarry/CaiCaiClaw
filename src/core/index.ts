@@ -4,6 +4,7 @@ export { getOpenrouterModel } from "./modelProvider.js";
 export {
     AgentRuntime,
     type AgentRuntimeOptions,
+    type ExecutionState,
     type InboundEvent,
     type MessageStreamChunk,
     type RuntimeOutputEvent,
