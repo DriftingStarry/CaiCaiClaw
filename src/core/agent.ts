@@ -67,7 +67,7 @@ export const getAgent = (config: AgentConfig) => {
 
         const resp = await model.invoke(context);
         return {
-            messages: [new AIMessage(resp)],
+            messages: [resp],
             llmCalls: 1,
         };
     };
