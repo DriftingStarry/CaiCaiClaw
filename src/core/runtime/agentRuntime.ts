@@ -22,6 +22,7 @@ export class AgentRuntime {
     private activeTurnId?: string;
     private nextTurnNumber = 1;
     private systemPromptPath: string;
+    private systemPrompt:string = '';
 
     constructor(config: AgentConfig, options?: AgentRuntimeOptions) {
         this.agent = getAgent({
@@ -35,9 +36,20 @@ export class AgentRuntime {
                 await this.emitToolResult(event);
             },
         });
-        this.heartbeatMs = options?.heartbeatMs ?? 30_000;
-        this.onOutput = options?.onOutput;
+
+        // init systemPrompt
         this.systemPromptPath = config.systemPromptPath;
+        try {
+            this.loadSystemPrompt();
+        } catch (e) {
+            throw Error(`${e}`);
+        }
+
+        // setheartbeatMs
+        this.heartbeatMs = options?.heartbeatMs ?? 30_000;
+
+        // setOutputHandler
+        this.onOutput = options?.onOutput;
     }
 
     public enqueue(event: InboundEvent) {
@@ -74,10 +86,10 @@ export class AgentRuntime {
     }
 
     //todo 更健壮的处理, 文件存在检查, 特殊符号处理, 编码问题, etc..
-    private getSystemPrompt() {
+    public loadSystemPrompt() {
         try {
             const systemPrompt = readFileSync(this.systemPromptPath, 'utf-8')
-            return systemPrompt
+            this.systemPrompt = systemPrompt;
         } catch (e) {
             throw Error(`${e}`)
         }
@@ -85,7 +97,7 @@ export class AgentRuntime {
     //todo 需要注意对工具调用输出的处理
     // todo 更好的上下文构建策略和更多可配置的参数 (如滑窗长度)
     private buildContext(inputMessages:BaseMessage[]) {
-        return [new SystemMessage(this.getSystemPrompt()), ...this.state.messages.slice(1,).slice(-30,) ,...inputMessages]
+        return [new SystemMessage(this.systemPrompt), ...this.state.messages.slice(1,).slice(-30,) ,...inputMessages]
     }
 
     private async handleEvents(events: InboundEvent[]) {
