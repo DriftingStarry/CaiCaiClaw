@@ -35,7 +35,7 @@ export class AgentRuntime {
     private readonly queue = new EventQueue();
     private rawHistoryState: RawHistoryState;
     private executionState: RuntimeState = { messages: [], llmCalls: 0 };
-    private readonly agent: CompiledStateGraph<any, any, any, any, any>;
+    private readonly agent: ReturnType<typeof getAgent>;
     private running = false;
     private readonly heartbeatMs: number;
     private readonly onOutput?: RuntimeOutputEmitter;

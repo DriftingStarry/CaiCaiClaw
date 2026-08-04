@@ -1,15 +1,15 @@
 import { AIMessage, AIMessageChunk } from "@langchain/core/messages";
-import { CompiledStateGraph } from "@langchain/langgraph";
 import { toJsonObject } from "@caicaiclaw/protocol";
 import { extractReasoningContent, extractTextContent } from "./messageContent.js";
 import { MessageStreamChunk, RuntimeOutputEmitter, RuntimeState } from "./types.js";
+import { getAgent } from "../agent.js";
 
 type LangGraphMultiStreamChunk =
     | readonly ["messages", MessageStreamChunk]
     | readonly ["values", RuntimeState];
 
 export async function runAgentStream(
-    agent: CompiledStateGraph<any, any, any, any, any>,
+    agent: ReturnType<typeof getAgent>,
     turnId: string,
     inputState: RuntimeState,
     emitOutput: RuntimeOutputEmitter,
