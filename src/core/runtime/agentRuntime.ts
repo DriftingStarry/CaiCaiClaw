@@ -19,6 +19,7 @@ import {
     RawHistoryEvent,
     RawHistoryEventDraft,
     RawHistoryState,
+    serializeHistoryMessage,
     serializeHistoryMessages,
 } from "./history.js";
 import { EventQueue } from "./eventQueue.js";
@@ -83,7 +84,7 @@ export class AgentRuntime {
             inputId,
             text: normalizedEvent.text,
             source: normalizedEvent.source,
-            message: message.toDict(),
+            message: serializeHistoryMessage(message),
         });
 
         this.queue.enqueue(normalizedEvent);

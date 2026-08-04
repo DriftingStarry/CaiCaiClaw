@@ -12,10 +12,23 @@ import { z } from "zod";
 export const HISTORY_VERSION = 1;
 export const HISTORY_WINDOW_MESSAGES = 30;
 
+/**
+ * Mirrors LangChain's `StoredMessage`, which is the JSONL wire format for persisted
+ * messages. `looseObject` is required: LangChain writes provider-specific keys
+ * (`tool_calls`, `invalid_tool_calls`, ...) that a strict object would silently drop,
+ * corrupting replayed history.
+ */
 export const storedMessageSchema = z.object({
     type: z.string().min(1),
-    data: z.record(z.string(), z.unknown()),
+    data: z.looseObject({
+        content: z.unknown(),
+        role: z.string().optional(),
+        name: z.string().optional(),
+        tool_call_id: z.string().optional(),
+    }),
 });
+
+export type StoredMessagePayload = z.infer<typeof storedMessageSchema>;
 
 const jsonObjectSchema = z.record(z.string(), z.unknown());
 
@@ -150,8 +163,15 @@ export function createEmptyRawHistoryState(): RawHistoryState {
     };
 }
 
-export function serializeHistoryMessages(messages: BaseMessage[]): Array<z.infer<typeof storedMessageSchema>> {
+export function serializeHistoryMessages(messages: BaseMessage[]): StoredMessagePayload[] {
     return mapChatMessagesToStoredMessages(messages).map(sanitizeStoredMessage);
+}
+
+/** Serializes one message for persistence, applying the same sanitizing as a batch. */
+export function serializeHistoryMessage(message: BaseMessage): StoredMessagePayload {
+    const [stored] = serializeHistoryMessages([message]);
+    if (!stored) throw new Error("message could not be serialized");
+    return stored;
 }
 
 export function applyRawHistoryEvent(state: RawHistoryState, event: RawHistoryEvent): void {
@@ -169,7 +189,7 @@ export function applyRawHistoryEvent(state: RawHistoryState, event: RawHistoryEv
                 throw new Error(`duplicate input ${event.inputId}`);
             }
 
-            const message = restoreStoredMessages([event.message as unknown as StoredMessage])[0];
+            const message = restoreStoredMessages([event.message])[0];
             if (!message) throw new Error("input event has no message");
             if (!HumanMessage.isInstance(message)) {
                 throw new Error("input event message must be human");
@@ -253,7 +273,7 @@ export function applyRawHistoryEvent(state: RawHistoryState, event: RawHistoryEv
                 return input.message;
             });
 
-            const outputMessages = restoreStoredMessages(event.messages as unknown as StoredMessage[]);
+            const outputMessages = restoreStoredMessages(event.messages);
             if (outputMessages.some((message) => !AIMessage.isInstance(message) && !ToolMessage.isInstance(message))) {
                 throw new Error(`turn ${event.turnId} output contains a non AI/tool message`);
             }
@@ -308,15 +328,26 @@ export function markInterruptedHistory(state: RawHistoryState): void {
     state.activeToolCalls.clear();
 }
 
-function restoreStoredMessages(messages: StoredMessage[]): BaseMessage[] {
+function restoreStoredMessages(messages: StoredMessagePayload[]): BaseMessage[] {
     try {
-        return mapStoredMessagesToChatMessages(messages.map(sanitizeStoredMessage) as StoredMessage[]);
+        return mapStoredMessagesToChatMessages(messages.map(sanitizeStoredMessage).map(toLangChainStoredMessage));
     } catch (error) {
         throw new Error(`invalid stored message: ${errorMessage(error)}`);
     }
 }
 
-function sanitizeStoredMessage(message: StoredMessage): z.infer<typeof storedMessageSchema> {
+/**
+ * The single adapter between our validated payload and LangChain's `StoredMessage`.
+ * `StoredMessageData` declares `content: string` and no index signature, but LangChain
+ * itself writes array content and extra keys, so the declared type is narrower than the
+ * real wire format. The cast is confined here; `sanitizeStoredMessage` has already
+ * validated `type`/`data` before this point.
+ */
+function toLangChainStoredMessage(message: StoredMessagePayload): StoredMessage {
+    return message as StoredMessage;
+}
+
+function sanitizeStoredMessage(message: StoredMessage | StoredMessagePayload): StoredMessagePayload {
     const data: Record<string, unknown> = { ...message.data };
     const additionalKwargs = data.additional_kwargs;
 
