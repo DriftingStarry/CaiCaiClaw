@@ -1,7 +1,7 @@
 import { tool } from "@langchain/core/tools";
 import child_process from "node:child_process";
 import util from "node:util";
-import { z } from "zod/v4";
+import { z } from "zod";
 
 const exec = util.promisify(child_process.exec);
 

@@ -1,7 +1,7 @@
 import { tool } from "@langchain/core/tools";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { z } from "zod/v4";
+import { z } from "zod";
 import { expandPath } from "./utils.js";
 
 export const fileWriteTool = tool(

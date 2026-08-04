@@ -1,6 +1,6 @@
 import { tool } from "@langchain/core/tools";
 import { promises as fs } from "node:fs";
-import { z } from "zod/v4";
+import { z } from "zod";
 import { expandPath, positionToOffset } from "./utils.js";
 
 export const fileEditTool = tool(
