@@ -3,7 +3,7 @@
 	"scripts": {
 		"dev": "set -a && { [ ! -f .env ] || . ./.env; } && set +a && tsx watch src/ws/server.ts",
 		"server": "set -a && { [ ! -f .env ] || . ./.env; } && set +a && tsx src/ws/server.ts",
-		"typecheck": "tsc -p tsconfig.json"
+		"typecheck": "tsc -b tsconfig.json"
 	},
 	"dependencies": {
 		"@caicaiclaw/protocol": "workspace:*",
