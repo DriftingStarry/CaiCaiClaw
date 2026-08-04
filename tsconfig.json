@@ -2,6 +2,7 @@
     "files": [],
     "references": [
         { "path": "./tsconfig.src.json" },
+        { "path": "./packages/tool" },
         { "path": "./packages/protocol" },
         { "path": "./packages/client-core" },
         { "path": "./apps/web" }

@@ -11,6 +11,9 @@ importers:
       '@caicaiclaw/protocol':
         specifier: workspace:*
         version: link:packages/protocol
+      '@caicaiclaw/tool':
+        specifier: workspace:*
+        version: link:packages/tool
       '@langchain/core':
         specifier: ^1.1.48
         version: 1.1.48(openai@6.42.0(ws@8.21.0)(zod@4.4.3))(ws@8.21.0)
@@ -60,6 +63,9 @@ importers:
       '@caicaiclaw/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
+      '@caicaiclaw/tool':
+        specifier: workspace:*
+        version: link:../../packages/tool
       '@tailwindcss/postcss':
         specifier: ^4.1.0
         version: 4.3.2
@@ -100,9 +106,14 @@ importers:
 
   packages/protocol:
     dependencies:
+      '@caicaiclaw/tool':
+        specifier: workspace:*
+        version: link:../tool
       zod:
         specifier: ^4.4.3
         version: 4.4.3
+
+  packages/tool: {}
 
 packages:
 
