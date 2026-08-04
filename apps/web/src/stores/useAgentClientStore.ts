@@ -1,6 +1,7 @@
 "use client";
 
 import { initialClientState, reduceClientState, ClientState } from "@caicaiclaw/client-core";
+import { errorMessage } from "@caicaiclaw/tool";
 import { create } from "zustand";
 import { getOrCreateClientId, setStoredClientId } from "../adapters/ws/clientIdentity";
 import { buildWsUrl } from "../adapters/ws/config";
@@ -54,7 +55,7 @@ export const useAgentClientStore = create<AgentClientStore>((set) => ({
         } catch (error) {
             set((state) => ({
                 ...state,
-                errors: [...state.errors, error instanceof Error ? error.message : String(error)],
+                errors: [...state.errors, errorMessage(error)],
             }));
         }
     },
