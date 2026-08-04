@@ -1,13 +1,13 @@
-import { z } from "zod/v4";
+import { z } from "zod";
+import type { JsonObject, JsonValue } from "@caicaiclaw/tool";
+
+export { errorMessage, isJsonObject, toJsonObject, toJsonValue } from "@caicaiclaw/tool";
+export { errorMessage as errorToMessage } from "@caicaiclaw/tool";
+export type { JsonArray, JsonObject, JsonPrimitive, JsonValue } from "@caicaiclaw/tool";
 
 export const WS_PROTOCOL_VERSION = 2;
 export const MAX_CLIENT_ID_LENGTH = 64;
 export const CLIENT_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
-
-export type JsonPrimitive = string | number | boolean | null;
-export type JsonValue = JsonPrimitive | JsonObject | JsonArray;
-export type JsonObject = { [key: string]: JsonValue };
-export type JsonArray = JsonValue[];
 
 export const requestIdSchema = z.string().min(1).optional();
 export const clientIdSchema = z.string().min(1).max(MAX_CLIENT_ID_LENGTH).regex(CLIENT_ID_PATTERN);
@@ -147,36 +147,4 @@ export function serializeServerMessage(message: ServerMessage): string {
 
 export function isValidClientId(value: unknown): value is string {
     return clientIdSchema.safeParse(value).success;
-}
-
-export function toJsonObject(value: unknown): JsonObject {
-    const jsonValue = toJsonValue(value);
-    return isJsonObject(jsonValue) ? jsonValue : {};
-}
-
-export function toJsonValue(value: unknown): JsonValue {
-    if (value === null) return null;
-
-    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-        return Number.isFinite(value) || typeof value !== "number" ? value : String(value);
-    }
-
-    if (Array.isArray(value)) {
-        return value.map((item) => toJsonValue(item));
-    }
-
-    if (typeof value === "object") {
-        const entries = Object.entries(value).map(([key, entryValue]) => [key, toJsonValue(entryValue)]);
-        return Object.fromEntries(entries) as JsonObject;
-    }
-
-    return String(value);
-}
-
-export function isJsonObject(value: JsonValue): value is JsonObject {
-    return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-export function errorToMessage(error: unknown): string {
-    return error instanceof Error ? error.message : String(error);
 }
