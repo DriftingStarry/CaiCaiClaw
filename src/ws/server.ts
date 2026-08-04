@@ -1,7 +1,7 @@
 import { WebSocket, WebSocketServer } from "ws";
+import { errorMessage } from "@caicaiclaw/tool";
 import { AgentConfig, AgentRuntime, tools, toolsByName } from "../core/index.js";
 import {
-    errorToMessage,
     isValidClientId,
     parseClientMessage,
     runtimeOutputToServerMessages,
@@ -55,7 +55,7 @@ if (!Number.isInteger(port) || port < 1 || port > 65_535) {
 
 const runtimeTask = runtime.run();
 runtimeTask.catch((error: unknown) => {
-    const message = errorToMessage(error);
+    const message = errorMessage(error);
     console.error(`[runtime] stopped: ${message}`);
     broadcast({ type: "error", message });
 });
@@ -95,7 +95,7 @@ server.on("connection", (socket, request) => {
         } catch (error) {
             send(socket, {
                 type: "error",
-                message: errorToMessage(error),
+                message: errorMessage(error),
                 requestId,
             });
         }
@@ -106,7 +106,7 @@ server.on("connection", (socket, request) => {
     });
 
     socket.on("error", (error) => {
-        console.error(`[ws:${clientId}/${connectionId}] ${errorToMessage(error)}`);
+        console.error(`[ws:${clientId}/${connectionId}] ${errorMessage(error)}`);
     });
 
     console.log(`[ws:${clientId}/${connectionId}] connected`);
@@ -117,7 +117,7 @@ server.on("listening", () => {
 });
 
 server.on("error", (error) => {
-    console.error(`[ws] ${errorToMessage(error)}`);
+    console.error(`[ws] ${errorMessage(error)}`);
 });
 
 function createClientId(): string {

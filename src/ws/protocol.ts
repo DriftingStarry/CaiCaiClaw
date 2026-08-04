@@ -1,20 +1,18 @@
 import { BaseMessage } from "@langchain/core/messages";
 import {
     clientIdSchema,
-    errorToMessage,
     isValidClientId,
     JsonObject,
     parseClientMessage,
     ServerMessage,
     serializeServerMessage,
-    toJsonObject,
     WS_PROTOCOL_VERSION,
 } from "@caicaiclaw/protocol";
+import { errorMessage, toJsonObject } from "@caicaiclaw/tool";
 import { RuntimeOutputEvent } from "../core/index.js";
 
 export {
     clientIdSchema,
-    errorToMessage,
     isValidClientId,
     parseClientMessage,
     serializeServerMessage,
@@ -88,7 +86,7 @@ export function runtimeOutputToServerMessages(event: RuntimeOutputEvent): Server
                 },
             ];
         case "error":
-            return [{ type: "error", turnId: event.turnId, message: errorToMessage(event.error) }];
+            return [{ type: "error", turnId: event.turnId, message: errorMessage(event.error) }];
         case "done":
             return [
                 { type: "agent_turn_done", turnId: event.turnId, createdAt: Date.now() },
