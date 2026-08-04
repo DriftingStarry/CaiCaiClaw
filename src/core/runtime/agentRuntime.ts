@@ -7,6 +7,7 @@ import { appendFile } from "node:fs/promises";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { dirname } from "node:path";
+import { errorMessage } from "@caicaiclaw/tool";
 import { AgentConfig, getAgent, ToolResultEvent, ToolStartEvent } from "../agent.js";
 import { runAgentStream } from "./agentStream.js";
 import { buildContext } from "./context.js";
@@ -372,10 +373,6 @@ export class AgentRuntime {
 
 function isFileMissingError(error: unknown): boolean {
     return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
-}
-
-function errorMessage(error: unknown): string {
-    return error instanceof Error ? error.message : String(error);
 }
 
 function normalizeFailureMessage(error: unknown): string {

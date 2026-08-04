@@ -7,6 +7,7 @@ import {
     StoredMessage,
     ToolMessage,
 } from "@langchain/core/messages";
+import { errorMessage } from "@caicaiclaw/tool";
 import { z } from "zod";
 
 export const HISTORY_VERSION = 1;
@@ -369,10 +370,6 @@ function assertActiveTurn(state: RawHistoryState, turnId: string): void {
     if (!state.activeTurns.has(turnId)) {
         throw new Error(`turn ${turnId} is not active`);
     }
-}
-
-function errorMessage(error: unknown): string {
-    return error instanceof Error ? error.message : String(error);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

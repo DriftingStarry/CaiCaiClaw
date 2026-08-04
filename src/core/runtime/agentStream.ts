@@ -1,5 +1,5 @@
 import { AIMessage, AIMessageChunk } from "@langchain/core/messages";
-import { toJsonObject } from "@caicaiclaw/protocol";
+import { toJsonObject } from "@caicaiclaw/tool";
 import { extractReasoningContent, extractTextContent } from "./messageContent.js";
 import { MessageStreamChunk, RuntimeOutputEmitter, RuntimeState } from "./types.js";
 import { getAgent } from "../agent.js";

@@ -1,6 +1,7 @@
 import { AIMessage, SystemMessage } from "@langchain/core/messages";
 import { DynamicStructuredTool } from "@langchain/core/tools";
-import { JsonObject, JsonValue } from "@caicaiclaw/protocol";
+import { errorMessage, toJsonObject, toJsonValue } from "@caicaiclaw/tool";
+import type { JsonObject, JsonValue, MaybePromise } from "@caicaiclaw/tool";
 import {
     ConditionalEdgeRouter,
     END,
@@ -23,8 +24,6 @@ export interface AgentConfig {
     onToolStart?: (event: ToolStartEvent) => MaybePromise<void>;
     onToolResult?: (event: ToolResultEvent) => MaybePromise<void>;
 }
-
-export type MaybePromise<T> = T | Promise<T>;
 
 export type ToolStartEvent = {
     toolCallId: string;
@@ -106,7 +105,7 @@ export const getAgent = (config: AgentConfig) => {
                     toolCallId,
                     name: call.name,
                     status: "error",
-                    result: error instanceof Error ? error.message : String(error),
+                    result: errorMessage(error),
                     createdAt: Date.now(),
                 });
                 throw error;
@@ -144,31 +143,3 @@ export const getAgent = (config: AgentConfig) => {
         .compile();
     return agent;
 };
-
-function toJsonObject(value: unknown): JsonObject {
-    const jsonValue = toJsonValue(value);
-    return isJsonObject(jsonValue) ? jsonValue : {};
-}
-
-function toJsonValue(value: unknown): JsonValue {
-    if (value === null) return null;
-
-    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-        return Number.isFinite(value) || typeof value !== "number" ? value : String(value);
-    }
-
-    if (Array.isArray(value)) {
-        return value.map((item) => toJsonValue(item));
-    }
-
-    if (typeof value === "object") {
-        const entries = Object.entries(value).map(([key, entryValue]) => [key, toJsonValue(entryValue)]);
-        return Object.fromEntries(entries) as JsonObject;
-    }
-
-    return String(value);
-}
-
-function isJsonObject(value: JsonValue): value is JsonObject {
-    return value !== null && typeof value === "object" && !Array.isArray(value);
-}
