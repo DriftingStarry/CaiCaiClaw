@@ -34,12 +34,31 @@
 
 ## 架构边界
 
-- `src/core` 放置 agent runtime、model provider、tools、prompt 等核心逻辑。
-- `src/ws` 放置 WebSocket 协议、连接管理、消息解析和序列化逻辑。
+仓库是 pnpm workspace，根目录只做编排（脚本、tsconfig references），不放业务代码。
+
+- `packages/utils` 通用工具函数（`JsonValue` 转换、`errorMessage` 等）。纯函数，不做 IO。
+- `packages/protocol` 对外消息协议：类型、Zod schema、解析与序列化。
+- `packages/agent-core` agent 核心：LangGraph 图、runtime、model provider、tools、上下文构建与事件历史。
+- `packages/client-core` 与框架无关的客户端状态归约，不依赖任何 UI 框架。
+- `apps/server` WebSocket 服务：传输、连接管理、进程编排与配置。
+- `apps/web` Next.js 前端。
+
+工作区依赖方向单向，不允许反向或循环：
+
+```text
+utils        ← 无工作区依赖
+protocol     ← utils
+agent-core   ← utils
+client-core  ← protocol
+server       ← agent-core, protocol, utils
+web          ← client-core, protocol, utils
+```
+
+- `agent-core` 不得依赖 `protocol`：核心层不认识具体传输协议。跨层共享的基础类型放 `utils`。
 - 传输层不应承载核心业务决策。
-- 核心层不应依赖具体传输协议。
 - 对外消息协议变更时，应同步更新类型、Zod schema、解析和序列化逻辑。
-- 工具能力放在 `src/core/tools`，并通过现有导出入口统一暴露。
+- 工具能力放在 `packages/agent-core/src/tools`，并通过现有导出入口统一暴露。
+- 新增工作区成员时，需同步更新根 `tsconfig.json` 的 references。
 
 ## 输入校验与错误处理
 

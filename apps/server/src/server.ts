@@ -1,6 +1,6 @@
 import { WebSocket, WebSocketServer } from "ws";
-import { errorMessage } from "@caicaiclaw/tool";
-import { AgentConfig, AgentRuntime, tools, toolsByName } from "../core/index.js";
+import { errorMessage } from "@caicaiclaw/utils";
+import { AgentConfig, AgentRuntime, tools, toolsByName } from "@caicaiclaw/agent-core";
 import {
     isValidClientId,
     parseClientMessage,

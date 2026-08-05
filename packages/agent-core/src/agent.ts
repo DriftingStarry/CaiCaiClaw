@@ -1,7 +1,7 @@
 import { AIMessage, SystemMessage } from "@langchain/core/messages";
 import { DynamicStructuredTool } from "@langchain/core/tools";
-import { errorMessage, toJsonObject, toJsonValue } from "@caicaiclaw/tool";
-import type { JsonObject, JsonValue, MaybePromise } from "@caicaiclaw/tool";
+import { errorMessage, toJsonObject, toJsonValue } from "@caicaiclaw/utils";
+import type { JsonObject, JsonValue, MaybePromise } from "@caicaiclaw/utils";
 import {
     ConditionalEdgeRouter,
     END,

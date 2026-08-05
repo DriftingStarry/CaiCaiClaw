@@ -7,7 +7,7 @@ import {
     StoredMessage,
     ToolMessage,
 } from "@langchain/core/messages";
-import { errorMessage } from "@caicaiclaw/tool";
+import { errorMessage } from "@caicaiclaw/utils";
 import { z } from "zod";
 
 export const HISTORY_VERSION = 1;

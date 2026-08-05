@@ -8,8 +8,8 @@ import {
     serializeServerMessage,
     WS_PROTOCOL_VERSION,
 } from "@caicaiclaw/protocol";
-import { errorMessage, toJsonObject } from "@caicaiclaw/tool";
-import { RuntimeOutputEvent } from "../core/index.js";
+import { errorMessage, toJsonObject } from "@caicaiclaw/utils";
+import { RuntimeOutputEvent } from "@caicaiclaw/agent-core";
 
 export {
     clientIdSchema,

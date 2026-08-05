@@ -8,33 +8,12 @@ importers:
 
   .:
     dependencies:
-      '@caicaiclaw/protocol':
-        specifier: workspace:*
-        version: link:packages/protocol
-      '@caicaiclaw/tool':
-        specifier: workspace:*
-        version: link:packages/tool
-      '@langchain/core':
-        specifier: ^1.1.48
-        version: 1.1.48(openai@6.42.0(ws@8.21.0)(zod@4.4.3))(ws@8.21.0)
-      '@langchain/langgraph':
-        specifier: ^1.3.7
-        version: 1.3.7(@langchain/core@1.1.48(openai@6.42.0(ws@8.21.0)(zod@4.4.3))(ws@8.21.0))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.4.3)
-      '@langchain/openrouter':
-        specifier: ^0.3.0
-        version: 0.3.0(@langchain/core@1.1.48(openai@6.42.0(ws@8.21.0)(zod@4.4.3))(ws@8.21.0))(ws@8.21.0)(zod@4.4.3)
       ink:
         specifier: ^7.0.6
         version: 7.0.6(@types/react@19.2.17)(react@19.2.7)
       react:
         specifier: ^19.2.7
         version: 19.2.7
-      ws:
-        specifier: ^8.21.0
-        version: 8.21.0
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
     devDependencies:
       '@types/node':
         specifier: ^25.9.2
@@ -42,6 +21,34 @@ importers:
       '@types/react':
         specifier: ^19.2.17
         version: 19.2.17
+      tsx:
+        specifier: ^4.22.4
+        version: 4.22.4
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
+  apps/server:
+    dependencies:
+      '@caicaiclaw/agent-core':
+        specifier: workspace:*
+        version: link:../../packages/agent-core
+      '@caicaiclaw/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@caicaiclaw/utils':
+        specifier: workspace:*
+        version: link:../../packages/utils
+      '@langchain/core':
+        specifier: ^1.1.48
+        version: 1.1.48(openai@6.42.0(ws@8.21.0)(zod@4.4.3))(ws@8.21.0)
+      ws:
+        specifier: ^8.21.0
+        version: 8.21.0
+    devDependencies:
+      '@types/node':
+        specifier: ^25.9.2
+        version: 25.9.2
       '@types/ws':
         specifier: ^8.18.1
         version: 8.18.1
@@ -63,9 +70,9 @@ importers:
       '@caicaiclaw/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
-      '@caicaiclaw/tool':
+      '@caicaiclaw/utils':
         specifier: workspace:*
-        version: link:../../packages/tool
+        version: link:../../packages/utils
       '@tailwindcss/postcss':
         specifier: ^4.1.0
         version: 4.3.2
@@ -98,6 +105,24 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
 
+  packages/agent-core:
+    dependencies:
+      '@caicaiclaw/utils':
+        specifier: workspace:*
+        version: link:../utils
+      '@langchain/core':
+        specifier: ^1.1.48
+        version: 1.1.48(openai@6.42.0(ws@8.21.0)(zod@4.4.3))(ws@8.21.0)
+      '@langchain/langgraph':
+        specifier: ^1.3.7
+        version: 1.3.7(@langchain/core@1.1.48(openai@6.42.0(ws@8.21.0)(zod@4.4.3))(ws@8.21.0))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.4.3)
+      '@langchain/openrouter':
+        specifier: ^0.3.0
+        version: 0.3.0(@langchain/core@1.1.48(openai@6.42.0(ws@8.21.0)(zod@4.4.3))(ws@8.21.0))(ws@8.21.0)(zod@4.4.3)
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+
   packages/client-core:
     dependencies:
       '@caicaiclaw/protocol':
@@ -106,14 +131,14 @@ importers:
 
   packages/protocol:
     dependencies:
-      '@caicaiclaw/tool':
+      '@caicaiclaw/utils':
         specifier: workspace:*
-        version: link:../tool
+        version: link:../utils
       zod:
         specifier: ^4.4.3
         version: 4.4.3
 
-  packages/tool: {}
+  packages/utils: {}
 
 packages:
 

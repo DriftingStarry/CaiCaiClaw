@@ -7,7 +7,7 @@ import { appendFile } from "node:fs/promises";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { dirname } from "node:path";
-import { errorMessage } from "@caicaiclaw/tool";
+import { errorMessage } from "@caicaiclaw/utils";
 import { AgentConfig, getAgent, ToolResultEvent, ToolStartEvent } from "../agent.js";
 import { runAgentStream } from "./agentStream.js";
 import { buildContext } from "./context.js";

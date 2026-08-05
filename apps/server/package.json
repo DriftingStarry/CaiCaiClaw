@@ -1,0 +1,22 @@
+{
+    "name": "@caicaiclaw/server",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "typecheck": "tsc -p tsconfig.json"
+    },
+    "dependencies": {
+        "@caicaiclaw/agent-core": "workspace:*",
+        "@caicaiclaw/protocol": "workspace:*",
+        "@caicaiclaw/utils": "workspace:*",
+        "@langchain/core": "^1.1.48",
+        "ws": "^8.21.0"
+    },
+    "devDependencies": {
+        "@types/node": "^25.9.2",
+        "@types/ws": "^8.18.1",
+        "tsx": "^4.22.4",
+        "typescript": "^6.0.3"
+    }
+}

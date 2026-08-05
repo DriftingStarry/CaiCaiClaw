@@ -1,8 +1,8 @@
 import { BaseMessage } from "@langchain/core/messages";
-import { JsonObject, JsonValue } from "@caicaiclaw/protocol";
-import type { MaybePromise } from "@caicaiclaw/tool";
+import { JsonObject, JsonValue } from "@caicaiclaw/utils";
+import type { MaybePromise } from "@caicaiclaw/utils";
 
-export type { MaybePromise } from "@caicaiclaw/tool";
+export type { MaybePromise } from "@caicaiclaw/utils";
 
 export type InboundEvent = {
     text: string;

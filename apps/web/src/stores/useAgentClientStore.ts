@@ -1,7 +1,7 @@
 "use client";
 
 import { initialClientState, reduceClientState, ClientState } from "@caicaiclaw/client-core";
-import { errorMessage } from "@caicaiclaw/tool";
+import { errorMessage } from "@caicaiclaw/utils";
 import { create } from "zustand";
 import { getOrCreateClientId, setStoredClientId } from "../adapters/ws/clientIdentity";
 import { buildWsUrl } from "../adapters/ws/config";

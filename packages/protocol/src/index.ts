@@ -1,9 +1,9 @@
 import { z } from "zod";
-import type { JsonObject, JsonValue } from "@caicaiclaw/tool";
+import type { JsonObject, JsonValue } from "@caicaiclaw/utils";
 
-export { errorMessage, isJsonObject, toJsonObject, toJsonValue } from "@caicaiclaw/tool";
-export { errorMessage as errorToMessage } from "@caicaiclaw/tool";
-export type { JsonArray, JsonObject, JsonPrimitive, JsonValue } from "@caicaiclaw/tool";
+export { errorMessage, isJsonObject, toJsonObject, toJsonValue } from "@caicaiclaw/utils";
+export { errorMessage as errorToMessage } from "@caicaiclaw/utils";
+export type { JsonArray, JsonObject, JsonPrimitive, JsonValue } from "@caicaiclaw/utils";
 
 export const WS_PROTOCOL_VERSION = 2;
 export const MAX_CLIENT_ID_LENGTH = 64;
