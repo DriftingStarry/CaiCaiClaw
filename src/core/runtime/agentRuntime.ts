@@ -133,7 +133,7 @@ export class AgentRuntime {
     }
 
     public loadSystemPrompt() {
-	if (this.systemPrompt === '') return // not set systemPrompt, do nothing
+	if (this.systemPromptPath === '') return // not set systemPrompt, do nothing
         try {
             this.systemPrompt = readFileSync(this.systemPromptPath, "utf-8");
         } catch (error) {
