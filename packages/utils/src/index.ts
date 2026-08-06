@@ -13,9 +13,16 @@ export function toJsonObject(value: unknown): JsonObject {
 export function toJsonValue(value: unknown): JsonValue {
     if (value === null) return null;
 
-    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-        return Number.isFinite(value) || typeof value !== "number" ? value : String(value);
+    if (typeof value === "number") {
+        if (!Number.isFinite(value)) {
+            // JSON cannot represent non-finite numbers, so match JSON.stringify by returning null.
+            return null;
+        }
+
+        return value;
     }
+
+    if (typeof value === "string" || typeof value === "boolean") return value;
 
     if (Array.isArray(value)) {
         return value.map((item) => toJsonValue(item));
