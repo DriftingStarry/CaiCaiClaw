@@ -156,13 +156,20 @@ export function parseClientMessage(raw: string): ClientMessage {
     return parsed.data;
 }
 
-export function parseServerMessage(raw: string): ServerMessage {
+export function parseServerMessage(raw: string): ServerMessage | undefined {
     let data: unknown;
 
     try {
         data = JSON.parse(raw);
     } catch {
         throw new Error("message must be valid JSON");
+    }
+
+    const messageType = typeof data === "object" && data !== null && "type" in data ? data.type : undefined;
+    const isKnownType = serverMessageSchema.options.some((option) => option.shape.type.value === messageType);
+    if (!isKnownType) {
+        // Unknown types return undefined for forward compatibility and are discarded by callers.
+        return undefined;
     }
 
     const parsed = serverMessageSchema.safeParse(data);

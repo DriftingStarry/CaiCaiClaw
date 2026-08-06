@@ -27,10 +27,13 @@ export const useAgentClientStore = create<AgentClientStore>((set) => ({
                 wsClient = undefined;
                 set((state) => reduceClientState(state, { type: "connection_status", status: "closed" }));
             },
-            onError: () =>
+            onError: (error) =>
                 set((state) => ({
                     ...state,
-                    errors: [...state.errors, "WebSocket connection error"],
+                    errors: [
+                        ...state.errors,
+                        error instanceof Error ? errorMessage(error) : "WebSocket connection error",
+                    ],
                 })),
             onMessage: (message) => {
                 if (message.type === "hello") {
