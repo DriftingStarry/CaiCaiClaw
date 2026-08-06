@@ -1,13 +1,3 @@
-import path from "node:path";
-
-export function expandPath(filePath: string): string {
-    if (filePath === "~") return process.env.HOME ?? filePath;
-    if (filePath.startsWith("~/")) {
-        return path.join(process.env.HOME ?? "~", filePath.slice(2));
-    }
-    return path.resolve(filePath);
-}
-
 function splitLinesWithEndings(content: string) {
     return content.match(/[^\r\n]*(?:\r\n|\r|\n|$)/g)?.filter((line) => line.length > 0) ?? [];
 }

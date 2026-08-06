@@ -1,11 +1,13 @@
 import { tool } from "@langchain/core/tools";
 import { promises as fs } from "node:fs";
 import { z } from "zod";
-import { addLineNumbers, expandPath } from "./utils.js";
+import { expandPath } from "./pathUtils.js";
+import { addLineNumbers } from "./textUtils.js";
+import { wrapToolResult } from "./toolResult.js";
 
 export const fileReadTool = tool(
     async ({ file_path, offset = 1, limit }) => {
-        try {
+        return wrapToolResult("file read", async () => {
             const fullPath = expandPath(file_path);
             const content = await fs.readFile(fullPath, "utf8");
             const allLines = content.length === 0 ? [] : content.split(/\r\n|\r|\n/);
@@ -21,12 +23,7 @@ export const fileReadTool = tool(
                 totalLines: allLines.length,
                 content: addLineNumbers(selectedContent, startLine),
             };
-        } catch (e) {
-            return {
-                error: "file read failed",
-                detail: e instanceof Error ? e.message : String(e),
-            };
-        }
+        });
     },
     {
         name: "fileReadTool",
