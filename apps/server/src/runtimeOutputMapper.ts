@@ -1,22 +1,6 @@
-import {
-    clientIdSchema,
-    isValidClientId,
-    parseClientMessage,
-    ServerMessage,
-    serializeServerMessage,
-    WS_PROTOCOL_VERSION,
-} from "@caicaiclaw/protocol";
+import { type ServerMessage } from "@caicaiclaw/protocol";
 import { errorMessage } from "@caicaiclaw/utils";
-import { RuntimeOutputEvent } from "@caicaiclaw/agent-core";
-
-export {
-    clientIdSchema,
-    isValidClientId,
-    parseClientMessage,
-    serializeServerMessage,
-    type ServerMessage,
-    WS_PROTOCOL_VERSION,
-} from "@caicaiclaw/protocol";
+import { type RuntimeOutputEvent } from "@caicaiclaw/agent-core";
 
 export function runtimeOutputToServerMessages(event: RuntimeOutputEvent): ServerMessage[] {
     switch (event.type) {

@@ -1,7 +1,5 @@
 import { z } from "zod";
 
-export { errorMessage, isJsonObject, toJsonObject, toJsonValue } from "@caicaiclaw/utils";
-export { errorMessage as errorToMessage } from "@caicaiclaw/utils";
 export type { JsonArray, JsonObject, JsonPrimitive, JsonValue } from "@caicaiclaw/utils";
 
 export const WS_PROTOCOL_VERSION = 2;
