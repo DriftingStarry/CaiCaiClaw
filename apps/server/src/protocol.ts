@@ -1,14 +1,12 @@
-import { BaseMessage } from "@langchain/core/messages";
 import {
     clientIdSchema,
     isValidClientId,
-    JsonObject,
     parseClientMessage,
     ServerMessage,
     serializeServerMessage,
     WS_PROTOCOL_VERSION,
 } from "@caicaiclaw/protocol";
-import { errorMessage, toJsonObject } from "@caicaiclaw/utils";
+import { errorMessage } from "@caicaiclaw/utils";
 import { RuntimeOutputEvent } from "@caicaiclaw/agent-core";
 
 export {
@@ -34,16 +32,6 @@ export function runtimeOutputToServerMessages(event: RuntimeOutputEvent): Server
             ];
         case "turn_start":
             return [{ type: "agent_turn_start", turnId: event.turnId, createdAt: event.createdAt }];
-        case "message": {
-            const [message, metadata] = event.chunk;
-            return [
-                {
-                    type: "message",
-                    message: serializeBaseMessage(message),
-                    metadata: toJsonObject(metadata),
-                },
-            ];
-        }
         case "assistant_delta":
             return [
                 {
@@ -88,13 +76,6 @@ export function runtimeOutputToServerMessages(event: RuntimeOutputEvent): Server
         case "error":
             return [{ type: "error", turnId: event.turnId, message: errorMessage(event.error) }];
         case "done":
-            return [
-                { type: "agent_turn_done", turnId: event.turnId, createdAt: Date.now() },
-                { type: "done" },
-            ];
+            return [{ type: "agent_turn_done", turnId: event.turnId, createdAt: Date.now() }];
     }
-}
-
-function serializeBaseMessage(message: BaseMessage): JsonObject {
-    return toJsonObject(message.toDict());
 }
