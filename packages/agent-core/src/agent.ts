@@ -90,6 +90,26 @@ export const getAgent = (config: AgentConfig) => {
                 createdAt: Date.now(),
             });
 
+            if (!tool) {
+                const error = `未知工具: ${call.name}`;
+                await onToolResult?.({
+                    toolCallId,
+                    name: call.name,
+                    status: "error",
+                    result: error,
+                    createdAt: Date.now(),
+                });
+                res.push(
+                    new ToolMessage({
+                        content: error,
+                        tool_call_id: toolCallId,
+                        name: call.name,
+                        status: "error",
+                    }),
+                );
+                continue;
+            }
+
             try {
                 const tool_res = await tool.invoke(call);
                 await onToolResult?.({
