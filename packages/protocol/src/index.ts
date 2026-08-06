@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { JsonObject, JsonValue } from "@caicaiclaw/utils";
+import type { JsonObject } from "@caicaiclaw/utils";
 
 export { errorMessage, isJsonObject, toJsonObject, toJsonValue } from "@caicaiclaw/utils";
 export { errorMessage as errorToMessage } from "@caicaiclaw/utils";
@@ -33,80 +33,111 @@ export type ClientMessage = z.infer<typeof clientMessageSchema>;
 
 export type StoredMessagePayload = JsonObject;
 
-export type ServerMessage =
-    | {
-          type: "hello";
-          protocolVersion: number;
-          clientId: string;
-      }
-    | {
-          type: "ack";
-          requestId?: string;
-      }
-    | {
-          type: "input_accepted";
-          turnId: string;
-          text: string;
-          source?: string;
-          createdAt: number;
-      }
-    | {
-          type: "agent_turn_start";
-          turnId: string;
-          createdAt: number;
-      }
-    | {
-          type: "assistant_message_delta";
-          turnId: string;
-          text: string;
-          metadata: JsonObject;
-      }
-    | {
-          type: "reasoning_delta";
-          turnId: string;
-          text: string;
-          metadata: JsonObject;
-      }
-    | {
-          type: "tool_call_start";
-          turnId: string;
-          toolCallId: string;
-          name: string;
-          args: JsonObject;
-          createdAt: number;
-      }
-    | {
-          type: "tool_call_result";
-          turnId: string;
-          toolCallId: string;
-          name: string;
-          status: "success" | "error";
-          result: JsonValue;
-          createdAt: number;
-      }
-    | {
-          type: "agent_turn_done";
-          turnId: string;
-          createdAt: number;
-      }
-    | {
-          type: "message";
-          message: StoredMessagePayload;
-          metadata: JsonObject;
-      }
-    | {
-          type: "done";
-      }
-    | {
-          type: "error";
-          message: string;
-          requestId?: string;
-          turnId?: string;
-      }
-    | {
-          type: "pong";
-          requestId?: string;
-      };
+const jsonObjectSchema = z.record(z.string(), z.json());
+
+export const serverHelloMessageSchema = z.object({
+    type: z.literal("hello"),
+    protocolVersion: z.number(),
+    clientId: z.string(),
+});
+
+export const serverAckMessageSchema = z.object({
+    type: z.literal("ack"),
+    requestId: requestIdSchema,
+});
+
+export const serverInputAcceptedMessageSchema = z.object({
+    type: z.literal("input_accepted"),
+    turnId: z.string(),
+    text: z.string(),
+    source: z.string().optional(),
+    createdAt: z.number(),
+});
+
+export const serverAgentTurnStartMessageSchema = z.object({
+    type: z.literal("agent_turn_start"),
+    turnId: z.string(),
+    createdAt: z.number(),
+});
+
+export const serverAssistantMessageDeltaSchema = z.object({
+    type: z.literal("assistant_message_delta"),
+    turnId: z.string(),
+    text: z.string(),
+    metadata: jsonObjectSchema,
+});
+
+export const serverReasoningDeltaSchema = z.object({
+    type: z.literal("reasoning_delta"),
+    turnId: z.string(),
+    text: z.string(),
+    metadata: jsonObjectSchema,
+});
+
+export const serverToolCallStartMessageSchema = z.object({
+    type: z.literal("tool_call_start"),
+    turnId: z.string(),
+    toolCallId: z.string(),
+    name: z.string(),
+    args: jsonObjectSchema,
+    createdAt: z.number(),
+});
+
+export const serverToolCallResultMessageSchema = z.object({
+    type: z.literal("tool_call_result"),
+    turnId: z.string(),
+    toolCallId: z.string(),
+    name: z.string(),
+    status: z.enum(["success", "error"]),
+    result: z.json(),
+    createdAt: z.number(),
+});
+
+export const serverAgentTurnDoneMessageSchema = z.object({
+    type: z.literal("agent_turn_done"),
+    turnId: z.string(),
+    createdAt: z.number(),
+});
+
+export const serverStoredMessageSchema = z.object({
+    type: z.literal("message"),
+    message: jsonObjectSchema,
+    metadata: jsonObjectSchema,
+});
+
+export const serverDoneMessageSchema = z.object({
+    type: z.literal("done"),
+});
+
+export const serverErrorMessageSchema = z.object({
+    type: z.literal("error"),
+    message: z.string(),
+    requestId: requestIdSchema,
+    turnId: z.string().optional(),
+});
+
+export const serverPongMessageSchema = z.object({
+    type: z.literal("pong"),
+    requestId: requestIdSchema,
+});
+
+export const serverMessageSchema = z.discriminatedUnion("type", [
+    serverHelloMessageSchema,
+    serverAckMessageSchema,
+    serverInputAcceptedMessageSchema,
+    serverAgentTurnStartMessageSchema,
+    serverAssistantMessageDeltaSchema,
+    serverReasoningDeltaSchema,
+    serverToolCallStartMessageSchema,
+    serverToolCallResultMessageSchema,
+    serverAgentTurnDoneMessageSchema,
+    serverStoredMessageSchema,
+    serverDoneMessageSchema,
+    serverErrorMessageSchema,
+    serverPongMessageSchema,
+]);
+
+export type ServerMessage = z.infer<typeof serverMessageSchema>;
 
 export function parseClientMessage(raw: string): ClientMessage {
     let data: unknown;
@@ -134,7 +165,12 @@ export function parseServerMessage(raw: string): ServerMessage {
         throw new Error("message must be valid JSON");
     }
 
-    return data as ServerMessage;
+    const parsed = serverMessageSchema.safeParse(data);
+    if (!parsed.success) {
+        throw new Error(z.prettifyError(parsed.error));
+    }
+
+    return parsed.data;
 }
 
 export function serializeClientMessage(message: ClientMessage): string {
