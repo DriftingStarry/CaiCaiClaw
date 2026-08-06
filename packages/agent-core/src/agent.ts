@@ -1,4 +1,4 @@
-import { AIMessage, SystemMessage } from "@langchain/core/messages";
+import { AIMessage, SystemMessage, ToolMessage } from "@langchain/core/messages";
 import { DynamicStructuredTool } from "@langchain/core/tools";
 import { errorMessage, toJsonObject, toJsonValue } from "@caicaiclaw/utils";
 import type { JsonObject, JsonValue, MaybePromise } from "@caicaiclaw/utils";
@@ -121,14 +121,22 @@ export const getAgent = (config: AgentConfig) => {
                 });
                 res.push(tool_res);
             } catch (error) {
+                const message = errorMessage(error);
                 await onToolResult?.({
                     toolCallId,
                     name: call.name,
                     status: "error",
-                    result: errorMessage(error),
+                    result: message,
                     createdAt: Date.now(),
                 });
-                throw error;
+                res.push(
+                    new ToolMessage({
+                        content: message,
+                        tool_call_id: toolCallId,
+                        name: call.name,
+                        status: "error",
+                    }),
+                );
             }
         }
         return { messages: res };
