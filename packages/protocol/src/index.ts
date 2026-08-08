@@ -1,5 +1,4 @@
 import { z } from "zod";
-import type { JsonObject } from "@caicaiclaw/utils";
 
 export { errorMessage, isJsonObject, toJsonObject, toJsonValue } from "@caicaiclaw/utils";
 export { errorMessage as errorToMessage } from "@caicaiclaw/utils";
@@ -30,8 +29,6 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
 ]);
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
-
-export type StoredMessagePayload = JsonObject;
 
 const jsonObjectSchema = z.record(z.string(), z.json());
 
@@ -99,16 +96,6 @@ export const serverAgentTurnDoneMessageSchema = z.object({
     createdAt: z.number(),
 });
 
-export const serverStoredMessageSchema = z.object({
-    type: z.literal("message"),
-    message: jsonObjectSchema,
-    metadata: jsonObjectSchema,
-});
-
-export const serverDoneMessageSchema = z.object({
-    type: z.literal("done"),
-});
-
 export const serverErrorMessageSchema = z.object({
     type: z.literal("error"),
     message: z.string(),
@@ -131,8 +118,6 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
     serverToolCallStartMessageSchema,
     serverToolCallResultMessageSchema,
     serverAgentTurnDoneMessageSchema,
-    serverStoredMessageSchema,
-    serverDoneMessageSchema,
     serverErrorMessageSchema,
     serverPongMessageSchema,
 ]);

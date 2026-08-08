@@ -10,7 +10,6 @@
         "@caicaiclaw/agent-core": "workspace:*",
         "@caicaiclaw/protocol": "workspace:*",
         "@caicaiclaw/utils": "workspace:*",
-        "@langchain/core": "^1.1.48",
         "ws": "^8.21.0"
     },
     "devDependencies": {

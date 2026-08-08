@@ -35,11 +35,6 @@ export type RuntimeOutputEvent =
           readonly createdAt: number;
       }
     | {
-          readonly type: "message";
-          readonly turnId: string;
-          readonly chunk: MessageStreamChunk;
-      }
-    | {
           readonly type: "assistant_delta";
           readonly turnId: string;
           readonly text: string;

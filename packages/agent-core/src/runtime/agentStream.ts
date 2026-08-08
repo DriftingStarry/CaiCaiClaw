@@ -24,7 +24,6 @@ export async function runAgentStream(
             const [mode, payload] = chunk;
 
             if (mode === "messages") {
-                await emitOutput({ type: "message", turnId, chunk: payload });
                 await emitMessageDelta(turnId, payload, emitOutput);
                 continue;
             }
