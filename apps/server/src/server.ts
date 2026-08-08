@@ -152,7 +152,14 @@ function getRequestedClientId(rawUrl?: string): string | undefined {
         return undefined;
     }
 
-    const url = new URL(rawUrl, "ws://localhost");
+    let url: URL;
+    try {
+        url = new URL(rawUrl, "ws://localhost");
+    } catch {
+        console.warn(`[ws] ignoring unparseable request URL: ${JSON.stringify(rawUrl)}`);
+        return undefined;
+    }
+
     const clientId = url.searchParams.get("clientId")?.trim();
     return clientId ? clientId : undefined;
 }
