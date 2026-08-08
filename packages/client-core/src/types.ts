@@ -56,4 +56,5 @@ export type ClientAction =
     | {
           type: "server_message";
           message: ServerMessage;
+          receivedAt: number;
       };

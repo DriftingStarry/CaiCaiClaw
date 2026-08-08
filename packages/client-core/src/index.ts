@@ -39,10 +39,10 @@ export function reduceClientState(state: ClientState, action: ClientAction): Cli
         };
     }
 
-    return applyServerMessage(state, action.message);
+    return applyServerMessage(state, action.message, action.receivedAt);
 }
 
-function applyServerMessage(state: ClientState, message: ServerMessage): ClientState {
+function applyServerMessage(state: ClientState, message: ServerMessage, receivedAt: number): ClientState {
     switch (message.type) {
         case "hello":
             return { ...state, connectionStatus: "connected", clientId: message.clientId };
@@ -57,14 +57,14 @@ function applyServerMessage(state: ClientState, message: ServerMessage): ClientS
                 startedAt: message.createdAt,
             });
         case "assistant_message_delta":
-            return appendAssistantDelta(state, message.turnId, message.text);
+            return appendAssistantDelta(state, message.turnId, message.text, receivedAt);
         case "reasoning_delta":
-            return updateActivity(state, message.turnId, (activity) => ({
+            return updateActivity(state, message.turnId, receivedAt, (activity) => ({
                 ...activity,
                 reasoningText: activity.reasoningText + message.text,
             }));
         case "tool_call_start":
-            return updateActivity(state, message.turnId, (activity) => ({
+            return updateActivity(state, message.turnId, receivedAt, (activity) => ({
                 ...activity,
                 tools: [
                     ...activity.tools,
@@ -79,7 +79,7 @@ function applyServerMessage(state: ClientState, message: ServerMessage): ClientS
                 ],
             }));
         case "tool_call_result":
-            return updateActivity(state, message.turnId, (activity) => ({
+            return updateActivity(state, message.turnId, receivedAt, (activity) => ({
                 ...activity,
                 tools: activity.tools.map((tool) =>
                     tool.id === message.toolCallId
@@ -93,7 +93,7 @@ function applyServerMessage(state: ClientState, message: ServerMessage): ClientS
                 ),
             }));
         case "agent_turn_done":
-            return markTurnDone(state, message.turnId, message.createdAt);
+            return markTurnDone(state, message.turnId, message.createdAt, receivedAt);
         case "error":
             return {
                 ...state,
@@ -141,7 +141,7 @@ function applyInputAccepted(
     };
 }
 
-function appendAssistantDelta(state: ClientState, turnId: string, text: string): ClientState {
+function appendAssistantDelta(state: ClientState, turnId: string, text: string, receivedAt: number): ClientState {
     const id = `${turnId}:assistant`;
     const existing = state.messages.find((item) => item.id === id);
 
@@ -156,7 +156,7 @@ function appendAssistantDelta(state: ClientState, turnId: string, text: string):
                     turnId,
                     text,
                     status: "streaming",
-                    createdAt: Date.now(),
+                    createdAt: receivedAt,
                 },
             ],
         };
@@ -168,9 +168,9 @@ function appendAssistantDelta(state: ClientState, turnId: string, text: string):
     };
 }
 
-function markTurnDone(state: ClientState, turnId: string, completedAt: number): ClientState {
+function markTurnDone(state: ClientState, turnId: string, completedAt: number, receivedAt: number): ClientState {
     return {
-        ...updateActivity(state, turnId, (activity) => ({ ...activity, status: "done", completedAt })),
+        ...updateActivity(state, turnId, receivedAt, (activity) => ({ ...activity, status: "done", completedAt })),
         messages: state.messages.map((message) =>
             message.turnId === turnId && message.role === "assistant" ? { ...message, status: "done" } : message,
         ),
@@ -179,7 +179,7 @@ function markTurnDone(state: ClientState, turnId: string, completedAt: number): 
 
 function upsertActivity(state: ClientState, activity: AgentTurnActivity): ClientState {
     if (state.activities.some((item) => item.turnId === activity.turnId)) {
-        return updateActivity(state, activity.turnId, () => activity);
+        return updateActivity(state, activity.turnId, activity.startedAt, () => activity);
     }
 
     return { ...state, activities: [...state.activities, activity] };
@@ -188,6 +188,8 @@ function upsertActivity(state: ClientState, activity: AgentTurnActivity): Client
 function updateActivity(
     state: ClientState,
     turnId: string,
+    // 仅在 activity 尚不存在时用作 startedAt：delta 类消息可能先于 agent_turn_start 到达。
+    fallbackStartedAt: number,
     update: (activity: AgentTurnActivity) => AgentTurnActivity,
 ): ClientState {
     const existing = state.activities.find((activity) => activity.turnId === turnId);
@@ -198,7 +200,7 @@ function updateActivity(
             status: "running",
             reasoningText: "",
             tools: [],
-            startedAt: Date.now(),
+            startedAt: fallbackStartedAt,
         } satisfies AgentTurnActivity);
 
     if (!existing) {

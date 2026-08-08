@@ -40,7 +40,10 @@ export const useAgentClientStore = create<AgentClientStore>((set) => ({
                     setStoredClientId(message.clientId);
                 }
 
-                set((state) => reduceClientState(state, { type: "server_message", message }));
+                // Reducer purity requires timestamps to be injected at this IO boundary.
+                set((state) =>
+                    reduceClientState(state, { type: "server_message", message, receivedAt: Date.now() }),
+                );
             },
         });
         wsClient.connect();
