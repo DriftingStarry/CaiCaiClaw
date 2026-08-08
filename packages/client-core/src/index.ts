@@ -1,4 +1,5 @@
-import { JsonObject, JsonValue, ServerMessage } from "@caicaiclaw/protocol";
+import { ServerMessage } from "@caicaiclaw/protocol";
+import { JsonObject, JsonValue } from "@caicaiclaw/utils";
 
 export type ConnectionStatus = "idle" | "connecting" | "connected" | "reconnecting" | "closed";
 
