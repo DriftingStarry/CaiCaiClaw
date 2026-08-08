@@ -5,7 +5,7 @@ import { ClientMessage, parseServerMessage, serializeClientMessage, ServerMessag
 export type WsClientHandlers = {
     onOpen?: () => void;
     onClose?: () => void;
-    onError?: (error: Event) => void;
+    onError?: (error: Event | Error) => void;
     onMessage?: (message: ServerMessage) => void;
 };
 
@@ -26,7 +26,14 @@ export class CaiCaiWsClient {
         this.socket.addEventListener("error", (error) => this.handlers.onError?.(error));
         this.socket.addEventListener("message", (event) => {
             if (typeof event.data !== "string") return;
-            this.handlers.onMessage?.(parseServerMessage(event.data));
+
+            try {
+                const message = parseServerMessage(event.data);
+                if (!message) return;
+                this.handlers.onMessage?.(message);
+            } catch (error) {
+                this.handlers.onError?.(error instanceof Error ? error : new Error(String(error)));
+            }
         });
     }
 
