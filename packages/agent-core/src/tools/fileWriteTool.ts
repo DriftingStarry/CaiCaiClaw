@@ -2,11 +2,12 @@ import { tool } from "@langchain/core/tools";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import { expandPath } from "./utils.js";
+import { expandPath } from "./pathUtils.js";
+import { wrapToolResult } from "./toolResult.js";
 
 export const fileWriteTool = tool(
     async ({ file_path, content }) => {
-        try {
+        return wrapToolResult("file write", async () => {
             const fullPath = expandPath(file_path);
             await fs.mkdir(path.dirname(fullPath), { recursive: true });
             await fs.writeFile(fullPath, content, "utf8");
@@ -15,12 +16,7 @@ export const fileWriteTool = tool(
                 filePath: fullPath,
                 bytesWritten: Buffer.byteLength(content, "utf8"),
             };
-        } catch (e) {
-            return {
-                error: "file write failed",
-                detail: e instanceof Error ? e.message : String(e),
-            };
-        }
+        });
     },
     {
         name: "fileWriteTool",

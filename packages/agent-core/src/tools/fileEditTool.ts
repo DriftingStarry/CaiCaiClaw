@@ -1,11 +1,13 @@
 import { tool } from "@langchain/core/tools";
 import { promises as fs } from "node:fs";
 import { z } from "zod";
-import { expandPath, positionToOffset } from "./utils.js";
+import { expandPath } from "./pathUtils.js";
+import { positionToOffset } from "./textUtils.js";
+import { wrapToolResult } from "./toolResult.js";
 
 export const fileEditTool = tool(
     async ({ file_path, start_line, start_column, end_line, end_column, replacement }) => {
-        try {
+        return wrapToolResult("file edit", async () => {
             const fullPath = expandPath(file_path);
             const content = await fs.readFile(fullPath, "utf8");
             const startOffset = positionToOffset(content, start_line, start_column);
@@ -25,12 +27,7 @@ export const fileEditTool = tool(
                 replacement,
                 bytesWritten: Buffer.byteLength(newContent, "utf8"),
             };
-        } catch (e) {
-            return {
-                error: "file edit failed",
-                detail: e instanceof Error ? e.message : String(e),
-            };
-        }
+        });
     },
     {
         name: "fileEditTool",
