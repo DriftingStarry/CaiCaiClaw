@@ -4,11 +4,11 @@ import { AgentConfig, AgentRuntime, tools, toolsByName } from "@caicaiclaw/agent
 import {
     isValidClientId,
     parseClientMessage,
-    runtimeOutputToServerMessages,
     serializeServerMessage,
     ServerMessage,
     WS_PROTOCOL_VERSION,
-} from "./protocol.js";
+} from "@caicaiclaw/protocol";
+import { runtimeOutputToServerMessages } from "./runtimeOutputMapper.js";
 
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
