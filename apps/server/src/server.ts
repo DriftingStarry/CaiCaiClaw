@@ -10,6 +10,7 @@ import {
     WS_PROTOCOL_VERSION,
 } from "./protocol.js";
 
+import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from 'node:path'
 
@@ -35,7 +36,6 @@ type ClientConnection = {
 
 const clients = new Map<string, ClientConnection>();
 let nextConnectionId = 1;
-let nextClientId = 1;
 
 const runtime = new AgentRuntime(config, {
     rawHistoryPath: process.env.CAICAI_RAW_HISTORY_PATH ?? DEFAULT_RAW_HISTORY_PATH,
@@ -121,9 +121,7 @@ server.on("error", (error) => {
 });
 
 function createClientId(): string {
-    const id = `client-${nextClientId}`;
-    nextClientId += 1;
-    return id;
+    return `client-${randomUUID()}`;
 }
 
 function createConnectionId(): string {
