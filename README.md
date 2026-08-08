@@ -52,12 +52,15 @@
 
 对照代码的现状，作为 M1 的起点。
 
-- **core**
-  - `agent.ts` —— LangGraph `StateGraph` 的 ReAct 循环（`llm` ↔ `toolNode`）；纯聊天回复即**单次模型调用后 `END`**，不强制多跳。
-  - `runtime/` —— `AgentRuntime` 目录模块：主 runtime 编排（`agentRuntime.ts`）、事件队列与等待唤醒（`eventQueue.ts`）、LangGraph stream 消费（`agentStream.ts`）、message content 提取（`messageContent.ts`）、公共类型（`types.ts`）。
-  - `modelProvider.ts` —— 模型接入层。系统 prompt 从上层指定的 Markdown 路径加载。 `tools/` —— `exec` / `fileRead` / `fileEdit` / `fileWrite` + 注册入口（`toolsByName`）。
-- **ws**
-  - `protocol.ts` —— Zod 校验的协议与序列化。 `server.ts` —— 单 agent 的 `WebSocketServer`。
+- **`packages/utils`** —— 通用工具函数，纯函数且不做 IO。
+- **`packages/protocol`** —— `src/index.ts` 提供 Zod 校验的协议与序列化。
+- **`packages/agent-core`**
+  - `src/agent.ts` —— LangGraph `StateGraph` 的 ReAct 循环（`llm` ↔ `toolNode`）；纯聊天回复即**单次模型调用后 `END`**，不强制多跳。
+  - `src/runtime/` —— `AgentRuntime` 目录模块：主 runtime 编排（`agentRuntime.ts`）、事件队列与等待唤醒（`eventQueue.ts`）、LangGraph stream 消费（`agentStream.ts`）、message content 提取（`messageContent.ts`）、公共类型（`types.ts`）。
+  - `src/modelProvider.ts` —— 模型接入层。系统 prompt 从上层指定的 Markdown 路径加载。 `src/tools/` —— `exec` / `fileRead` / `fileEdit` / `fileWrite` + 注册入口（`toolsByName`）。
+- **`packages/client-core`** —— 与框架无关的客户端状态归约。
+- **`apps/server`** —— `src/server.ts` 提供单 agent 的 `WebSocketServer`。
+- **`apps/web`** —— Next.js Web 前端。
 - **关键性质**：`this.agent`（编译出的图）、`rawHistoryState`（可回放的完整历史）与 `executionState`（单轮上下文）已分离——这正是核心不变式的雏形，M3 的 `reload` 因此几乎是加法。
 
 ## M1 · 最小可运行版本（MVP）
