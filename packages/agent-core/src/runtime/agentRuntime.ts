@@ -257,6 +257,8 @@ export class AgentRuntime {
                 messages: this.buildContext(inputMessages),
                 llmCalls: 0,
             };
+            // This positional delta assumes final messages retain the baseline as a prefix; compaction must diff by identity.
+            const baselineMessageCount = executionInput.messages.length;
             this.executionState = executionInput;
 
             const finalState = await runAgentStream(
@@ -272,7 +274,7 @@ export class AgentRuntime {
                 type: "turn.output_committed",
                 createdAt: Date.now(),
                 turnId,
-                messages: serializeHistoryMessages(completedState.messages.slice(executionInput.messages.length)),
+                messages: serializeHistoryMessages(completedState.messages.slice(baselineMessageCount)),
             });
             outputCommitted = true;
 
@@ -281,16 +283,12 @@ export class AgentRuntime {
             if (outputCommitted) throw error;
 
             if (!this.fatalError) {
-                try {
-                    await this.appendRawHistoryEvent({
-                        type: "turn.failed",
-                        createdAt: Date.now(),
-                        turnId,
-                        message: normalizeFailureMessage(error),
-                    });
-                } catch (persistenceError) {
-                    throw persistenceError;
-                }
+                await this.appendRawHistoryEvent({
+                    type: "turn.failed",
+                    createdAt: Date.now(),
+                    turnId,
+                    message: normalizeFailureMessage(error),
+                });
             }
 
             await this.emitOutput({ type: "error", turnId, error });
@@ -310,6 +308,9 @@ export class AgentRuntime {
     private async emitToolStart(event: ToolStartEvent): Promise<void> {
         const turnId = this.activeTurnId;
         if (!turnId) return;
+        // A rejected append is already on disk, and replay-on-boot rethrows: writing an event the
+        // projection will refuse permanently bricks the runtime. Skip instead of poisoning history.
+        if (!this.rawHistoryState.activeTurns.has(turnId)) return;
 
         await this.appendRawHistoryEvent({
             type: "tool.started",
@@ -332,6 +333,9 @@ export class AgentRuntime {
     private async emitToolResult(event: ToolResultEvent): Promise<void> {
         const turnId = this.activeTurnId;
         if (!turnId) return;
+        // Same reason as emitToolStart, plus the projection rejects a completion whose start it
+        // never saw -- which is reachable whenever emitToolStart skipped this same tool call.
+        if (!this.rawHistoryState.activeToolCalls.get(turnId)?.has(event.toolCallId)) return;
 
         await this.appendRawHistoryEvent({
             type: "tool.completed",
