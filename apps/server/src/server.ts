@@ -9,22 +9,16 @@ import {
     WS_PROTOCOL_VERSION,
 } from "@caicaiclaw/protocol";
 import { runtimeOutputToServerMessages } from "./runtimeOutputMapper.js";
+import { loadServerConfig } from "./config.js";
 
 import { randomUUID } from "node:crypto";
-import { homedir } from "node:os";
-import { join } from 'node:path'
 
-const MAX_STEP_LIMIT = 3;
-const LOOP_WARNING_LENGTH = 1;
-const DEFAULT_HOST = "127.0.0.1";
-const DEFAULT_PORT = 8787;
-const DEFAULT_SYSTEM_PROMPT_PATH = join(homedir(), '.caicaiclaw/SYSTEM.md')
-const DEFAULT_RAW_HISTORY_PATH = join(homedir(), '.caicaiclaw/history.jsonl')
+const serverConfig = loadServerConfig();
 
 const config: AgentConfig = {
-    systemPromptPath: process.env.CAICAI_SYSTEM_PROMPT_PATH ?? DEFAULT_SYSTEM_PROMPT_PATH,
-    maxStepLimit: MAX_STEP_LIMIT,
-    loopWarningLength: LOOP_WARNING_LENGTH,
+    systemPromptPath: serverConfig.systemPromptPath,
+    maxStepLimit: serverConfig.maxStepLimit,
+    loopWarningLength: serverConfig.loopWarningLength,
     tools,
     toolsByName,
 };
@@ -38,20 +32,13 @@ const clients = new Map<string, ClientConnection>();
 let nextConnectionId = 1;
 
 const runtime = new AgentRuntime(config, {
-    rawHistoryPath: process.env.CAICAI_RAW_HISTORY_PATH ?? DEFAULT_RAW_HISTORY_PATH,
+    rawHistoryPath: serverConfig.rawHistoryPath,
     onOutput: async (event) => {
         for (const message of runtimeOutputToServerMessages(event)) {
             broadcast(message);
         }
     },
 });
-
-const host = process.env.CAICAI_WS_HOST ?? DEFAULT_HOST;
-const port = Number.parseInt(process.env.CAICAI_WS_PORT ?? String(DEFAULT_PORT), 10);
-
-if (!Number.isInteger(port) || port < 1 || port > 65_535) {
-    throw new Error("CAICAI_WS_PORT must be an integer between 1 and 65535");
-}
 
 const runtimeTask = runtime.run();
 runtimeTask.catch((error: unknown) => {
@@ -60,7 +47,7 @@ runtimeTask.catch((error: unknown) => {
     broadcast({ type: "error", message });
 });
 
-const server = new WebSocketServer({ host, port });
+const server = new WebSocketServer({ host: serverConfig.host, port: serverConfig.port });
 
 server.on("connection", (socket, request) => {
     const connectionId = createConnectionId();
@@ -113,7 +100,7 @@ server.on("connection", (socket, request) => {
 });
 
 server.on("listening", () => {
-    console.log(`CaiCaiClaw ws server listening on ws://${host}:${port}`);
+    console.log(`CaiCaiClaw ws server listening on ws://${serverConfig.host}:${serverConfig.port}`);
 });
 
 server.on("error", (error) => {

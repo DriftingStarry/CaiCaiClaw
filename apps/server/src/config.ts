@@ -1,0 +1,59 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+export type ServerConfig = {
+    host: string;
+    port: number;
+    systemPromptPath: string;
+    rawHistoryPath: string;
+    maxStepLimit: number;
+    loopWarningLength: number;
+};
+
+const DEFAULT_HOST = "127.0.0.1";
+const DEFAULT_PORT = 8787;
+const DEFAULT_SYSTEM_PROMPT_PATH = join(homedir(), ".caicaiclaw/SYSTEM.md");
+const DEFAULT_RAW_HISTORY_PATH = join(homedir(), ".caicaiclaw/history.jsonl");
+const DEFAULT_MAX_STEP_LIMIT = 3;
+const DEFAULT_LOOP_WARNING_LENGTH = 1;
+
+export function loadServerConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
+    return {
+        host: env.CAICAI_WS_HOST ?? DEFAULT_HOST,
+        port: parseInteger(
+            env.CAICAI_WS_PORT,
+            DEFAULT_PORT,
+            (value) => value >= 1 && value <= 65_535,
+            "CAICAI_WS_PORT must be an integer between 1 and 65535",
+        ),
+        // 必须用 ?? 而不是 ||：空串是有意义的取值，表示不加载 system prompt。
+        systemPromptPath: env.CAICAI_SYSTEM_PROMPT_PATH ?? DEFAULT_SYSTEM_PROMPT_PATH,
+        rawHistoryPath: env.CAICAI_RAW_HISTORY_PATH ?? DEFAULT_RAW_HISTORY_PATH,
+        maxStepLimit: parseInteger(
+            env.CAICAI_MAX_STEP_LIMIT,
+            DEFAULT_MAX_STEP_LIMIT,
+            (value) => value >= 1,
+            "CAICAI_MAX_STEP_LIMIT must be an integer >= 1",
+        ),
+        loopWarningLength: parseInteger(
+            env.CAICAI_LOOP_WARNING_LENGTH,
+            DEFAULT_LOOP_WARNING_LENGTH,
+            (value) => value >= 1,
+            "CAICAI_LOOP_WARNING_LENGTH must be an integer >= 1",
+        ),
+    };
+}
+
+function parseInteger(
+    value: string | undefined,
+    defaultValue: number,
+    isValid: (parsedValue: number) => boolean,
+    errorMessage: string,
+): number {
+    const parsedValue = Number.parseInt(value ?? String(defaultValue), 10);
+    if (!Number.isInteger(parsedValue) || !isValid(parsedValue)) {
+        throw new Error(errorMessage);
+    }
+
+    return parsedValue;
+}
