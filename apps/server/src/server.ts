@@ -1,6 +1,6 @@
 import { WebSocket, WebSocketServer } from "ws";
 import { errorMessage } from "@caicaiclaw/utils";
-import { AgentConfig, AgentRuntime, tools, toolsByName } from "@caicaiclaw/agent-core";
+import { AgentConfig, AgentRuntime, createOpenrouterModel, toolsByName } from "@caicaiclaw/agent-core";
 import {
     isValidClientId,
     parseClientMessage,
@@ -30,7 +30,7 @@ function createServer(serverConfig: ServerConfig): RunningServer {
         systemPromptPath: serverConfig.systemPromptPath,
         maxStepLimit: serverConfig.maxStepLimit,
         loopWarningLength: serverConfig.loopWarningLength,
-        tools,
+        model: createOpenrouterModel(serverConfig.openrouterModel),
         toolsByName,
     };
 
