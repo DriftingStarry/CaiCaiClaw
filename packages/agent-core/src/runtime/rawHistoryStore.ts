@@ -77,7 +77,9 @@ export class RawHistoryStore {
             try {
                 this.apply(parsed.data);
             } catch (error) {
-                throw new Error(`raw history line ${index + 1} cannot be replayed: ${errorMessage(error)}`);
+                throw new Error(`raw history line ${index + 1} cannot be replayed: ${errorMessage(error)}`, {
+                    cause: error,
+                });
             }
         }
 
@@ -126,5 +128,5 @@ function isFileMissingError(error: unknown): boolean {
 }
 
 function toError(error: unknown, fallback: string): Error {
-    return new Error(`${fallback}: ${errorMessage(error)}`);
+    return new Error(`${fallback}: ${errorMessage(error)}`, { cause: error });
 }

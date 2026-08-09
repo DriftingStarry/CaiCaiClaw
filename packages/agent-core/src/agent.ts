@@ -148,7 +148,7 @@ export const getAgent = (config: AgentConfig) => {
 
     const toolRouter: ConditionalEdgeRouter<
         typeof MessageState,
-        {},
+        object,
         "userInput" | "toolNode"
     > = (state) => {
         // should be from llm. if have toolcall, returns to tool, if not, returns to human input

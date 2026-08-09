@@ -19,22 +19,18 @@ export async function runAgentStream(
     });
     let finalState: ExecutionState | undefined;
 
-    try {
-        for await (const chunk of stream as AsyncIterable<LangGraphMultiStreamChunk>) {
-            const [mode, payload] = chunk;
+    for await (const chunk of stream as AsyncIterable<LangGraphMultiStreamChunk>) {
+        const [mode, payload] = chunk;
 
-            if (mode === "messages") {
-                await emitMessageDelta(turnId, payload, emitOutput);
-                continue;
-            }
-
-            finalState = payload;
+        if (mode === "messages") {
+            await emitMessageDelta(turnId, payload, emitOutput);
+            continue;
         }
 
-        return finalState;
-    } catch (error) {
-        throw error;
+        finalState = payload;
     }
+
+    return finalState;
 }
 
 async function emitMessageDelta(
