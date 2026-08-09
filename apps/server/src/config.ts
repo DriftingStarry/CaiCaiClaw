@@ -4,6 +4,7 @@ import { join } from "node:path";
 export type ServerConfig = {
     host: string;
     port: number;
+    openrouterModel: string;
     systemPromptPath: string;
     rawHistoryPath: string;
     maxStepLimit: number;
@@ -18,6 +19,12 @@ const DEFAULT_MAX_STEP_LIMIT = 3;
 const DEFAULT_LOOP_WARNING_LENGTH = 1;
 
 export function loadServerConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
+    const openrouterModel = env.OPENROUTER_MODEL;
+    // 模型名在配置边界校验，避免库包隐式依赖进程环境。
+    if (!openrouterModel) {
+        throw new Error("OPENROUTER_MODEL must be set");
+    }
+
     return {
         host: env.CAICAI_WS_HOST ?? DEFAULT_HOST,
         port: parseInteger(
@@ -26,6 +33,7 @@ export function loadServerConfig(env: NodeJS.ProcessEnv = process.env): ServerCo
             (value) => value >= 1 && value <= 65_535,
             "CAICAI_WS_PORT must be an integer between 1 and 65535",
         ),
+        openrouterModel,
         // 必须用 ?? 而不是 ||：空串是有意义的取值，表示不加载 system prompt。
         systemPromptPath: env.CAICAI_SYSTEM_PROMPT_PATH ?? DEFAULT_SYSTEM_PROMPT_PATH,
         rawHistoryPath: env.CAICAI_RAW_HISTORY_PATH ?? DEFAULT_RAW_HISTORY_PATH,

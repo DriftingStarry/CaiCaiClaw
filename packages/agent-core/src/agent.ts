@@ -1,4 +1,5 @@
 import { AIMessage, SystemMessage, ToolMessage } from "@langchain/core/messages";
+import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { DynamicStructuredTool } from "@langchain/core/tools";
 import { errorMessage, toJsonObject, toJsonValue } from "@caicaiclaw/utils";
 import type { JsonObject, JsonValue, MaybePromise } from "@caicaiclaw/utils";
@@ -13,12 +14,15 @@ import {
     StateSchema,
 } from "@langchain/langgraph";
 import { z } from "zod";
-import { getOpenrouterModel } from "./modelProvider.js";
+
+type ToolBindingChatModel = BaseChatModel & {
+    bindTools: NonNullable<BaseChatModel["bindTools"]>;
+};
 
 export interface AgentConfig {
     maxStepLimit: number;
     loopWarningLength: number;
-    tools: DynamicStructuredTool[];
+    model: ToolBindingChatModel;
     toolsByName: Record<string, DynamicStructuredTool>;
     systemPromptPath: string;
     onToolStart?: (event: ToolStartEvent) => MaybePromise<void>;
@@ -48,8 +52,9 @@ const MessageState = new StateSchema({
 });
 
 export const getAgent = (config: AgentConfig) => {
-    const { maxStepLimit, loopWarningLength, tools, toolsByName, onToolStart, onToolResult } = config;
-    const model = getOpenrouterModel().bindTools(tools);
+    const { maxStepLimit, loopWarningLength, model, toolsByName, onToolStart, onToolResult } = config;
+    const tools = Object.values(toolsByName);
+    const modelWithTools = model.bindTools(tools);
 
     const llm: GraphNode<typeof MessageState> = async (state) => {
         const context = [...state.messages];
@@ -64,7 +69,7 @@ export const getAgent = (config: AgentConfig) => {
             );
         }
 
-        const resp = await model.invoke(context);
+        const resp = await modelWithTools.invoke(context);
         return {
             messages: [resp],
             llmCalls: 1,
