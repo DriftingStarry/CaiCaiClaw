@@ -9,6 +9,7 @@ export type InboundEvent = {
     source?: string;
     createdAt?: number;
     inputId?: string;
+    requestId?: string;
 };
 
 export type ExecutionState = { messages: BaseMessage[]; llmCalls: number };
@@ -24,6 +25,7 @@ export type RuntimeOutputEvent =
           readonly turnId: string;
           readonly text: string;
           readonly source?: string;
+          readonly requestId?: string;
           readonly createdAt: number;
       }
     | {

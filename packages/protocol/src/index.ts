@@ -44,6 +44,7 @@ export const serverInputAcceptedMessageSchema = z.object({
     turnId: z.string(),
     text: z.string(),
     source: z.string().optional(),
+    requestId: requestIdSchema,
     createdAt: z.number(),
 });
 
