@@ -1,4 +1,4 @@
-import { ServerMessage } from "@caicaiclaw/protocol";
+import { ServerMessage, WS_PROTOCOL_VERSION } from "@caicaiclaw/protocol";
 import { updateActivity, upsertActivity } from "./activities.js";
 import { appendAssistantDelta, applyInputAccepted } from "./messages.js";
 import { ClientState } from "./types.js";
@@ -6,7 +6,15 @@ import { ClientState } from "./types.js";
 export function applyServerMessage(state: ClientState, message: ServerMessage, receivedAt: number): ClientState {
     switch (message.type) {
         case "hello":
-            return { ...state, connectionStatus: "connected", clientId: message.clientId };
+            if (message.protocolVersion === WS_PROTOCOL_VERSION) {
+                return { ...state, connectionStatus: "connected", clientId: message.clientId };
+            }
+            return {
+                ...state,
+                connectionStatus: "closed",
+                clientId: message.clientId,
+                errors: [...state.errors, protocolVersionMismatch(message.protocolVersion)],
+            };
         case "input_accepted":
             return applyInputAccepted(state, message);
         case "agent_turn_start":
@@ -68,6 +76,10 @@ export function applyServerMessage(state: ClientState, message: ServerMessage, r
         default:
             return state;
     }
+}
+
+function protocolVersionMismatch(serverVersion: number): string {
+    return `protocol version mismatch: server ${serverVersion}, client ${WS_PROTOCOL_VERSION}`;
 }
 
 function markTurnDone(state: ClientState, turnId: string, completedAt: number, receivedAt: number): ClientState {

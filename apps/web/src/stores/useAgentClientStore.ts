@@ -1,6 +1,7 @@
 "use client";
 
 import { initialClientState, reduceClientState, ClientState } from "@caicaiclaw/client-core";
+import { WS_PROTOCOL_VERSION } from "@caicaiclaw/protocol";
 import { errorMessage } from "@caicaiclaw/utils";
 import { create } from "zustand";
 import { getOrCreateClientId, setStoredClientId } from "../adapters/ws/clientIdentity";
@@ -45,6 +46,13 @@ export const useAgentClientStore = create<AgentClientStore>((set) => ({
                 set((state) =>
                     reduceClientState(state, { type: "server_message", message, receivedAt: Date.now() }),
                 );
+
+                // The reducer can only record the mismatch; tearing down the socket is this
+                // boundary's job. Reconnecting cannot fix a version gap, so stop for good.
+                if (message.type === "hello" && message.protocolVersion !== WS_PROTOCOL_VERSION) {
+                    wsClient?.disconnect();
+                    wsClient = undefined;
+                }
             },
         });
         wsClient.connect();
