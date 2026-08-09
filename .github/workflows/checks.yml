@@ -1,4 +1,4 @@
-name: typecheck
+name: checks
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
 
 # 同一分支上的新提交取消上一次还没跑完的检查，避免排队浪费。
 concurrency:
-  group: typecheck-${{ github.ref }}
+  group: checks-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -29,3 +29,25 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - run: pnpm typecheck
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm lint
+
+      # 即使 lint 失败也跑，一次 CI 就能看到全部待修项，不必来回推送。
+      - if: ${{ !cancelled() }}
+        run: pnpm format:check
