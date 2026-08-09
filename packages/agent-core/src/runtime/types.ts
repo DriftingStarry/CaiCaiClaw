@@ -14,10 +14,7 @@ export type InboundEvent = {
 
 export type ExecutionState = { messages: BaseMessage[]; llmCalls: number };
 
-export type MessageStreamChunk = readonly [
-    message: BaseMessage,
-    metadata: Record<string, unknown>,
-];
+export type MessageStreamChunk = readonly [message: BaseMessage, metadata: Record<string, unknown>];
 
 export type RuntimeOutputEvent =
     | {

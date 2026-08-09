@@ -37,12 +37,7 @@ export const fileReadTool = tool(
                 .positive()
                 .optional()
                 .describe("1-based line number to start reading from; defaults to 1"),
-            limit: z
-                .number()
-                .int()
-                .positive()
-                .optional()
-                .describe("Maximum number of lines to return"),
+            limit: z.number().int().positive().optional().describe("Maximum number of lines to return"),
         }),
     },
 );

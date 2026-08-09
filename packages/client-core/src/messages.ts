@@ -38,7 +38,12 @@ export function applyInputAccepted(
     };
 }
 
-export function appendAssistantDelta(state: ClientState, turnId: string, text: string, receivedAt: number): ClientState {
+export function appendAssistantDelta(
+    state: ClientState,
+    turnId: string,
+    text: string,
+    receivedAt: number,
+): ClientState {
     const id = `${turnId}:assistant`;
     const existing = state.messages.find((item) => item.id === id);
 

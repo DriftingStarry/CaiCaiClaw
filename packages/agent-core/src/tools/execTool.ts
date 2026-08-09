@@ -34,9 +34,7 @@ export const execTool = tool(
         name: "execTool",
         description: "execute cmd",
         schema: z.object({
-            cmd: z
-                .string()
-                .describe("command to execute, returns cmd stdout and stderr, or exec failaure info"),
+            cmd: z.string().describe("command to execute, returns cmd stdout and stderr, or exec failaure info"),
         }),
     },
 );
