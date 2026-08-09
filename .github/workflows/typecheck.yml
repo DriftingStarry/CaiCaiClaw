@@ -1,0 +1,31 @@
+name: typecheck
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# 同一分支上的新提交取消上一次还没跑完的检查，避免排队浪费。
+concurrency:
+  group: typecheck-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v7
+        with:
+          # 复用仓库里的 .nvmrc，避免 CI 和本地的 Node 版本各说一套。
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm typecheck
