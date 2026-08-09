@@ -1,5 +1,7 @@
 import { ServerMessage } from "@caicaiclaw/protocol";
-import { AgentTurnActivity, ClientAction, ClientState } from "./types.js";
+import { upsertActivity, updateActivity } from "./activities.js";
+import { appendAssistantDelta, applyInputAccepted } from "./messages.js";
+import { ClientAction, ClientState } from "./types.js";
 
 export type {
     ConnectionStatus,
@@ -109,106 +111,11 @@ function applyServerMessage(state: ClientState, message: ServerMessage, received
     }
 }
 
-function applyInputAccepted(
-    state: ClientState,
-    message: Extract<ServerMessage, { type: "input_accepted" }>,
-): ClientState {
-    const existing = state.messages.find((item) => item.role === "user" && item.text === message.text && item.status === "pending");
-    if (existing) {
-        return {
-            ...state,
-            messages: state.messages.map((item) =>
-                item.id === existing.id
-                    ? { ...item, turnId: message.turnId, status: "done", createdAt: message.createdAt }
-                    : item,
-            ),
-        };
-    }
-
-    return {
-        ...state,
-        messages: [
-            ...state.messages,
-            {
-                id: `${message.turnId}:user`,
-                role: "user",
-                turnId: message.turnId,
-                text: message.text,
-                status: "done",
-                createdAt: message.createdAt,
-            },
-        ],
-    };
-}
-
-function appendAssistantDelta(state: ClientState, turnId: string, text: string, receivedAt: number): ClientState {
-    const id = `${turnId}:assistant`;
-    const existing = state.messages.find((item) => item.id === id);
-
-    if (!existing) {
-        return {
-            ...state,
-            messages: [
-                ...state.messages,
-                {
-                    id,
-                    role: "assistant",
-                    turnId,
-                    text,
-                    status: "streaming",
-                    createdAt: receivedAt,
-                },
-            ],
-        };
-    }
-
-    return {
-        ...state,
-        messages: state.messages.map((item) => (item.id === id ? { ...item, text: item.text + text } : item)),
-    };
-}
-
 function markTurnDone(state: ClientState, turnId: string, completedAt: number, receivedAt: number): ClientState {
     return {
         ...updateActivity(state, turnId, receivedAt, (activity) => ({ ...activity, status: "done", completedAt })),
         messages: state.messages.map((message) =>
             message.turnId === turnId && message.role === "assistant" ? { ...message, status: "done" } : message,
         ),
-    };
-}
-
-function upsertActivity(state: ClientState, activity: AgentTurnActivity): ClientState {
-    if (state.activities.some((item) => item.turnId === activity.turnId)) {
-        return updateActivity(state, activity.turnId, activity.startedAt, () => activity);
-    }
-
-    return { ...state, activities: [...state.activities, activity] };
-}
-
-function updateActivity(
-    state: ClientState,
-    turnId: string,
-    // 仅在 activity 尚不存在时用作 startedAt：delta 类消息可能先于 agent_turn_start 到达。
-    fallbackStartedAt: number,
-    update: (activity: AgentTurnActivity) => AgentTurnActivity,
-): ClientState {
-    const existing = state.activities.find((activity) => activity.turnId === turnId);
-    const activity =
-        existing ??
-        ({
-            turnId,
-            status: "running",
-            reasoningText: "",
-            tools: [],
-            startedAt: fallbackStartedAt,
-        } satisfies AgentTurnActivity);
-
-    if (!existing) {
-        return { ...state, activities: [...state.activities, update(activity)] };
-    }
-
-    return {
-        ...state,
-        activities: state.activities.map((item) => (item.turnId === turnId ? update(item) : item)),
     };
 }
