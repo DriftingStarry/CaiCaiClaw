@@ -22,7 +22,7 @@ export function restoreStoredMessages(messages: StoredMessagePayload[]): BaseMes
     try {
         return mapStoredMessagesToChatMessages(messages.map(sanitizeStoredMessage).map(toLangChainStoredMessage));
     } catch (error) {
-        throw new Error(`invalid stored message: ${errorMessage(error)}`);
+        throw new Error(`invalid stored message: ${errorMessage(error)}`, { cause: error });
     }
 }
 

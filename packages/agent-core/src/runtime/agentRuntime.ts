@@ -2,7 +2,6 @@ import {
     BaseMessage,
     HumanMessage,
 } from "@langchain/core/messages";
-import { CompiledStateGraph } from "@langchain/langgraph";
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { errorMessage } from "@caicaiclaw/utils";
@@ -132,7 +131,7 @@ export class AgentRuntime {
         try {
             this.systemPrompt = readFileSync(this.systemPromptPath, "utf-8");
         } catch (error) {
-            throw Error(`${error}`);
+            throw new Error(`${error}`, { cause: error });
         }
     }
 

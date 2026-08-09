@@ -1,5 +1,5 @@
 import { AIMessage, BaseMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
-import { RawHistoryEvent, RawHistoryInput, StoredMessagePayload } from "./historyEvents.js";
+import { RawHistoryEvent, RawHistoryInput } from "./historyEvents.js";
 import { restoreStoredMessages } from "./historyMessages.js";
 
 export type RawHistoryTurn = {
