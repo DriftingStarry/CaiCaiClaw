@@ -75,6 +75,7 @@ export class AgentRuntime {
             inputId,
             text: normalizedEvent.text,
             source: normalizedEvent.source,
+            requestId: normalizedEvent.requestId,
             message: serializeHistoryMessage(message),
         });
 
@@ -161,6 +162,7 @@ export class AgentRuntime {
                     turnId,
                     text: event.text,
                     source: event.source,
+                    requestId: event.requestId,
                     createdAt: event.createdAt ?? turnCreatedAt,
                 });
             }
