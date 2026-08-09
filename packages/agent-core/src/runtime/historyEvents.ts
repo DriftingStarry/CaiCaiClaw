@@ -33,6 +33,7 @@ export const rawHistoryEventSchema = z.discriminatedUnion("type", [
         inputId: z.string().min(1),
         text: z.string(),
         source: z.string().optional(),
+        requestId: z.string().min(1).optional(),
         message: storedMessageSchema,
     }),
     z.object({
@@ -99,6 +100,7 @@ export type RawHistoryInput = {
     inputId: string;
     text: string;
     source?: string;
+    requestId?: string;
     createdAt: number;
     message: BaseMessage;
 };
