@@ -14,15 +14,17 @@ import { EventQueue } from "./eventQueue.js";
 import { RawHistoryStore } from "./rawHistoryStore.js";
 import {
     AgentRuntimeOptions,
+    ExecutionState,
     InboundEvent,
     RuntimeOutputEmitter,
     RuntimeOutputEvent,
-    RuntimeState,
 } from "./types.js";
 
 export class AgentRuntime {
     private readonly queue = new EventQueue();
     private executionState: RuntimeState = { messages: [], llmCalls: 0 };
+    private rawHistoryState: RawHistoryState;
+    private executionState: ExecutionState = { messages: [], llmCalls: 0 };
     private readonly agent: ReturnType<typeof getAgent>;
     private running = false;
     private readonly heartbeatMs: number;
@@ -34,6 +36,8 @@ export class AgentRuntime {
     private fatalError?: Error;
 
     constructor(config: AgentConfig, options: AgentRuntimeOptions) {
+        this.rawHistoryPath = options.rawHistoryPath;
+        this.systemPromptPath = options.systemPromptPath;
         this.heartbeatMs = options.heartbeatMs ?? 30_000;
         this.onOutput = options.onOutput;
         this.history = new RawHistoryStore({
@@ -49,7 +53,6 @@ export class AgentRuntime {
 
         this.history.load();
 
-        this.systemPromptPath = config.systemPromptPath;
         this.loadSystemPrompt();
 
         this.agent = getAgent({
@@ -171,7 +174,7 @@ export class AgentRuntime {
             await this.emitOutput({ type: "turn_start", turnId, createdAt: turnCreatedAt });
 
             const inputMessages = events.map((event) => this.createHumanMessage(event));
-            const executionInput: RuntimeState = {
+            const executionInput: ExecutionState = {
                 messages: this.buildContext(inputMessages),
                 llmCalls: 0,
             };

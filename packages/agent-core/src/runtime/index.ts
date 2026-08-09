@@ -6,5 +6,4 @@ export type {
     MaybePromise,
     MessageStreamChunk,
     RuntimeOutputEvent,
-    RuntimeState,
 } from "./types.js";
