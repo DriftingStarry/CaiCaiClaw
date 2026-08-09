@@ -24,7 +24,6 @@ export interface AgentConfig {
     loopWarningLength: number;
     model: ToolBindingChatModel;
     toolsByName: Record<string, DynamicStructuredTool>;
-    systemPromptPath: string;
     onToolStart?: (event: ToolStartEvent) => MaybePromise<void>;
     onToolResult?: (event: ToolResultEvent) => MaybePromise<void>;
 }

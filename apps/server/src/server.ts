@@ -27,7 +27,6 @@ function createServer(serverConfig: ServerConfig): RunningServer {
     let nextConnectionId = 1;
 
     const config: AgentConfig = {
-        systemPromptPath: serverConfig.systemPromptPath,
         maxStepLimit: serverConfig.maxStepLimit,
         loopWarningLength: serverConfig.loopWarningLength,
         model: createOpenrouterModel(serverConfig.openrouterModel),
@@ -51,6 +50,7 @@ function createServer(serverConfig: ServerConfig): RunningServer {
 
     const runtime = new AgentRuntime(config, {
         rawHistoryPath: serverConfig.rawHistoryPath,
+        systemPromptPath: serverConfig.systemPromptPath,
         onOutput: async (event) => {
             for (const message of runtimeOutputToServerMessages(event)) {
                 broadcast(message);
