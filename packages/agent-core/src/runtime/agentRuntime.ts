@@ -51,13 +51,13 @@ export class AgentRuntime {
 
     constructor(config: AgentConfig, options: AgentRuntimeOptions) {
         this.rawHistoryPath = options.rawHistoryPath;
+        this.systemPromptPath = options.systemPromptPath;
         this.heartbeatMs = options.heartbeatMs ?? 30_000;
         this.onOutput = options.onOutput;
         this.rawHistoryState = createEmptyRawHistoryState();
 
         this.loadRawHistory();
 
-        this.systemPromptPath = config.systemPromptPath;
         this.loadSystemPrompt();
 
         this.agent = getAgent({
