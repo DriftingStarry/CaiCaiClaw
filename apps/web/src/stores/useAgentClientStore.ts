@@ -24,9 +24,10 @@ export const useAgentClientStore = create<AgentClientStore>((set) => ({
         wsClient = new CaiCaiWsClient(buildWsUrl(getOrCreateClientId()), {
             onOpen: () => set((state) => reduceClientState(state, { type: "connection_status", status: "connected" })),
             onClose: () => {
-                wsClient = undefined;
                 set((state) => reduceClientState(state, { type: "connection_status", status: "closed" }));
             },
+            onReconnecting: () =>
+                set((state) => reduceClientState(state, { type: "connection_status", status: "reconnecting" })),
             onError: (error) =>
                 set((state) => ({
                     ...state,
