@@ -1,9 +1,13 @@
 {
 	"type": "module",
 	"scripts": {
-		"dev": "set -a && { [ ! -f .env ] || . ./.env; } && set +a && tsx watch apps/server/src/server.ts",
-		"server": "set -a && { [ ! -f .env ] || . ./.env; } && set +a && tsx apps/server/src/server.ts",
+		"dev": "tsx watch --env-file-if-exists=.env apps/server/src/server.ts",
+		"server": "tsx --env-file-if-exists=.env apps/server/src/server.ts",
 		"typecheck": "tsc -b tsconfig.json"
+	},
+	"engines": {
+		"node": ">=22.7.0",
+		"pnpm": ">=10"
 	},
 	"dependencies": {
 		"ink": "^7.0.6",
