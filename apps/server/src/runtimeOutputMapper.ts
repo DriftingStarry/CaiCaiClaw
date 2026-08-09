@@ -11,6 +11,7 @@ export function runtimeOutputToServerMessages(event: RuntimeOutputEvent): Server
                     turnId: event.turnId,
                     text: event.text,
                     source: event.source,
+                    requestId: event.requestId,
                     createdAt: event.createdAt,
                 },
             ];

@@ -5,7 +5,12 @@ export function applyInputAccepted(
     state: ClientState,
     message: Extract<ServerMessage, { type: "input_accepted" }>,
 ): ClientState {
-    const existing = state.messages.find((item) => item.role === "user" && item.text === message.text && item.status === "pending");
+    const existing = state.messages.find((item) => {
+        if (item.role !== "user" || item.status !== "pending") return false;
+        if (message.requestId) return item.id === message.requestId;
+        // Keep text matching as a fallback for inputs from CLI and other sources without requestId.
+        return item.text === message.text;
+    });
     if (existing) {
         return {
             ...state,

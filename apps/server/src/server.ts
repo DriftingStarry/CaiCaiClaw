@@ -97,6 +97,7 @@ function createServer(serverConfig: ServerConfig): RunningServer {
                     text: message.text,
                     source: makeSource(clientId, message.source),
                     createdAt: Date.now(),
+                    requestId: message.requestId,
                 });
                 send(socket, { type: "ack", requestId: message.requestId });
             } catch (error) {
