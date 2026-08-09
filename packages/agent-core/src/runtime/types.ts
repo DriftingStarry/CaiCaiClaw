@@ -72,6 +72,7 @@ export type RuntimeOutputEvent =
 
 export type AgentRuntimeOptions = {
     rawHistoryPath: string;
+    systemPromptPath: string;
     heartbeatMs?: number;
     onOutput?: (event: RuntimeOutputEvent) => MaybePromise<void>;
 };
