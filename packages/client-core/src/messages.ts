@@ -5,7 +5,9 @@ export function applyInputAccepted(
     state: ClientState,
     message: Extract<ServerMessage, { type: "input_accepted" }>,
 ): ClientState {
-    const existing = state.messages.find((item) => item.role === "user" && item.text === message.text && item.status === "pending");
+    const existing = state.messages.find(
+        (item) => item.role === "user" && item.text === message.text && item.status === "pending",
+    );
     if (existing) {
         return {
             ...state,
@@ -33,7 +35,12 @@ export function applyInputAccepted(
     };
 }
 
-export function appendAssistantDelta(state: ClientState, turnId: string, text: string, receivedAt: number): ClientState {
+export function appendAssistantDelta(
+    state: ClientState,
+    turnId: string,
+    text: string,
+    receivedAt: number,
+): ClientState {
     const id = `${turnId}:assistant`;
     const existing = state.messages.find((item) => item.id === id);
 

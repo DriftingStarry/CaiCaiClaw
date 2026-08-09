@@ -52,7 +52,9 @@ function TurnActivity({ activity }: { activity: AgentTurnActivity }) {
                         key: "reasoning",
                         label: "Reasoning",
                         children: activity.reasoningText ? (
-                            <Typography.Paragraph className="!mb-0 whitespace-pre-wrap">{activity.reasoningText}</Typography.Paragraph>
+                            <Typography.Paragraph className="!mb-0 whitespace-pre-wrap">
+                                {activity.reasoningText}
+                            </Typography.Paragraph>
                         ) : (
                             <Typography.Text type="secondary">Provider 未返回 reasoning 文本。</Typography.Text>
                         ),
@@ -82,14 +84,16 @@ function ToolCard({ tool }: { tool: ToolActivity }) {
         <div className="rounded-2xl border border-stone-200 bg-stone-50 p-3">
             <Space className="mb-2" wrap>
                 <Typography.Text code>{tool.name}</Typography.Text>
-                                <Tag color={toolStatusColor[tool.status]}>{tool.status}</Tag>
+                <Tag color={toolStatusColor[tool.status]}>{tool.status}</Tag>
             </Space>
             <Typography.Text type="secondary">Args</Typography.Text>
             <pre className="mt-1 max-h-32 overflow-auto rounded-xl bg-white p-2 text-xs">{formatJson(tool.args)}</pre>
             {tool.result !== undefined ? (
                 <>
                     <Typography.Text type="secondary">Result</Typography.Text>
-                    <pre className="mt-1 max-h-40 overflow-auto rounded-xl bg-white p-2 text-xs">{formatJson(tool.result)}</pre>
+                    <pre className="mt-1 max-h-40 overflow-auto rounded-xl bg-white p-2 text-xs">
+                        {formatJson(tool.result)}
+                    </pre>
                 </>
             ) : null}
         </div>

@@ -32,11 +32,21 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
                         <Typography.Text className={message.role === "user" ? "!text-emerald-50" : undefined} strong>
                             {message.role === "user" ? "You" : "CaiCai"}
                         </Typography.Text>
-                        <Tag color={message.status === "error" ? "error" : message.status === "streaming" ? "processing" : "default"}>
+                        <Tag
+                            color={
+                                message.status === "error"
+                                    ? "error"
+                                    : message.status === "streaming"
+                                      ? "processing"
+                                      : "default"
+                            }
+                        >
                             {message.status}
                         </Tag>
                     </div>
-                    <Typography.Paragraph className={message.role === "user" ? "!mb-0 !text-white" : "!mb-0 whitespace-pre-wrap"}>
+                    <Typography.Paragraph
+                        className={message.role === "user" ? "!mb-0 !text-white" : "!mb-0 whitespace-pre-wrap"}
+                    >
                         {message.text}
                     </Typography.Paragraph>
                 </article>

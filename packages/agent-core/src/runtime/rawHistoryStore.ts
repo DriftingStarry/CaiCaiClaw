@@ -8,12 +8,7 @@ import {
     markInterruptedHistory,
     RawHistoryState,
 } from "./history.js";
-import {
-    HISTORY_VERSION,
-    rawHistoryEventSchema,
-    RawHistoryEvent,
-    RawHistoryEventDraft,
-} from "./historyEvents.js";
+import { HISTORY_VERSION, rawHistoryEventSchema, RawHistoryEvent, RawHistoryEventDraft } from "./historyEvents.js";
 
 export type RawHistoryStoreOptions = {
     path: string;

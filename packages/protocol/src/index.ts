@@ -19,10 +19,7 @@ export const clientPingMessageSchema = z.object({
     requestId: requestIdSchema,
 });
 
-export const clientMessageSchema = z.discriminatedUnion("type", [
-    clientInputMessageSchema,
-    clientPingMessageSchema,
-]);
+export const clientMessageSchema = z.discriminatedUnion("type", [clientInputMessageSchema, clientPingMessageSchema]);
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
 

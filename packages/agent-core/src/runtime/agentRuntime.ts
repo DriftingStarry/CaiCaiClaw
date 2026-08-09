@@ -1,7 +1,4 @@
-import {
-    BaseMessage,
-    HumanMessage,
-} from "@langchain/core/messages";
+import { BaseMessage, HumanMessage } from "@langchain/core/messages";
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { errorMessage } from "@caicaiclaw/utils";
@@ -126,7 +123,8 @@ export class AgentRuntime {
     }
 
     public loadSystemPrompt() {
-	if (this.systemPromptPath === '') return // not set systemPrompt, do nothing
+        // prettier-ignore
+        if (this.systemPromptPath === '') return // not set systemPrompt, do nothing
         try {
             this.systemPrompt = readFileSync(this.systemPromptPath, "utf-8");
         } catch (error) {
@@ -178,12 +176,7 @@ export class AgentRuntime {
             const baselineMessageCount = executionInput.messages.length;
             this.executionState = executionInput;
 
-            const finalState = await runAgentStream(
-                this.agent,
-                turnId,
-                executionInput,
-                this.emitOutput.bind(this),
-            );
+            const finalState = await runAgentStream(this.agent, turnId, executionInput, this.emitOutput.bind(this));
             const completedState = finalState ?? executionInput;
             this.executionState = { messages: completedState.messages, llmCalls: completedState.llmCalls };
 

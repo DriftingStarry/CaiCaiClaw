@@ -43,9 +43,7 @@ export const useAgentClientStore = create<AgentClientStore>((set) => ({
                 }
 
                 // Reducer purity requires timestamps to be injected at this IO boundary.
-                set((state) =>
-                    reduceClientState(state, { type: "server_message", message, receivedAt: Date.now() }),
-                );
+                set((state) => reduceClientState(state, { type: "server_message", message, receivedAt: Date.now() }));
 
                 // The reducer can only record the mismatch; tearing down the socket is this
                 // boundary's job. Reconnecting cannot fix a version gap, so stop for good.

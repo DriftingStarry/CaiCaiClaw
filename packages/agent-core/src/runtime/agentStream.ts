@@ -4,9 +4,7 @@ import { extractReasoningContent, extractTextContent } from "./messageContent.js
 import { ExecutionState, MessageStreamChunk, RuntimeOutputEmitter } from "./types.js";
 import { getAgent } from "../agent.js";
 
-type LangGraphMultiStreamChunk =
-    | readonly ["messages", MessageStreamChunk]
-    | readonly ["values", ExecutionState];
+type LangGraphMultiStreamChunk = readonly ["messages", MessageStreamChunk] | readonly ["values", ExecutionState];
 
 export async function runAgentStream(
     agent: ReturnType<typeof getAgent>,
