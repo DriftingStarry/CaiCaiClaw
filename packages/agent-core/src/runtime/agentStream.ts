@@ -1,23 +1,23 @@
 import { AIMessage, AIMessageChunk } from "@langchain/core/messages";
 import { toJsonObject } from "@caicaiclaw/utils";
 import { extractReasoningContent, extractTextContent } from "./messageContent.js";
-import { MessageStreamChunk, RuntimeOutputEmitter, RuntimeState } from "./types.js";
+import { ExecutionState, MessageStreamChunk, RuntimeOutputEmitter } from "./types.js";
 import { getAgent } from "../agent.js";
 
 type LangGraphMultiStreamChunk =
     | readonly ["messages", MessageStreamChunk]
-    | readonly ["values", RuntimeState];
+    | readonly ["values", ExecutionState];
 
 export async function runAgentStream(
     agent: ReturnType<typeof getAgent>,
     turnId: string,
-    inputState: RuntimeState,
+    inputState: ExecutionState,
     emitOutput: RuntimeOutputEmitter,
-): Promise<RuntimeState | undefined> {
+): Promise<ExecutionState | undefined> {
     const stream = await agent.stream(inputState, {
         streamMode: ["messages", "values"],
     });
-    let finalState: RuntimeState | undefined;
+    let finalState: ExecutionState | undefined;
 
     try {
         for await (const chunk of stream as AsyncIterable<LangGraphMultiStreamChunk>) {

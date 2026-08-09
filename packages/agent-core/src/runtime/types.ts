@@ -13,9 +13,6 @@ export type InboundEvent = {
 
 export type ExecutionState = { messages: BaseMessage[]; llmCalls: number };
 
-/** Compatibility alias for the LangGraph invocation state. */
-export type RuntimeState = ExecutionState;
-
 export type MessageStreamChunk = readonly [
     message: BaseMessage,
     metadata: Record<string, unknown>,

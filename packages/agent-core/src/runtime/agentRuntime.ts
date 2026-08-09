@@ -27,16 +27,16 @@ import { serializeHistoryMessage, serializeHistoryMessages } from "./historyMess
 import { EventQueue } from "./eventQueue.js";
 import {
     AgentRuntimeOptions,
+    ExecutionState,
     InboundEvent,
     RuntimeOutputEmitter,
     RuntimeOutputEvent,
-    RuntimeState,
 } from "./types.js";
 
 export class AgentRuntime {
     private readonly queue = new EventQueue();
     private rawHistoryState: RawHistoryState;
-    private executionState: RuntimeState = { messages: [], llmCalls: 0 };
+    private executionState: ExecutionState = { messages: [], llmCalls: 0 };
     private readonly agent: ReturnType<typeof getAgent>;
     private running = false;
     private readonly heartbeatMs: number;
@@ -254,7 +254,7 @@ export class AgentRuntime {
             await this.emitOutput({ type: "turn_start", turnId, createdAt: turnCreatedAt });
 
             const inputMessages = events.map((event) => this.createHumanMessage(event));
-            const executionInput: RuntimeState = {
+            const executionInput: ExecutionState = {
                 messages: this.buildContext(inputMessages),
                 llmCalls: 0,
             };
