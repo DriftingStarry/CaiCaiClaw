@@ -3,7 +3,11 @@
 	"scripts": {
 		"dev": "tsx watch --env-file-if-exists=.env apps/server/src/server.ts",
 		"server": "tsx --env-file-if-exists=.env apps/server/src/server.ts",
-		"typecheck": "tsc -b tsconfig.json"
+		"typecheck": "tsc -b tsconfig.json",
+		"lint": "eslint .",
+		"lint:fix": "eslint . --fix",
+		"format": "prettier --write \"{apps,packages}/**/*.{ts,tsx}\"",
+		"format:check": "prettier --check \"{apps,packages}/**/*.{ts,tsx}\""
 	},
 	"engines": {
 		"node": ">=22.7.0",
@@ -14,9 +18,14 @@
 		"react": "^19.2.7"
 	},
 	"devDependencies": {
+		"@eslint/js": "^10.0.1",
 		"@types/node": "^25.9.2",
 		"@types/react": "^19.2.17",
+		"eslint": "^10.8.1",
+		"eslint-config-prettier": "^10.1.8",
+		"prettier": "^3.9.6",
 		"tsx": "^4.22.4",
-		"typescript": "^6.0.3"
+		"typescript": "^6.0.3",
+		"typescript-eslint": "^8.66.0"
 	}
 }
