@@ -22,8 +22,6 @@ import {
 
 export class AgentRuntime {
     private readonly queue = new EventQueue();
-    private executionState: RuntimeState = { messages: [], llmCalls: 0 };
-    private rawHistoryState: RawHistoryState;
     private executionState: ExecutionState = { messages: [], llmCalls: 0 };
     private readonly agent: ReturnType<typeof getAgent>;
     private running = false;
@@ -36,7 +34,6 @@ export class AgentRuntime {
     private fatalError?: Error;
 
     constructor(config: AgentConfig, options: AgentRuntimeOptions) {
-        this.rawHistoryPath = options.rawHistoryPath;
         this.systemPromptPath = options.systemPromptPath;
         this.heartbeatMs = options.heartbeatMs ?? 30_000;
         this.onOutput = options.onOutput;
