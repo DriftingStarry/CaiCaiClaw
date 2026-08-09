@@ -3,28 +3,15 @@ import {
     HumanMessage,
 } from "@langchain/core/messages";
 import { CompiledStateGraph } from "@langchain/langgraph";
-import { appendFile } from "node:fs/promises";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { dirname } from "node:path";
 import { errorMessage } from "@caicaiclaw/utils";
 import { AgentConfig, getAgent, ToolResultEvent, ToolStartEvent } from "../agent.js";
 import { runAgentStream } from "./agentStream.js";
 import { buildContext } from "./context.js";
-import {
-    applyRawHistoryEvent,
-    createEmptyRawHistoryState,
-    markInterruptedHistory,
-    RawHistoryState,
-} from "./history.js";
-import {
-    HISTORY_VERSION,
-    rawHistoryEventSchema,
-    RawHistoryEvent,
-    RawHistoryEventDraft,
-} from "./historyEvents.js";
 import { serializeHistoryMessage, serializeHistoryMessages } from "./historyMessages.js";
 import { EventQueue } from "./eventQueue.js";
+import { RawHistoryStore } from "./rawHistoryStore.js";
 import {
     AgentRuntimeOptions,
     ExecutionState,
@@ -35,17 +22,17 @@ import {
 
 export class AgentRuntime {
     private readonly queue = new EventQueue();
+    private executionState: RuntimeState = { messages: [], llmCalls: 0 };
     private rawHistoryState: RawHistoryState;
     private executionState: ExecutionState = { messages: [], llmCalls: 0 };
     private readonly agent: ReturnType<typeof getAgent>;
     private running = false;
     private readonly heartbeatMs: number;
     private readonly onOutput?: RuntimeOutputEmitter;
+    private readonly history: RawHistoryStore;
     private activeTurnId?: string;
-    private readonly rawHistoryPath: string;
     private readonly systemPromptPath: string;
     private systemPrompt = "";
-    private historyWriteTail: Promise<void> = Promise.resolve();
     private fatalError?: Error;
 
     constructor(config: AgentConfig, options: AgentRuntimeOptions) {
@@ -53,9 +40,18 @@ export class AgentRuntime {
         this.systemPromptPath = options.systemPromptPath;
         this.heartbeatMs = options.heartbeatMs ?? 30_000;
         this.onOutput = options.onOutput;
-        this.rawHistoryState = createEmptyRawHistoryState();
+        this.history = new RawHistoryStore({
+            path: options.rawHistoryPath,
+            createId: (prefix) => this.createId(prefix),
+            onFatalError: (error) => {
+                this.fatalError = error;
+            },
+            assertAvailable: () => {
+                this.assertAvailable();
+            },
+        });
 
-        this.loadRawHistory();
+        this.history.load();
 
         this.loadSystemPrompt();
 
@@ -80,7 +76,7 @@ export class AgentRuntime {
         const normalizedEvent: InboundEvent = { ...event, inputId, createdAt };
         const message = this.createHumanMessage(normalizedEvent);
 
-        await this.appendRawHistoryEvent({
+        await this.history.append({
             type: "input.accepted",
             createdAt,
             inputId,
@@ -142,84 +138,8 @@ export class AgentRuntime {
         }
     }
 
-    private loadRawHistory(): void {
-        let content: string;
-
-        try {
-            content = readFileSync(this.rawHistoryPath, "utf-8");
-        } catch (error) {
-            if (!isFileMissingError(error)) throw this.toError(error, "raw history cannot be read");
-
-            mkdirSync(dirname(this.rawHistoryPath), { recursive: true });
-            writeFileSync(this.rawHistoryPath, "", { flag: "a" });
-            return;
-        }
-
-        const lines = content.split(/\r?\n/);
-        for (let index = 0; index < lines.length; index += 1) {
-            const line = lines[index];
-            if (!line.trim()) continue;
-
-            let value: unknown;
-            try {
-                value = JSON.parse(line);
-            } catch {
-                throw new Error(`raw history line ${index + 1} is not valid JSON`);
-            }
-
-            const parsed = rawHistoryEventSchema.safeParse(value);
-            if (!parsed.success) {
-                throw new Error(`raw history line ${index + 1} has an invalid event schema`);
-            }
-
-            try {
-                this.applyRawHistoryEvent(parsed.data);
-            } catch (error) {
-                throw new Error(`raw history line ${index + 1} cannot be replayed: ${errorMessage(error)}`);
-            }
-        }
-
-        this.markInterruptedHistory();
-    }
-
-    private async appendRawHistoryEvent(event: RawHistoryEventDraft): Promise<void> {
-        this.assertAvailable();
-
-        const operation = this.historyWriteTail.then(async () => {
-            this.assertAvailable();
-            const record = rawHistoryEventSchema.parse({
-                version: HISTORY_VERSION,
-                sequence: this.rawHistoryState.lastSequence + 1,
-                eventId: this.createId("event"),
-                ...event,
-            });
-
-            try {
-                await appendFile(this.rawHistoryPath, `${JSON.stringify(record)}\n`, "utf-8");
-            } catch (error) {
-                throw this.toError(error, "raw history append failed");
-            }
-
-            this.applyRawHistoryEvent(record);
-        });
-
-        this.historyWriteTail = operation.catch((error) => {
-            this.fatalError = this.toError(error, "runtime persistence failed");
-        });
-
-        await operation;
-    }
-
-    private applyRawHistoryEvent(event: RawHistoryEvent): void {
-        applyRawHistoryEvent(this.rawHistoryState, event);
-    }
-
-    private markInterruptedHistory(): void {
-        markInterruptedHistory(this.rawHistoryState);
-    }
-
     private buildContext(inputMessages: BaseMessage[]): BaseMessage[] {
-        return buildContext(this.systemPrompt, this.rawHistoryState, inputMessages);
+        return buildContext(this.systemPrompt, this.history.projection, inputMessages);
     }
 
     private async handleEvents(events: InboundEvent[]) {
@@ -230,7 +150,7 @@ export class AgentRuntime {
         const turnId = this.createId("turn");
         const turnCreatedAt = Date.now();
 
-        await this.appendRawHistoryEvent({
+        await this.history.append({
             type: "turn.started",
             createdAt: turnCreatedAt,
             turnId,
@@ -271,7 +191,7 @@ export class AgentRuntime {
             const completedState = finalState ?? executionInput;
             this.executionState = { messages: completedState.messages, llmCalls: completedState.llmCalls };
 
-            await this.appendRawHistoryEvent({
+            await this.history.append({
                 type: "turn.output_committed",
                 createdAt: Date.now(),
                 turnId,
@@ -284,7 +204,7 @@ export class AgentRuntime {
             if (outputCommitted) throw error;
 
             if (!this.fatalError) {
-                await this.appendRawHistoryEvent({
+                await this.history.append({
                     type: "turn.failed",
                     createdAt: Date.now(),
                     turnId,
@@ -311,9 +231,9 @@ export class AgentRuntime {
         if (!turnId) return;
         // A rejected append is already on disk, and replay-on-boot rethrows: writing an event the
         // projection will refuse permanently bricks the runtime. Skip instead of poisoning history.
-        if (!this.rawHistoryState.activeTurns.has(turnId)) return;
+        if (!this.history.projection.activeTurns.has(turnId)) return;
 
-        await this.appendRawHistoryEvent({
+        await this.history.append({
             type: "tool.started",
             turnId,
             toolCallId: event.toolCallId,
@@ -336,9 +256,9 @@ export class AgentRuntime {
         if (!turnId) return;
         // Same reason as emitToolStart, plus the projection rejects a completion whose start it
         // never saw -- which is reachable whenever emitToolStart skipped this same tool call.
-        if (!this.rawHistoryState.activeToolCalls.get(turnId)?.has(event.toolCallId)) return;
+        if (!this.history.projection.activeToolCalls.get(turnId)?.has(event.toolCallId)) return;
 
-        await this.appendRawHistoryEvent({
+        await this.history.append({
             type: "tool.completed",
             turnId,
             toolCallId: event.toolCallId,
@@ -374,10 +294,6 @@ export class AgentRuntime {
     private toError(error: unknown, fallback: string): Error {
         return new Error(`${fallback}: ${errorMessage(error)}`);
     }
-}
-
-function isFileMissingError(error: unknown): boolean {
-    return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
 }
 
 function normalizeFailureMessage(error: unknown): string {
