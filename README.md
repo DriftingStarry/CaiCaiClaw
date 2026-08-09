@@ -89,7 +89,7 @@
 runtime 内部状态分为两层：
 
 - `rawHistoryState` 是 JSONL 回放得到的完整 projection，包含按 turn 分组的 committed messages、未完成 / interrupted inputs、active / failed / interrupted turn 状态、tool 审计和最后应用的 sequence。
-- `executionState` 是单轮 LangGraph 调用状态。每轮由 committed turns 按完整 turn 选取约 30 条消息，再拼接 System Prompt 和当前输入；窗口不会截断一个 turn，最新完整 turn 即使超出预算也保留。`RuntimeState` 仍作为兼容别名。
+- `executionState` 是单轮 LangGraph 调用状态。每轮由 committed turns 按完整 turn 选取约 30 条消息，再拼接 System Prompt 和当前输入；窗口不会截断一个 turn，最新完整 turn 即使超出预算也保留。其类型为 `ExecutionState`。
 
 JSONL 每行是 version 1 event envelope：`input.accepted`、`turn.started`、`tool.started`、`tool.completed`、`turn.output_committed`、`turn.failed`。消息 payload 使用 LangChain `StoredMessage`，只持久化完整 Human / AI / Tool 消息和工具审计；System Prompt、循环警告、`llmCalls`、stream delta、reasoning 不写入历史。
 
