@@ -16,8 +16,6 @@ import {
     createEmptyRawHistoryState,
     markInterruptedHistory,
     RawHistoryState,
-    serializeHistoryMessage,
-    serializeHistoryMessages,
 } from "./history.js";
 import {
     HISTORY_VERSION,
@@ -25,6 +23,7 @@ import {
     RawHistoryEvent,
     RawHistoryEventDraft,
 } from "./historyEvents.js";
+import { serializeHistoryMessage, serializeHistoryMessages } from "./historyMessages.js";
 import { EventQueue } from "./eventQueue.js";
 import {
     AgentRuntimeOptions,
