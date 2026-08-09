@@ -14,15 +14,17 @@ import { buildContext } from "./context.js";
 import {
     applyRawHistoryEvent,
     createEmptyRawHistoryState,
-    HISTORY_VERSION,
     markInterruptedHistory,
-    rawHistoryEventSchema,
-    RawHistoryEvent,
-    RawHistoryEventDraft,
     RawHistoryState,
     serializeHistoryMessage,
     serializeHistoryMessages,
 } from "./history.js";
+import {
+    HISTORY_VERSION,
+    rawHistoryEventSchema,
+    RawHistoryEvent,
+    RawHistoryEventDraft,
+} from "./historyEvents.js";
 import { EventQueue } from "./eventQueue.js";
 import {
     AgentRuntimeOptions,

@@ -1,5 +1,7 @@
 import { BaseMessage, SystemMessage } from "@langchain/core/messages";
-import { HISTORY_WINDOW_MESSAGES, RawHistoryState } from "./history.js";
+import { RawHistoryState } from "./history.js";
+
+const HISTORY_WINDOW_MESSAGES = 30;
 
 export function buildContext(
     systemPrompt: string,
