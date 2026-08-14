@@ -1,126 +1,86 @@
-# AGENTS.md
+# CaiCaiClaw Agent Harness
 
-本文件定义本仓库中 AI agent / coding agent 需要遵守的协作、代码风格、验证和提交约束。
+本文件只保存 agent 每次工作都必须遵守的启动路径、工程不变量和完成门槛。产品愿景、里程碑与领域设计以 `README.md` 为准；不要把路线图复制到这里。
 
-## 交流与协作
+## Startup Workflow
 
-- 默认使用中文交流，允许并推荐在必要时保留英文技术术语。
-- 修改前先阅读相关文件，理解现有结构、命名和边界后再动手。
-- 保持改动聚焦，不主动重构无关代码，不顺手修改与任务无关的格式或结构。
-- 不覆盖、回滚、删除用户已有改动，除非用户明确要求。
-- 涉及删除文件、改动公共协议、改变运行方式、执行破坏性命令时，必须先说明影响并取得确认。
+开始修改前：
 
-## 技术栈与项目约束
+1. 运行 `pwd` 与 `git status --short --branch`，确认仓库位置和用户已有改动。
+2. 完整阅读本文件；按任务需要读取 `README.md` 的相关里程碑和相关源码。
+3. 读取 `feature_list.json` 与 `progress.md`。仅当 `session-handoff.md` 标记了未完成交接时再读取其细节。
+4. 在依赖已安装且任务涉及仓库文件时运行 `./init.sh`，记录基线。若基线已有与本任务无关的失败，记录后继续限定范围，不擅自修复无关问题。
+5. 先确认目标、成功标准、影响模块和验证方式，再编辑文件。
 
-- 包管理器使用 `pnpm`。
-- 项目使用 TypeScript、ESM、Bundler module resolution。
-- 本地 TypeScript/TSX 模块使用无后缀相对导入，例如 `./agent`；CSS 等资源保留文件后缀。
-- 源码由 `tsx` 或 bundler 消费；如果未来需要直接运行 emitted Node ESM，需要重新设计 `dist` 构建和导入路径。
-- 不引入 CommonJS 写法。
-- 优先使用仓库现有依赖和现有抽象。
-- 不允许在未询问用户的情况下自行新增 npm 依赖。
-- 如确需新增依赖，需先说明依赖用途、替代方案和影响范围，取得用户确认后再执行。
+## State And Scope
 
-## 代码风格
+- **One feature at a time**：`feature_list.json` 最多有一个 `in-progress` 项；它是当前执行状态的唯一来源，README 仍是长期规划来源。
+- **Stay in scope**：只修改当前请求与活动项需要的文件，不顺手重构或格式化无关内容。
+- 小型修复、一次性文档修改和只读分析无需制造 feature 记录；跨会话或影响多个模块的工作才进入 `feature_list.json`。
+- 不覆盖、回滚或删除用户已有改动。遇到重叠改动时先理解并在其基础上工作。
+- 当前需求与 README 冲突时先指出偏差；不要静默改变产品方向。
 
-- TypeScript 源码默认使用 4 空格缩进。
-- JSON 等配置文件遵循文件现有格式；不要仅为格式统一产生无关 diff。
-- 函数、变量、方法使用 `camelCase`。
-- 类型、接口、类使用 `PascalCase`。
-- 常量使用 `UPPER_SNAKE_CASE`。
-- 文件命名遵循现有风格：普通模块使用 `camelCase.ts`，工具模块使用 `xxxTool.ts`。
-- 优先显式建模类型，避免使用 `any`。
-- 如果第三方库边界必须使用 `any`，应限制在最小范围内，并尽量用局部类型或 wrapper 隔离。
-- 注释只用于解释非显然设计意图、复杂边界或重要取舍；避免逐行翻译代码。
+## Architecture Invariants
 
-## 架构边界
-
-仓库是 pnpm workspace，根目录只做编排（脚本、tsconfig references），不放业务代码。
-
-- `packages/utils` 通用工具函数（`JsonValue` 转换、`errorMessage` 等）。纯函数，不做 IO。
-- `packages/protocol` 对外消息协议：类型、Zod schema、解析与序列化。
-- `packages/agent-core` agent 核心：LangGraph 图、runtime、model provider、tools、上下文构建与事件历史。
-- `packages/client-core` 与框架无关的客户端状态归约，不依赖任何 UI 框架。
-- `apps/server` WebSocket 服务：传输、连接管理、进程编排与配置。
-- `apps/web` Next.js 前端。
-
-工作区依赖方向单向，不允许反向或循环：
+- 使用 `pnpm`、TypeScript、ESM 与 Bundler module resolution；不引入 CommonJS。
+- 本地 TypeScript/TSX 相对导入不带扩展名；CSS 等资源导入保留扩展名。
+- 根目录只做 workspace 编排，不放业务代码。依赖方向必须保持单向：
 
 ```text
-utils        ← 无工作区依赖
-protocol     ← utils
-agent-core   ← utils
-client-core  ← protocol
-server       ← agent-core, protocol, utils
-web          ← client-core, protocol, utils
+utils        <- 无工作区依赖
+protocol     <- utils
+agent-core   <- utils
+client-core  <- protocol
+server       <- agent-core, protocol, utils
+web          <- client-core, protocol, utils
 ```
 
-- `agent-core` 不得依赖 `protocol`：核心层不认识具体传输协议。跨层共享的基础类型放 `utils`。
-- 传输层不应承载核心业务决策。
-- 对外消息协议变更时，应同步更新类型、Zod schema、解析和序列化逻辑。
-- 工具能力放在 `packages/agent-core/src/tools`，并通过现有导出入口统一暴露。
-- 新增工作区成员时，需同步更新根 `tsconfig.json` 的 references。
+- `agent-core` 不依赖 `protocol`；传输层不承载核心业务决策。
+- 对外协议变更必须同步类型、Zod schema、解析与序列化；新增 workspace 成员同步根 `tsconfig.json` references。
+- 状态与行为保持分离：持久状态进入事件日志，tools、prompts 与上下文构建来自可加载代码或配置。
 
-## 输入校验与错误处理
+## Working Rules
 
-- 外部输入必须经过结构化校验，优先使用 Zod。
-- 边界层应返回稳定、可读的错误信息。
-- 不吞掉错误；捕获错误后必须记录、转换或返回结构化错误结果。
-- 不在日志或错误信息中输出 secret、token、完整环境变量或敏感路径。
+- 默认使用中文交流，必要时保留英文技术术语。
+- TypeScript 使用 4 空格缩进并遵循现有命名、文件结构和导出入口。
+- 优先显式类型，避免 `any`；第三方边界确需使用时限制在最小局部。
+- 外部协议和持久化边界使用结构化校验；错误必须被记录、转换或返回，不得吞掉，也不得泄露 secret、token 或完整环境变量。
+- 优先使用现有依赖和抽象。新增 npm 依赖、改变公共协议或运行方式时，若当前用户请求尚未明确授权，先说明用途、替代方案与影响并取得确认。
+- 常规仓库编辑和本地只读/验证命令无需额外确认。删除、覆盖难恢复数据、访问凭据、安装依赖、产生外部网络或服务状态变更时必须先确认。
+- 不自动启动长期服务，不自动创建 commit；用户明确要求时例外。提交信息使用 Angular Commit Message。
 
-## 验证要求
+## Verification Commands
 
-- 修改 TypeScript 代码后，必须运行：
+统一入口：
 
 ```bash
-pnpm typecheck
+./init.sh
 ```
 
-- `pnpm typecheck` 必须无报错。
-- 默认要求无警告；特殊情况下可以接受警告，但必须在最终说明中明确原因和影响。
-- 如果后续加入测试脚本，修改核心逻辑、协议、工具行为时应运行相关测试。
-- 无法运行验证命令时，必须说明原因、已完成的替代检查和残余风险。
+该脚本按顺序执行：
 
-## 提交规范
+- `pnpm typecheck`
+- `pnpm lint`
+- `pnpm format:check`
 
-- 提交信息使用 Angular Commit Message 规范。
-- 提交信息允许中文或英文，但同一个提交内应保持语言一致。
-- 推荐格式：
+仓库当前明确不设置 `test` 命令或测试计划，测试覆盖率不是完成门槛。行为变更仍需做与风险相称的手动验收，并在状态文件或最终说明中记录操作和观察结果；不得把“未报错”写成未经执行的验证证据。
 
-```text
-<type>(<scope>): <subject>
-```
+## Definition of Done
 
-- 常用 `type`：
-  - `feat`: 新功能
-  - `fix`: 缺陷修复
-  - `docs`: 文档变更
-  - `style`: 仅格式变更，不影响逻辑
-  - `refactor`: 重构，不新增功能或修复缺陷
-  - `perf`: 性能优化
-  - `test`: 测试相关
-  - `build`: 构建系统或依赖相关
-  - `ci`: CI 配置相关
-  - `chore`: 维护性变更
-  - `revert`: 回滚提交
+只有同时满足以下条件才能宣称工作完成：
 
-- 示例：
+- 请求的行为和明确验收条件已经实现，没有遗留未说明的占位代码或临时方案。
+- 改动符合依赖方向、公共协议与状态/行为分离等不变量。
+- `./init.sh` 已通过；无法运行或存在基线失败时，已写明命令、失败原因、替代检查和残余风险。
+- 需要运行时观察的改动已完成手动验收并记录证据。
+- 对活动 feature 的状态、evidence 和 `progress.md` 已同步；README 只在愿景、里程碑或领域设计发生变化时更新。
+- 工作树保持可理解且 `restartable`，未混入无关改动，也未擅自提交。
 
-```text
-feat(ws): add client ping message
-fix(core): 修复工具调用结果处理
-docs: 补充 agent 协作约束
-```
+## End of Session
 
-- 一个提交只包含一个明确目的。
-- 不将无关格式化、重构和功能改动混入同一提交。
-- 创建提交前应检查 `git status`，确认没有纳入无关文件。
+当本次工作修改了代码、文档或重要决策时，结束前：
 
-## Agent 执行约束
-
-- 修改文件前先说明将要修改的内容。
-- 优先小步改动，保持 diff 易于审查。
-- 不自动创建 commit，除非用户明确要求。
-- 不自动启动长时间运行的服务，除非任务需要。
-- 遇到未跟踪文件或用户已有改动时，先读取并理解，再决定如何继续。
-- 对文件系统、网络、凭据、依赖安装等有明显副作用的操作，必须先取得用户确认。
+1. 更新 `progress.md` 的当前状态、验证证据、风险和下一步。
+2. 若活动 feature 的状态变化，同步 `feature_list.json`；只有满足 Definition of Done 才标记 `done`。
+3. 仅在工作未完成、存在 blocker 或需要较多上下文才能续接时填写 `session-handoff.md`；正常完成后保持其“无活动交接”状态。
+4. 运行 `git status --short`，确认没有无关文件，并向用户说明验证结果和残余风险。

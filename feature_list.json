@@ -1,0 +1,22 @@
+{
+    "activeFeatureId": "feat-001",
+    "features": [
+        {
+            "id": "feat-001",
+            "name": "M1 TUI 共享运行时客户端",
+            "description": "补齐 M1 剩余的 TUI 端，通过 WebSocket 观察和输入同一个 AgentRuntime，不在客户端创建独立会话或持有核心状态。",
+            "dependencies": [],
+            "status": "in-progress",
+            "doneCriteria": [
+                "TUI 能连接现有 WebSocket server，并清晰呈现连接状态",
+                "TUI 能发送用户输入并展示共享 runtime 的消息与活动状态",
+                "客户端状态归约复用 packages/client-core，不在 TUI 重复实现协议状态机",
+                "Web 与 TUI 同时连接时观察和操作的是同一个 runtime",
+                "pnpm typecheck、pnpm lint、pnpm format:check 全部通过",
+                "记录双端共享 runtime 的手动验收结果"
+            ],
+            "evidence": "M1 的 shared runtime、Web observer、上下文构建和 JSONL 恢复已落地；TUI 尚未实现，当前证据与范围见 README.md 和 progress.md。"
+        }
+    ]
+}
+
