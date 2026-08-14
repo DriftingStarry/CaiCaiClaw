@@ -1,5 +1,5 @@
-import { applyServerMessage } from "./serverMessage.js";
-import { ClientAction, ClientState } from "./types.js";
+import { applyServerMessage } from "./serverMessage";
+import { ClientAction, ClientState } from "./types";
 
 export type {
     ConnectionStatus,
@@ -9,7 +9,7 @@ export type {
     AgentTurnActivity,
     ClientState,
     ClientAction,
-} from "./types.js";
+} from "./types";
 
 export const initialClientState: ClientState = {
     connectionStatus: "idle",

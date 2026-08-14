@@ -1,9 +1,9 @@
 import { tool } from "@langchain/core/tools";
 import { promises as fs } from "node:fs";
 import { z } from "zod";
-import { expandPath } from "./pathUtils.js";
-import { addLineNumbers } from "./textUtils.js";
-import { wrapToolResult } from "./toolResult.js";
+import { expandPath } from "./pathUtils";
+import { addLineNumbers } from "./textUtils";
+import { wrapToolResult } from "./toolResult";
 
 export const fileReadTool = tool(
     async ({ file_path, offset = 1, limit }) => {

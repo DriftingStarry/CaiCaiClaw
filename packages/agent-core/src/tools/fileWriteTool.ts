@@ -2,8 +2,8 @@ import { tool } from "@langchain/core/tools";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import { expandPath } from "./pathUtils.js";
-import { wrapToolResult } from "./toolResult.js";
+import { expandPath } from "./pathUtils";
+import { wrapToolResult } from "./toolResult";
 
 export const fileWriteTool = tool(
     async ({ file_path, content }) => {

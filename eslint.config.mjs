@@ -8,5 +8,34 @@ export default tseslint.config(
     },
     js.configs.recommended,
     tseslint.configs.recommended,
+    {
+        files: ["**/*.{ts,tsx}"],
+        rules: {
+            "no-restricted-imports": [
+                "error",
+                {
+                    patterns: [
+                        {
+                            group: [
+                                "./*.js",
+                                "../*.js",
+                                "./**/*.js",
+                                "../**/*.js",
+                                "./*.mjs",
+                                "../*.mjs",
+                                "./**/*.mjs",
+                                "../**/*.mjs",
+                                "./*.cjs",
+                                "../*.cjs",
+                                "./**/*.cjs",
+                                "../**/*.cjs",
+                            ],
+                            message: "Use extensionless relative imports for local TypeScript modules.",
+                        },
+                    ],
+                },
+            ],
+        },
+    },
     eslintConfigPrettier,
 );

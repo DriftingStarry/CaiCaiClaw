@@ -1,5 +1,5 @@
 import { BaseMessage, SystemMessage } from "@langchain/core/messages";
-import { RawHistoryState } from "./history.js";
+import { RawHistoryState } from "./history";
 
 const HISTORY_WINDOW_MESSAGES = 30;
 

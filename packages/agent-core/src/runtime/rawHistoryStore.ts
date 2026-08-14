@@ -2,13 +2,8 @@ import { appendFile } from "node:fs/promises";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { errorMessage } from "@caicaiclaw/utils";
-import {
-    applyRawHistoryEvent,
-    createEmptyRawHistoryState,
-    markInterruptedHistory,
-    RawHistoryState,
-} from "./history.js";
-import { HISTORY_VERSION, rawHistoryEventSchema, RawHistoryEvent, RawHistoryEventDraft } from "./historyEvents.js";
+import { applyRawHistoryEvent, createEmptyRawHistoryState, markInterruptedHistory, RawHistoryState } from "./history";
+import { HISTORY_VERSION, rawHistoryEventSchema, RawHistoryEvent, RawHistoryEventDraft } from "./historyEvents";
 
 export type RawHistoryStoreOptions = {
     path: string;

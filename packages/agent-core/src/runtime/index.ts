@@ -1,4 +1,4 @@
-export { AgentRuntime } from "./agentRuntime.js";
+export { AgentRuntime } from "./agentRuntime";
 export type {
     AgentRuntimeOptions,
     ExecutionState,
@@ -6,4 +6,4 @@ export type {
     MaybePromise,
     MessageStreamChunk,
     RuntimeOutputEvent,
-} from "./types.js";
+} from "./types";

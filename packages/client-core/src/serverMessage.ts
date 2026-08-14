@@ -1,7 +1,7 @@
 import { ServerMessage, WS_PROTOCOL_VERSION } from "@caicaiclaw/protocol";
-import { updateActivity, upsertActivity } from "./activities.js";
-import { appendAssistantDelta, applyInputAccepted } from "./messages.js";
-import { ClientState } from "./types.js";
+import { updateActivity, upsertActivity } from "./activities";
+import { appendAssistantDelta, applyInputAccepted } from "./messages";
+import { ClientState } from "./types";
 
 export function applyServerMessage(state: ClientState, message: ServerMessage, receivedAt: number): ClientState {
     switch (message.type) {

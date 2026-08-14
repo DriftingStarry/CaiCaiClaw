@@ -1,6 +1,6 @@
 import { AIMessage, BaseMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
-import { RawHistoryEvent, RawHistoryInput } from "./historyEvents.js";
-import { restoreStoredMessages } from "./historyMessages.js";
+import { RawHistoryEvent, RawHistoryInput } from "./historyEvents";
+import { restoreStoredMessages } from "./historyMessages";
 
 export type RawHistoryTurn = {
     turnId: string;

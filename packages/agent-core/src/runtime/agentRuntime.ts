@@ -2,19 +2,13 @@ import { BaseMessage, HumanMessage } from "@langchain/core/messages";
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { errorMessage } from "@caicaiclaw/utils";
-import { AgentConfig, getAgent, ToolResultEvent, ToolStartEvent } from "../agent.js";
-import { runAgentStream } from "./agentStream.js";
-import { buildContext } from "./context.js";
-import { serializeHistoryMessage, serializeHistoryMessages } from "./historyMessages.js";
-import { EventQueue } from "./eventQueue.js";
-import { RawHistoryStore } from "./rawHistoryStore.js";
-import {
-    AgentRuntimeOptions,
-    ExecutionState,
-    InboundEvent,
-    RuntimeOutputEmitter,
-    RuntimeOutputEvent,
-} from "./types.js";
+import { AgentConfig, getAgent, ToolResultEvent, ToolStartEvent } from "../agent";
+import { runAgentStream } from "./agentStream";
+import { buildContext } from "./context";
+import { serializeHistoryMessage, serializeHistoryMessages } from "./historyMessages";
+import { EventQueue } from "./eventQueue";
+import { RawHistoryStore } from "./rawHistoryStore";
+import { AgentRuntimeOptions, ExecutionState, InboundEvent, RuntimeOutputEmitter, RuntimeOutputEvent } from "./types";
 
 export class AgentRuntime {
     private readonly queue = new EventQueue();

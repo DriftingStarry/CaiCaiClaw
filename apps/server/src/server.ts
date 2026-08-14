@@ -8,8 +8,8 @@ import {
     ServerMessage,
     WS_PROTOCOL_VERSION,
 } from "@caicaiclaw/protocol";
-import { runtimeOutputToServerMessages } from "./runtimeOutputMapper.js";
-import { loadServerConfig, type ServerConfig } from "./config.js";
+import { runtimeOutputToServerMessages } from "./runtimeOutputMapper";
+import { loadServerConfig, type ServerConfig } from "./config";
 
 import { randomUUID } from "node:crypto";
 

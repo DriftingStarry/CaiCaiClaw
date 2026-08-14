@@ -1,5 +1,5 @@
 import { ServerMessage } from "@caicaiclaw/protocol";
-import { ClientState } from "./types.js";
+import { ClientState } from "./types";
 
 export function applyInputAccepted(
     state: ClientState,

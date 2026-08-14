@@ -5,7 +5,7 @@ import {
     StoredMessage,
 } from "@langchain/core/messages";
 import { errorMessage } from "@caicaiclaw/utils";
-import { storedMessageSchema, StoredMessagePayload } from "./historyEvents.js";
+import { storedMessageSchema, StoredMessagePayload } from "./historyEvents";
 
 export function serializeHistoryMessages(messages: BaseMessage[]): StoredMessagePayload[] {
     return mapChatMessagesToStoredMessages(messages).map(sanitizeStoredMessage);

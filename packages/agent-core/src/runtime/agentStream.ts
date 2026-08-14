@@ -1,8 +1,8 @@
 import { AIMessage, AIMessageChunk } from "@langchain/core/messages";
 import { toJsonObject } from "@caicaiclaw/utils";
-import { extractReasoningContent, extractTextContent } from "./messageContent.js";
-import { ExecutionState, MessageStreamChunk, RuntimeOutputEmitter } from "./types.js";
-import { getAgent } from "../agent.js";
+import { extractReasoningContent, extractTextContent } from "./messageContent";
+import { ExecutionState, MessageStreamChunk, RuntimeOutputEmitter } from "./types";
+import { getAgent } from "../agent";
 
 type LangGraphMultiStreamChunk = readonly ["messages", MessageStreamChunk] | readonly ["values", ExecutionState];
 

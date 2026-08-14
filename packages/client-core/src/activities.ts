@@ -1,4 +1,4 @@
-import { AgentTurnActivity, ClientState } from "./types.js";
+import { AgentTurnActivity, ClientState } from "./types";
 
 export function upsertActivity(state: ClientState, activity: AgentTurnActivity): ClientState {
     if (state.activities.some((item) => item.turnId === activity.turnId)) {

@@ -13,8 +13,9 @@
 ## 技术栈与项目约束
 
 - 包管理器使用 `pnpm`。
-- 项目使用 TypeScript、ESM、NodeNext。
-- 本地模块导入保持 NodeNext 兼容形式，使用 `.js` 后缀，例如 `./agent.js`。
+- 项目使用 TypeScript、ESM、Bundler module resolution。
+- 本地 TypeScript/TSX 模块使用无后缀相对导入，例如 `./agent`；CSS 等资源保留文件后缀。
+- 源码由 `tsx` 或 bundler 消费；如果未来需要直接运行 emitted Node ESM，需要重新设计 `dist` 构建和导入路径。
 - 不引入 CommonJS 写法。
 - 优先使用仓库现有依赖和现有抽象。
 - 不允许在未询问用户的情况下自行新增 npm 依赖。

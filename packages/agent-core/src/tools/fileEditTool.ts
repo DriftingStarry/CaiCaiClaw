@@ -1,9 +1,9 @@
 import { tool } from "@langchain/core/tools";
 import { promises as fs } from "node:fs";
 import { z } from "zod";
-import { expandPath } from "./pathUtils.js";
-import { positionToOffset } from "./textUtils.js";
-import { wrapToolResult } from "./toolResult.js";
+import { expandPath } from "./pathUtils";
+import { positionToOffset } from "./textUtils";
+import { wrapToolResult } from "./toolResult";
 
 export const fileEditTool = tool(
     async ({ file_path, start_line, start_column, end_line, end_column, replacement }) => {

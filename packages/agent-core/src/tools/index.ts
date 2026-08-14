@@ -1,13 +1,13 @@
 import { DynamicStructuredTool } from "@langchain/core/tools";
-import { execTool } from "./execTool.js";
-import { fileEditTool } from "./fileEditTool.js";
-import { fileReadTool } from "./fileReadTool.js";
-import { fileWriteTool } from "./fileWriteTool.js";
+import { execTool } from "./execTool";
+import { fileEditTool } from "./fileEditTool";
+import { fileReadTool } from "./fileReadTool";
+import { fileWriteTool } from "./fileWriteTool";
 
-export { execTool } from "./execTool.js";
-export { fileEditTool } from "./fileEditTool.js";
-export { fileReadTool } from "./fileReadTool.js";
-export { fileWriteTool } from "./fileWriteTool.js";
+export { execTool } from "./execTool";
+export { fileEditTool } from "./fileEditTool";
+export { fileReadTool } from "./fileReadTool";
+export { fileWriteTool } from "./fileWriteTool";
 
 export const toolsByName: Record<string, DynamicStructuredTool> = {
     [execTool.name]: execTool,

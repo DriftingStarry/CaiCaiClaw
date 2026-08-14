@@ -1,4 +1,4 @@
-import { InboundEvent } from "./types.js";
+import { InboundEvent } from "./types";
 
 type QueueWaiter = (events: InboundEvent[]) => void;
 
