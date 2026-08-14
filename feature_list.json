@@ -1,12 +1,20 @@
 {
-    "activeFeatureId": "feat-001",
+    "schemaVersion": 2,
+    "parallel": {
+        "maxLanes": 3
+    },
     "features": [
         {
             "id": "feat-001",
             "name": "M1 TUI 共享运行时客户端",
             "description": "补齐 M1 剩余的 TUI 端，通过 WebSocket 观察和输入同一个 AgentRuntime，不在客户端创建独立会话或持有核心状态。",
             "dependencies": [],
-            "status": "in-progress",
+            "status": "planned",
+            "touches": [
+                "apps/tui",
+                "packages/client-core"
+            ],
+            "branch": "feature/tui",
             "doneCriteria": [
                 "TUI 能连接现有 WebSocket server，并清晰呈现连接状态",
                 "TUI 能发送用户输入并展示共享 runtime 的消息与活动状态",
@@ -19,4 +27,3 @@
         }
     ]
 }
-

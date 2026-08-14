@@ -9,6 +9,23 @@ export default tseslint.config(
     js.configs.recommended,
     tseslint.configs.recommended,
     {
+        // harness/ 下的 node 脚本由 `node -` 直接执行，不经构建也不依赖 node_modules，因此使用 CJS。
+        files: ["harness/**/*.cjs"],
+        languageOptions: {
+            sourceType: "commonjs",
+            globals: {
+                require: "readonly",
+                module: "writable",
+                process: "readonly",
+                console: "readonly",
+                __dirname: "readonly",
+            },
+        },
+        rules: {
+            "@typescript-eslint/no-require-imports": "off",
+        },
+    },
+    {
         files: ["**/*.{ts,tsx}"],
         rules: {
             "no-restricted-imports": [
