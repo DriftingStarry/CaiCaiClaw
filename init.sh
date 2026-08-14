@@ -33,7 +33,7 @@ NODE
     next_steps="Next steps: read $lane_dir/state.json and $lane_dir/progress.md, then work only on this lane's declared scope."
 else
     echo "Lane: 当前分支尚未建立 lane 分片"
-    next_steps="Next steps: read $main_root/progress.md and $main_root/feature_list.json for the integration view; create a lane with harness/wt.sh new <feature-id> before making feature changes."
+    next_steps="Next steps: read $main_root/README.md and $main_root/feature_list.json for the integration view; create a lane with harness/wt.sh new <feature-id> before making feature changes."
 fi
 
 echo "=== harness validate ==="

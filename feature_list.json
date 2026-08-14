@@ -23,7 +23,7 @@
                 "pnpm typecheck、pnpm lint、pnpm format:check 全部通过",
                 "记录双端共享 runtime 的手动验收结果"
             ],
-            "evidence": "M1 的 shared runtime、Web observer、上下文构建和 JSONL 恢复已落地；TUI 尚未实现，当前证据与范围见 README.md 和 progress.md。"
+            "evidence": "M1 的 shared runtime、Web observer、上下文构建和 JSONL 恢复已落地；TUI 尚未实现，当前范围与已完成里程碑见 README.md。"
         }
     ]
 }

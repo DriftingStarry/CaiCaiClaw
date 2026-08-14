@@ -8,14 +8,15 @@
 
 1. 运行 `pwd` 与 `git status --short --branch`，确认仓库位置和用户已有改动。
 2. 完整阅读本文件；按任务需要读取 `README.md` 的相关里程碑和相关源码。
-3. 读取 `feature_list.json` 与 `progress.md`，并定位当前分支对应的 `.harness/<branch-slug>/state.json` 与 `.harness/<branch-slug>/progress.md`。
+3. 读取 `feature_list.json`，并定位当前分支对应的 `.harness/<branch-slug>/state.json` 与 `.harness/<branch-slug>/progress.md`。
 4. 在依赖已安装且任务涉及仓库文件时运行 `./init.sh`，记录基线。若基线已有与本任务无关的失败，记录后继续限定范围，不擅自修复无关问题。
 5. 先确认目标、成功标准、影响模块和验证方式，再编辑文件。
 
 ## State And Scope
 
 - **One feature per worktree**：每个 worktree / 分支同时只有一个 `in-progress` lane。仓库整体允许多个 lane 并行，但当前 agent 只读写自己领取的那一个。
-- **Lane 状态真相源**：分支内以 `.harness/<branch-slug>/state.json` 为准。`feature_list.json` 与 `progress.md` 是 main 上的集成视图，在 feature 分支上会 stale，**禁止在分支内修改**。
+- **Lane 状态真相源**：分支内以 `.harness/<branch-slug>/state.json` 为准。`feature_list.json` 是 main 上的集成视图，在 feature 分支上会 stale，**禁止在分支内修改**。
+- **没有根级 `progress.md`**：集成视图由三者构成 —— `README.md` 负责愿景、里程碑与领域设计，`feature_list.json` 负责当前可执行单元的状态与证据，git 历史负责已发生的事。会话进展只写进本 lane 的 `.harness/<slug>/progress.md`。不要重建根级进展日志：它与上述三者必然 drift，且所有 lane 都会争写同一个文件。
 - **Stay in scope**：只修改当前 lane 的 `touches` 声明覆盖的路径；需要越界时先在 `scopeNotes` 记录理由，合并时同步回任务池。
 - 不修改其他 lane 的分片文件，不编辑其他 worktree 的工作树。
 - 小型修复、一次性文档修改和只读分析无需制造 feature 记录；跨会话或影响多个模块的工作才进入 `feature_list.json`。
@@ -72,7 +73,7 @@
 - `status` 是唯一被脚本消费的枚举。写成表外取值不会报错，而是让该 lane 静默退出冲突判定与 `maxLanes` 计数，等于放行本应被拦的并行；改它前先确认取值在上表内。
 - 活跃 lane 的真相源只有各 worktree 的 `state.json`。不要在 `feature_list.json` 里另设活跃列表字段。
 - `touches` 允许写尚未创建的包路径（如新建 `apps/tui`），`validate` 与 `check` 会告警并按保守启发式判定依赖序，但不阻断。
-- 根级 `progress.md` 与 lane 分片的 `progress.md` 不做字段校验，按现有章节结构书写即可。
+- lane 分片的 `progress.md` 不做字段校验，按 `harness/wt.sh new` 生成的章节结构书写即可。
 
 ## Architecture Invariants
 
@@ -114,9 +115,12 @@ apps/web              <- client-core, protocol, utils
 
 该脚本按顺序执行：
 
+- `harness/lanes.sh validate`
 - `pnpm typecheck`
 - `pnpm lint`
 - `pnpm format:check`
+
+`init.sh` 只做静态检查与字段校验：它不安装依赖、不启动服务，也不新增测试命令。`validate` 放在最前，因此在尚未 `pnpm install` 的新 worktree 里也能先跑出字段结论。
 
 仓库当前明确不设置 `test` 命令或测试计划，测试覆盖率不是完成门槛。行为变更仍需做与风险相称的手动验收，并在状态文件或最终说明中记录操作和观察结果；不得把“未报错”写成未经执行的验证证据。
 
@@ -128,7 +132,7 @@ apps/web              <- client-core, protocol, utils
 - 改动符合依赖方向、公共协议与状态/行为分离等不变量。
 - `./init.sh` 已通过；无法运行或存在基线失败时，已写明命令、失败原因、替代检查和残余风险。
 - 需要运行时观察的改动已完成手动验收并记录证据。
-- 对当前 lane 的 `state.json` 与 `.harness/<slug>/progress.md` 已同步；根级 `progress.md` 与 `feature_list.json` 仅在 main 合并时更新。README 只在愿景、里程碑或领域设计发生变化时更新。
+- 对当前 lane 的 `state.json` 与 `.harness/<slug>/progress.md` 已同步；`feature_list.json` 仅在 main 合并时更新。README 只在愿景、里程碑或领域设计发生变化时更新。
 - 工作树保持可理解且 `restartable`，未混入无关改动，也未擅自提交。
 
 ## End of Session
@@ -139,4 +143,4 @@ apps/web              <- client-core, protocol, utils
 2. 更新 `.harness/<slug>/state.json` 的 `status`、`verification`、`lastUpdated`。
 3. 工作未完成或受阻时填写该 lane `progress.md` 的 `Handoff Notes`。
 4. 运行 `git status --short`，确认没有无关文件，并说明验证结果和残余风险。
-5. **不在分支内**改动 `feature_list.json` 或根级 `progress.md`。
+5. **不在分支内**改动 `feature_list.json`，也不新建根级进展文件。

@@ -95,24 +95,24 @@ NODE
 - lane 分片已建立，尚未开始 feature 实现。
 
 ## What's In Progress
-- 执行 feature `$feature_id`。
+- 执行 feature \`$feature_id\`。
 
 ## What's Next
-- 根据 `feature_list.json` 的 `touches` 开始实现并记录验证证据。
+- 根据 \`feature_list.json\` 的 \`touches\` 开始实现并记录验证证据。
 
 ## Verification Evidence
 | Check | Command | Result | Notes |
 | --- | --- | --- | --- |
-| Static verification | `./init.sh` | pending | lane 创建后尚未执行。 |
+| Static verification | \`./init.sh\` | pending | lane 创建后尚未执行。 |
 
 ## Blockers / Risks
 - 当前无 blocker。
 
 ## Decisions Made
-- 本 lane 只写入自己的分片，不修改根级集成视图或其他 lane。
+- 本 lane 只写入自己的分片，不修改根级 \`feature_list.json\`、\`README.md\` 或其他 lane。
 
 ## Handoff Notes
-- 工作未完成，下一次从本 lane 的 `state.json` 与本文件继续。
+- 工作未完成，下一次从本 lane 的 \`state.json\` 与本文件继续。
 EOF
 }
 
