@@ -165,6 +165,27 @@ list_lanes() {
     "$repo_root/harness/lanes.sh" list
 }
 
+# 按 porcelain 状态行是否落在某个路径前缀内分流。mode=inside 只输出前缀内的行，
+# mode=outside 只输出前缀外的行。必须用 --untracked-files=all：默认输出会把未跟踪
+# 目录折叠成 ".harness/"，按文件路径前缀就匹配不到。
+lane_status_lines() {
+    local target_root=$1
+    local prefix=$2
+    local mode=$3
+    local line
+    local relative
+    while IFS= read -r line; do
+        relative=${line:3}
+        if [[ "$relative" == "$prefix"* ]]; then
+            if [[ "$mode" == "inside" ]]; then
+                printf '%s\n' "$line"
+            fi
+        elif [[ "$mode" == "outside" ]]; then
+            printf '%s\n' "$line"
+        fi
+    done < <(git -C "$target_root" status --porcelain --untracked-files=all)
+}
+
 remove_lane() {
     local slug=$1
     local force=${2:-}
@@ -184,9 +205,12 @@ remove_lane() {
         echo "Refusing to remove the current main worktree." >&2
         exit 1
     fi
+    # 本 lane 自己的分片不计入"未提交改动"：它由 wt.sh new 生成且未跟踪，若计入则
+    # 非 --force 的 rm 对任何新建 lane 都必然失败。分片外的改动仍然拦。
+    local shard_prefix=".harness/$slug/"
     if [[ "$force" != "--force" ]]; then
-        if [[ -n $(git -C "$target_root" status --short) ]]; then
-            echo "Worktree has uncommitted changes; use --force after review." >&2
+        if [[ -n $(lane_status_lines "$target_root" "$shard_prefix" outside) ]]; then
+            echo "Worktree has uncommitted changes outside $shard_prefix; use --force after review." >&2
             exit 1
         fi
         if [[ -n $(git -C "$target_root" log --oneline "origin/main..HEAD") ]]; then
@@ -194,11 +218,16 @@ remove_lane() {
             exit 1
         fi
     fi
-    if [[ "$force" == "--force" ]]; then
-        git -C "$repo_root" worktree remove --force "$target_root"
-    else
-        git -C "$repo_root" worktree remove "$target_root"
+    local pending_shard
+    pending_shard=$(lane_status_lines "$target_root" "$shard_prefix" inside)
+    if [[ -n "$pending_shard" ]]; then
+        echo "Discarding uncommitted lane shard under $shard_prefix:" >&2
+        printf '%s\n' "$pending_shard" >&2
     fi
+    # 分片按设计是未跟踪文件，git worktree remove 会因此拒绝，所以固定传 --force。
+    # 是否允许删除由上面那道 review 门槛决定，它比 git 自己的检查更严：既看分片外的
+    # 改动，也看未合并提交。wt.sh 的 --force 跳过的是那道门槛，不是这里。
+    git -C "$repo_root" worktree remove --force "$target_root"
     echo "Removed lane $slug at $target_root"
 }
 
