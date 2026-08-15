@@ -103,7 +103,7 @@ apps/web              <- client-core, protocol, utils
 - 外部协议和持久化边界使用结构化校验；错误必须被记录、转换或返回，不得吞掉，也不得泄露 secret、token 或完整环境变量。
 - 优先使用现有依赖和抽象。新增 npm 依赖、改变公共协议或运行方式时，若当前用户请求尚未明确授权，先说明用途、替代方案与影响并取得确认。
 - 常规仓库编辑和本地只读/验证命令无需额外确认。删除、覆盖难恢复数据、访问凭据、安装依赖、产生外部网络或服务状态变更时必须先确认。
-- 不自动启动长期服务，不自动创建 commit；用户明确要求时例外。提交信息使用 Angular Commit Message。
+- 不自动启动长期服务；用户明确要求时例外。提交信息使用 Angular Commit Message。
 
 ## Verification Commands
 
@@ -133,7 +133,7 @@ apps/web              <- client-core, protocol, utils
 - `./init.sh` 已通过；无法运行或存在基线失败时，已写明命令、失败原因、替代检查和残余风险。
 - 需要运行时观察的改动已完成手动验收并记录证据。
 - 对当前 lane 的 `state.json` 与 `.harness/<slug>/progress.md` 已同步；`feature_list.json` 仅在 main 合并时更新。README 只在愿景、里程碑或领域设计发生变化时更新。
-- 工作树保持可理解且 `restartable`，未混入无关改动，也未擅自提交。
+- 工作树保持可理解且 `restartable`，未混入无关改动。
 
 ## End of Session
 
