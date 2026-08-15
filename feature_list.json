@@ -24,6 +24,26 @@
                 "记录双端共享 runtime 的手动验收结果"
             ],
             "evidence": "M1 的 shared runtime、Web observer、上下文构建和 JSONL 恢复已落地；TUI 尚未实现，当前范围与已完成里程碑见 README.md。"
+        },
+        {
+            "id": "feat-002",
+            "name": "Web 前端迁移到 client-core 传输层",
+            "description": "删除 apps/web 自带的 WebSocket adapter，改为复用 feat-001 提升到 packages/client-core 的传输层，消除双端重复的重连与解析逻辑。",
+            "dependencies": [
+                "feat-001"
+            ],
+            "status": "planned",
+            "touches": [
+                "apps/web"
+            ],
+            "branch": "feature/web-shared-transport",
+            "doneCriteria": [
+                "apps/web/src/adapters/ws 下的 wsClient 与 config 已删除，store 从 @caicaiclaw/client-core 引入传输层并注入浏览器 WebSocket 工厂",
+                "重连退避、协议版本不匹配主动断开、clientId 持久化行为与迁移前一致",
+                "pnpm typecheck、pnpm lint、pnpm format:check 全部通过",
+                "记录 Web 端连接、断线重连与消息收发的手动验收结果"
+            ],
+            "evidence": "feat-001 负责把传输层提升到 packages/client-core；该 lane 完成前 apps/web 继续使用自己的副本。"
         }
     ]
 }
