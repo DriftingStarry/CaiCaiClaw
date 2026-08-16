@@ -44,6 +44,26 @@
                 "记录 Web 端连接、断线重连与消息收发的手动验收结果"
             ],
             "evidence": "依赖已就绪：feat-001 已合并，传输层位于 packages/client-core/src/transport.ts（导出 CaiCaiWsClient、WebSocketLike、WebSocketFactory、buildWsUrl）。迁移时注意 onError 签名已放宽为 (error: unknown) => void，受 strictFunctionTypes 逆变检查，apps/web 现有的 (e: Event | Error) 回调需先调整类型才能赋值。apps/web 当前仍在使用自己的 adapter 副本。"
+        },
+        {
+            "id": "feat-003",
+            "name": "M2 上下文精进",
+            "description": "实现文件式记忆快照、滚动摘要 checkpoint、可串行化 compaction 与长工具结果引用，使 runtime 从滑动窗口演进为可恢复的分层上下文。Web 后台另行拆分。",
+            "dependencies": [],
+            "status": "claimed",
+            "touches": [
+                "packages/agent-core",
+                "apps/server"
+            ],
+            "branch": "feature/m2-context",
+            "doneCriteria": [
+                "buildContext 按 README 固定顺序注入唯一 SystemMessage、最新摘要、checkpoint 保留 turns、其后新 turns与当前输入",
+                "SYSTEM.md、Role.md、Memory.md 与 tasks/Index.md 每轮读取一致快照，并对各文件执行明确的独立大小预算",
+                "context.compacted 事件可严格校验、追加与回放，重启后 active context 从最新 checkpoint 恢复且原始 JSONL 不被改写或截断",
+                "AgentRuntime.compact() 与输入处理串行化，在 quiescent boundary 运行；摘要失败或预算校验失败不改变 checkpoint",
+                "长工具结果完整保存在 tool.completed，模型可见消息使用稳定 history 引用与有界预览，并可按 turnId、toolCallId、offset、limit 只读查询",
+                "./init.sh 通过，并记录 compaction 重启恢复、失败原子性、完整 turn 保留和长工具结果分页的手动验收证据"
+            ]
         }
     ]
 }
