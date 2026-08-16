@@ -10,6 +10,10 @@ export type {
     ClientState,
     ClientAction,
 } from "./types";
+export { CaiCaiWsClient, buildWsUrl, SOCKET_CLOSED, SOCKET_OPEN } from "./transport";
+export type { WebSocketFactory, WebSocketLike, WsClientHandlers } from "./transport";
+export { selectTimeline } from "./timeline";
+export type { TimelineItem } from "./timeline";
 
 export const initialClientState: ClientState = {
     connectionStatus: "idle",

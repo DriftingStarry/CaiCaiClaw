@@ -1,0 +1,15 @@
+{
+    "featureId": "feat-001",
+    "branch": "feature/tui",
+    "status": "in-progress",
+    "startedAt": "2026-08-15",
+    "lastUpdated": "2026-08-16",
+    "verification": {
+        "command": "./init.sh",
+        "result": "pass",
+        "at": "2026-08-16"
+    },
+    "manualAcceptance": "用户已在当前代码状态上验收本 lane。静态验证（./init.sh）与假 TTY harness 运行时验证已过；真实终端交互验收（备用屏、kitty Shift+Enter、真实鼠标滚轮、双端共享 runtime）仍未执行。",
+    "scopeNotes": "除 touches 声明的 apps/tui 与 packages/client-core 外，还同步了新增 workspace 成员必需的根级集成点：tsconfig.json references、package.json 的 tui 脚本、AGENTS.md 依赖方向表、.env.example、pnpm-lock.yaml。",
+    "evidence": "已修复 TUI 滚动视口方向与实测视口高、ws_url 与连接错误边界、函数式字素缓冲、emoji 光标、连接状态一致性、动画门控与布局挤压；SGR 鼠标消费仅覆盖单 chunk 完整序列，X10 降级与跨 chunk 分片仍会泄漏（已记入 progress.md 的 Blockers / Risks）。运行时证据来自 /tmp 一次性真实 Ink 7.0.6 + parse-keypress harness（跑完即删，不可重跑）：maxOffset > 0 且恒等于内容高减视口高、单 chunk 鼠标点击未注入缓冲、abcdef 连按三次退格得 def/cursor=0、a😀b 退格得 a😀 无孤立代理对、stickBottom 三态成立；具体数值随终端尺寸与内容量变化。./init.sh 于 2026-08-16 通过。真实终端未验证。"
+}
