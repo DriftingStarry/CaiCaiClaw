@@ -60,18 +60,18 @@ pnpm --filter @caicaiclaw/web build
 apps/web
 ├── app/                     # Next.js App Router 入口
 ├── src/components/         # UI 组件
-├── src/stores/             # Zustand store，封装 shared reducers
-└── src/adapters/ws/        # WebSocket transport 和 browser identity
+├── src/stores/             # Zustand store，封装 shared transport 和 reducers
+└── src/adapters/ws/        # browser identity
 ```
 
 模块职责：
 
 - `app/page.tsx`: 页面入口，渲染 `ChatShell`
 - `src/components/ChatShell.tsx`: 页面骨架，组合 chat、activity、connection badge
-- `src/stores/useAgentClientStore.ts`: 连接 lifecycle、发送输入、接收 server message
-- `src/adapters/ws/wsClient.ts`: 浏览器 WebSocket 封装
-- `src/adapters/ws/config.ts`: WS URL 配置与 query 拼装
+- `src/stores/useAgentClientStore.ts`: 连接 lifecycle、发送输入、接收 server message，并注入浏览器 WebSocket 工厂
 - `src/adapters/ws/clientIdentity.ts`: 浏览器匿名 `clientId` 持久化
+
+WebSocket 重连、消息解析、序列化和 URL query 拼装统一由 `@caicaiclaw/client-core` 提供；Web 层只保留 `NEXT_PUBLIC_CAICAI_WS_URL` 配置和浏览器原生 `WebSocket` 工厂注入。
 
 ## 状态模型
 
