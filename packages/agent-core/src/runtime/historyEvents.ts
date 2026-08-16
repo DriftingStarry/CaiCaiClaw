@@ -22,6 +22,11 @@ export const storedMessageSchema = z.object({
 export type StoredMessagePayload = z.infer<typeof storedMessageSchema>;
 
 const jsonObjectSchema = z.record(z.string(), z.unknown());
+const compactedTurnSchema = z.object({
+    turnId: z.string().min(1),
+    inputIds: z.array(z.string().min(1)).min(1),
+    messages: z.array(storedMessageSchema),
+});
 
 export const rawHistoryEventSchema = z.discriminatedUnion("type", [
     z.object({
@@ -85,6 +90,20 @@ export const rawHistoryEventSchema = z.discriminatedUnion("type", [
         createdAt: z.number().int().nonnegative(),
         turnId: z.string().min(1),
         message: z.string().min(1),
+    }),
+    z.object({
+        version: z.literal(HISTORY_VERSION),
+        sequence: z.number().int().positive(),
+        eventId: z.string().min(1),
+        type: z.literal("context.compacted"),
+        createdAt: z.number().int().nonnegative(),
+        compactionId: z.string().min(1),
+        coveredSequence: z.number().int().nonnegative(),
+        summary: z.string().min(1),
+        preservedTurns: z.array(compactedTurnSchema),
+        promptVersion: z.string().min(1),
+        model: z.string().min(1),
+        trigger: z.enum(["manual", "scheduled"]),
     }),
 ]);
 

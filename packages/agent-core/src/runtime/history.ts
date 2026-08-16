@@ -1,11 +1,21 @@
 import { AIMessage, BaseMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
 import { RawHistoryEvent, RawHistoryInput } from "./historyEvents";
-import { restoreStoredMessages } from "./historyMessages";
+import { restoreStoredMessages, serializeHistoryMessages } from "./historyMessages";
 
 export type RawHistoryTurn = {
     turnId: string;
     inputIds: string[];
     messages: BaseMessage[];
+};
+
+export type RawHistoryCheckpoint = {
+    compactionId: string;
+    coveredSequence: number;
+    summary: string;
+    preservedTurns: RawHistoryTurn[];
+    promptVersion: string;
+    model: string;
+    trigger: "manual" | "scheduled";
 };
 
 export type RawHistoryToolEvent = {
@@ -32,6 +42,8 @@ export type RawHistoryState = {
     interruptedInputIds: Set<string>;
     interruptedTurnIds: Set<string>;
     toolEvents: RawHistoryToolEvent[];
+    contextCheckpoint?: RawHistoryCheckpoint;
+    knownCompactionIds: Set<string>;
     lastSequence: number;
 };
 
@@ -49,6 +61,7 @@ export function createEmptyRawHistoryState(): RawHistoryState {
         interruptedInputIds: new Set(),
         interruptedTurnIds: new Set(),
         toolEvents: [],
+        knownCompactionIds: new Set(),
         lastSequence: 0,
     };
 }
@@ -181,10 +194,94 @@ export function applyRawHistoryEvent(state: RawHistoryState, event: RawHistoryEv
             state.activeToolCalls.delete(event.turnId);
             break;
         }
+        case "context.compacted": {
+            if (state.knownCompactionIds.has(event.compactionId)) {
+                throw new Error(`duplicate compaction ${event.compactionId}`);
+            }
+            if (event.coveredSequence !== state.lastSequence) {
+                throw new Error(
+                    `compaction ${event.compactionId} must cover sequence ${state.lastSequence}, received ${event.coveredSequence}`,
+                );
+            }
+            if (state.contextCheckpoint && event.coveredSequence <= state.contextCheckpoint.coveredSequence) {
+                throw new Error(`compaction ${event.compactionId} does not advance the checkpoint`);
+            }
+            if (state.activeTurns.size || state.pendingInputs.size || state.activeToolCalls.size) {
+                throw new Error(`compaction ${event.compactionId} was recorded while runtime was active`);
+            }
+
+            const preservedTurns: RawHistoryTurn[] = event.preservedTurns.map((turn) => ({
+                turnId: turn.turnId,
+                inputIds: [...turn.inputIds],
+                messages: restoreStoredMessages(turn.messages),
+            }));
+            if (new Set(preservedTurns.map((turn) => turn.turnId)).size !== preservedTurns.length) {
+                throw new Error(`compaction ${event.compactionId} contains duplicate preserved turns`);
+            }
+            if (preservedTurns.some((turn) => !state.knownTurnIds.has(turn.turnId))) {
+                throw new Error(`compaction ${event.compactionId} references an unknown preserved turn`);
+            }
+            if (preservedTurns.some((turn) => turn.messages.length === 0)) {
+                throw new Error(`compaction ${event.compactionId} contains an empty turn`);
+            }
+            assertPreservedTurnSuffix(state, event, preservedTurns);
+            state.contextCheckpoint = {
+                compactionId: event.compactionId,
+                coveredSequence: event.coveredSequence,
+                summary: event.summary,
+                preservedTurns,
+                promptVersion: event.promptVersion,
+                model: event.model,
+                trigger: event.trigger,
+            };
+            state.committedTurns = [];
+            state.toolEvents = [];
+            state.knownCompactionIds.add(event.compactionId);
+            break;
+        }
     }
 
     state.knownEventIds.add(event.eventId);
     state.lastSequence = event.sequence;
+}
+
+function assertPreservedTurnSuffix(
+    state: RawHistoryState,
+    event: Extract<RawHistoryEvent, { type: "context.compacted" }>,
+    restoredTurns: RawHistoryTurn[],
+): void {
+    const candidates = [...(state.contextCheckpoint?.preservedTurns ?? []), ...state.committedTurns];
+    if (event.preservedTurns.length > candidates.length) {
+        throw new Error(`compaction ${event.compactionId} preserves more turns than the active context contains`);
+    }
+
+    const suffixStart = candidates.length - event.preservedTurns.length;
+    for (let index = 0; index < event.preservedTurns.length; index += 1) {
+        const actual = event.preservedTurns[index];
+        const expected = candidates[suffixStart + index];
+        if (!actual || !expected || actual.turnId !== expected.turnId) {
+            throw new Error(`compaction ${event.compactionId} preserved turns are not an active-context suffix`);
+        }
+        if (actual.inputIds.join("\0") !== expected.inputIds.join("\0")) {
+            throw new Error(`compaction ${event.compactionId} changed preserved turn inputs for ${actual.turnId}`);
+        }
+        const restored = restoredTurns[index];
+        if (
+            !restored ||
+            JSON.stringify(toComparableStoredMessages(restored.messages)) !==
+                JSON.stringify(toComparableStoredMessages(expected.messages))
+        ) {
+            throw new Error(`compaction ${event.compactionId} changed preserved turn messages for ${actual.turnId}`);
+        }
+    }
+}
+
+function toComparableStoredMessages(messages: BaseMessage[]) {
+    return serializeHistoryMessages(messages).map((message) => {
+        const data = { ...message.data };
+        delete data.id;
+        return { ...message, data };
+    });
 }
 
 export function markInterruptedHistory(state: RawHistoryState): void {

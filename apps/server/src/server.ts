@@ -51,6 +51,7 @@ function createServer(serverConfig: ServerConfig): RunningServer {
     const runtime = new AgentRuntime(config, {
         rawHistoryPath: serverConfig.rawHistoryPath,
         systemPromptPath: serverConfig.systemPromptPath,
+        compactionModelName: serverConfig.openrouterModel,
         onOutput: async (event) => {
             for (const message of runtimeOutputToServerMessages(event)) {
                 broadcast(message);

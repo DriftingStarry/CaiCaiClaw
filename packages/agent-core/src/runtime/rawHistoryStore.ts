@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import { errorMessage } from "@caicaiclaw/utils";
 import { applyRawHistoryEvent, createEmptyRawHistoryState, markInterruptedHistory, RawHistoryState } from "./history";
 import { HISTORY_VERSION, rawHistoryEventSchema, RawHistoryEvent, RawHistoryEventDraft } from "./historyEvents";
+import { ToolResultPage } from "./types";
 
 export type RawHistoryStoreOptions = {
     path: string;
@@ -32,6 +33,56 @@ export class RawHistoryStore {
 
     public get projection(): RawHistoryState {
         return this.state;
+    }
+
+    public readToolResult(turnId: string, toolCallId: string, offset = 0, limit = 4_000): ToolResultPage {
+        if (!Number.isInteger(offset) || offset < 0)
+            throw new Error("tool result offset must be a non-negative integer");
+        if (!Number.isInteger(limit) || limit < 1 || limit > 100_000) {
+            throw new Error("tool result limit must be an integer between 1 and 100000");
+        }
+
+        let content: string;
+        try {
+            content = readFileSync(this.path, "utf-8");
+        } catch (error) {
+            throw toError(error, "tool result history cannot be read");
+        }
+
+        const lines = content.split(/\r?\n/);
+        for (let index = 0; index < lines.length; index += 1) {
+            const line = lines[index];
+            if (!line.trim()) continue;
+            let value: unknown;
+            try {
+                value = JSON.parse(line);
+            } catch {
+                throw new Error(`raw history line ${index + 1} is not valid JSON`);
+            }
+            const parsed = rawHistoryEventSchema.safeParse(value);
+            if (!parsed.success) throw new Error(`raw history line ${index + 1} has an invalid event schema`);
+            if (parsed.data.type !== "tool.completed") continue;
+            if (parsed.data.turnId !== turnId || parsed.data.toolCallId !== toolCallId) continue;
+
+            const result = stringifyToolResult(parsed.data.result);
+            if (offset > result.length) {
+                throw new Error(
+                    `tool result offset ${offset} is out of bounds for ${turnId}/${toolCallId} with length ${result.length}`,
+                );
+            }
+            const page = result.slice(offset, offset + limit);
+            return {
+                turnId,
+                toolCallId,
+                status: parsed.data.status,
+                totalLength: result.length,
+                offset,
+                limit,
+                content: page,
+                hasMore: offset + page.length < result.length,
+            };
+        }
+        throw new Error(`tool result ${turnId}/${toolCallId} was not found`);
     }
 
     public load(): void {
@@ -111,6 +162,17 @@ export class RawHistoryStore {
     private markInterrupted(): void {
         markInterruptedHistory(this.state);
     }
+}
+
+export function stringifyToolResult(result: unknown): string {
+    if (typeof result === "string") return result;
+    try {
+        const serialized = JSON.stringify(result);
+        if (serialized !== undefined) return serialized;
+    } catch {
+        // The event schema normally prevents this; return a safe explicit marker if a caller bypasses it.
+    }
+    return String(result);
 }
 
 function isFileMissingError(error: unknown): boolean {

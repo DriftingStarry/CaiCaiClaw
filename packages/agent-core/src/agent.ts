@@ -26,6 +26,7 @@ export interface AgentConfig {
     toolsByName: Record<string, DynamicStructuredTool>;
     onToolStart?: (event: ToolStartEvent) => MaybePromise<void>;
     onToolResult?: (event: ToolResultEvent) => MaybePromise<void>;
+    toolResultMessage?: (event: ToolResultEvent, message: ToolMessage) => ToolMessage;
 }
 
 export type ToolStartEvent = {
@@ -51,7 +52,8 @@ const MessageState = new StateSchema({
 });
 
 export const getAgent = (config: AgentConfig) => {
-    const { maxStepLimit, loopWarningLength, model, toolsByName, onToolStart, onToolResult } = config;
+    const { maxStepLimit, loopWarningLength, model, toolsByName, onToolStart, onToolResult, toolResultMessage } =
+        config;
     const tools = Object.values(toolsByName);
     const modelWithTools = model.bindTools(tools);
 
@@ -61,11 +63,13 @@ export const getAgent = (config: AgentConfig) => {
 
         if (maxStepLimit - llmCalls <= loopWarningLength) {
             // is going to max loop recursion
-            context.push(
-                new SystemMessage(
-                    `warning: is going to max step limit, now step is: ${llmCalls + 1}, max loop limit is ${maxStepLimit}`,
-                ),
-            );
+            const warning = `warning: is going to max step limit, now step is: ${llmCalls + 1}, max loop limit is ${maxStepLimit}`;
+            const firstMessage = context[0];
+            if (firstMessage && SystemMessage.isInstance(firstMessage)) {
+                context[0] = new SystemMessage(`${String(firstMessage.content)}\n\n${warning}`);
+            } else {
+                context.unshift(new SystemMessage(warning));
+            }
         }
 
         const resp = await modelWithTools.invoke(context);
@@ -104,26 +108,58 @@ export const getAgent = (config: AgentConfig) => {
                     createdAt: Date.now(),
                 });
                 res.push(
-                    new ToolMessage({
-                        content: error,
-                        tool_call_id: toolCallId,
-                        name: call.name,
-                        status: "error",
-                    }),
+                    toolResultMessage?.(
+                        {
+                            toolCallId,
+                            name: call.name,
+                            status: "error",
+                            result: error,
+                            createdAt: Date.now(),
+                        },
+                        new ToolMessage({
+                            content: error,
+                            tool_call_id: toolCallId,
+                            name: call.name,
+                            status: "error",
+                        }),
+                    ) ??
+                        new ToolMessage({
+                            content: error,
+                            tool_call_id: toolCallId,
+                            name: call.name,
+                            status: "error",
+                        }),
                 );
                 continue;
             }
 
             try {
-                const tool_res = await tool.invoke(call);
+                const rawToolResult = await tool.invoke(call.args);
+                const serializedToolResult = toJsonValue(rawToolResult);
                 await onToolResult?.({
                     toolCallId,
                     name: call.name,
                     status: "success",
-                    result: toJsonValue(tool_res),
+                    result: serializedToolResult,
                     createdAt: Date.now(),
                 });
-                res.push(tool_res);
+                const toolMessage = new ToolMessage({
+                    content: typeof rawToolResult === "string" ? rawToolResult : JSON.stringify(serializedToolResult),
+                    tool_call_id: toolCallId,
+                    name: call.name,
+                });
+                res.push(
+                    toolResultMessage?.(
+                        {
+                            toolCallId,
+                            name: call.name,
+                            status: "success",
+                            result: serializedToolResult,
+                            createdAt: Date.now(),
+                        },
+                        toolMessage,
+                    ) ?? toolMessage,
+                );
             } catch (error) {
                 const message = errorMessage(error);
                 await onToolResult?.({
@@ -134,12 +170,27 @@ export const getAgent = (config: AgentConfig) => {
                     createdAt: Date.now(),
                 });
                 res.push(
-                    new ToolMessage({
-                        content: message,
-                        tool_call_id: toolCallId,
-                        name: call.name,
-                        status: "error",
-                    }),
+                    toolResultMessage?.(
+                        {
+                            toolCallId,
+                            name: call.name,
+                            status: "error",
+                            result: message,
+                            createdAt: Date.now(),
+                        },
+                        new ToolMessage({
+                            content: message,
+                            tool_call_id: toolCallId,
+                            name: call.name,
+                            status: "error",
+                        }),
+                    ) ??
+                        new ToolMessage({
+                            content: message,
+                            tool_call_id: toolCallId,
+                            name: call.name,
+                            status: "error",
+                        }),
                 );
             }
         }

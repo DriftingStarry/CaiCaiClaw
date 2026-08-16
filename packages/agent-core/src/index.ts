@@ -8,5 +8,7 @@ export {
     type InboundEvent,
     type MessageStreamChunk,
     type RuntimeOutputEvent,
+    type CompactOptions,
+    type ToolResultPage,
 } from "./runtime/index";
 export { execTool, fileEditTool, fileReadTool, fileWriteTool, toolsByName } from "./tools/index";

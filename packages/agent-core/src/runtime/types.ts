@@ -72,8 +72,37 @@ export type RuntimeOutputEvent =
 export type AgentRuntimeOptions = {
     rawHistoryPath: string;
     systemPromptPath: string;
+    memoryDir?: string;
+    allowMissingMemoryFiles?: boolean;
+    compactionModelName?: string;
+    compactionPrompt?: string;
+    compactionPromptVersion?: string;
+    compactionSummaryBudget?: number;
+    toolResultProjectionThreshold?: number;
+    memoryBudgets?: {
+        system?: number;
+        role?: number;
+        memory?: number;
+        tasksIndex?: number;
+    };
     heartbeatMs?: number;
     onOutput?: (event: RuntimeOutputEvent) => MaybePromise<void>;
+};
+
+export type CompactOptions = {
+    trigger?: "manual" | "scheduled";
+    preservedTurns?: number;
+};
+
+export type ToolResultPage = {
+    turnId: string;
+    toolCallId: string;
+    status: "success" | "error";
+    totalLength: number;
+    offset: number;
+    limit: number;
+    content: string;
+    hasMore: boolean;
 };
 
 export type RuntimeOutputEmitter = (event: RuntimeOutputEvent) => MaybePromise<void>;

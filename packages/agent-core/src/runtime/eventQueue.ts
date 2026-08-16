@@ -21,6 +21,10 @@ export class EventQueue {
         return events;
     }
 
+    public get size(): number {
+        return this.queue.length;
+    }
+
     public async drainWithin(timeoutMs: number): Promise<InboundEvent[]> {
         const existing = this.drain();
         if (existing.length > 0) return existing;
@@ -50,5 +54,10 @@ export class EventQueue {
         if (waiter) {
             waiter([]);
         }
+    }
+
+    public wake(): void {
+        const waiter = this.waiters.shift();
+        if (waiter) waiter([]);
     }
 }

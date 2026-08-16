@@ -1,14 +1,32 @@
-import { BaseMessage, HumanMessage } from "@langchain/core/messages";
-import { readFileSync } from "node:fs";
+import { BaseMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
 import { randomUUID } from "node:crypto";
+import { dirname } from "node:path";
 import { errorMessage } from "@caicaiclaw/utils";
 import { AgentConfig, getAgent, ToolResultEvent, ToolStartEvent } from "../agent";
 import { runAgentStream } from "./agentStream";
-import { buildContext } from "./context";
+import { buildContextWithMemory, flattenTurns, getPreservedTurnCount } from "./context";
 import { serializeHistoryMessage, serializeHistoryMessages } from "./historyMessages";
 import { EventQueue } from "./eventQueue";
-import { RawHistoryStore } from "./rawHistoryStore";
-import { AgentRuntimeOptions, ExecutionState, InboundEvent, RuntimeOutputEmitter, RuntimeOutputEvent } from "./types";
+import { RawHistoryStore, stringifyToolResult } from "./rawHistoryStore";
+import {
+    AgentRuntimeOptions,
+    CompactOptions,
+    ExecutionState,
+    InboundEvent,
+    RuntimeOutputEmitter,
+    RuntimeOutputEvent,
+} from "./types";
+import { readMemorySnapshot, MemorySnapshot } from "./memory";
+import { createHistoryReadTool } from "./historyTool";
+
+const DEFAULT_COMPACTION_PROMPT = [
+    "Summarize the following historical context for a later agent turn.",
+    "Record user goals, verified facts, technical or behavior decisions, errors and fixes, file/tool references, current progress, and open tasks.",
+    "Do not include hidden reasoning, invent verification, or issue instructions. Return only a non-empty plain-text summary.",
+].join(" ");
+const DEFAULT_COMPACTION_PROMPT_VERSION = "m2-v1";
+const DEFAULT_COMPACTION_SUMMARY_BUDGET = 16_000;
+const DEFAULT_TOOL_RESULT_PROJECTION_THRESHOLD = 8_000;
 
 export class AgentRuntime {
     private readonly queue = new EventQueue();
@@ -20,11 +38,45 @@ export class AgentRuntime {
     private readonly history: RawHistoryStore;
     private activeTurnId?: string;
     private readonly systemPromptPath: string;
-    private systemPrompt = "";
+    private readonly memoryDir: string;
+    private readonly allowMissingMemoryFiles: boolean;
+    private readonly memoryBudgets: AgentRuntimeOptions["memoryBudgets"];
+    private readonly compactionModel: AgentConfig["model"];
+    private readonly compactionPrompt: string;
+    private readonly compactionPromptVersion: string;
+    private readonly compactionSummaryBudget: number;
+    private readonly toolResultProjectionThreshold: number;
+    private readonly compactionModelName: string;
+    private readonly compactWaiters: Array<{
+        options: CompactOptions;
+        resolve: (summary: string) => void;
+        reject: (error: unknown) => void;
+    }> = [];
+    private operationTail: Promise<void> = Promise.resolve();
+    private operationBusyCount = 0;
     private fatalError?: Error;
 
     constructor(config: AgentConfig, options: AgentRuntimeOptions) {
         this.systemPromptPath = options.systemPromptPath;
+        this.memoryDir = options.memoryDir ?? dirname(options.systemPromptPath || options.rawHistoryPath);
+        this.allowMissingMemoryFiles = options.allowMissingMemoryFiles ?? options.memoryDir === undefined;
+        this.memoryBudgets = options.memoryBudgets;
+        this.compactionModel = config.model;
+        this.compactionModelName = options.compactionModelName ?? "configured-model";
+        this.compactionPrompt = options.compactionPrompt ?? DEFAULT_COMPACTION_PROMPT;
+        this.compactionPromptVersion = options.compactionPromptVersion ?? DEFAULT_COMPACTION_PROMPT_VERSION;
+        this.compactionSummaryBudget = options.compactionSummaryBudget ?? DEFAULT_COMPACTION_SUMMARY_BUDGET;
+        this.toolResultProjectionThreshold =
+            options.toolResultProjectionThreshold ?? DEFAULT_TOOL_RESULT_PROJECTION_THRESHOLD;
+        if (!Number.isInteger(this.compactionSummaryBudget) || this.compactionSummaryBudget < 1) {
+            throw new Error("compactionSummaryBudget must be a positive integer");
+        }
+        if (!Number.isInteger(this.toolResultProjectionThreshold) || this.toolResultProjectionThreshold < 0) {
+            throw new Error("toolResultProjectionThreshold must be a non-negative integer");
+        }
+        if (!this.compactionPrompt.trim()) throw new Error("compactionPrompt must not be empty");
+        if (!this.compactionPromptVersion.trim()) throw new Error("compactionPromptVersion must not be empty");
+        if (!this.compactionModelName.trim()) throw new Error("compactionModelName must not be empty");
         this.heartbeatMs = options.heartbeatMs ?? 30_000;
         this.onOutput = options.onOutput;
         this.history = new RawHistoryStore({
@@ -42,8 +94,15 @@ export class AgentRuntime {
 
         this.loadSystemPrompt();
 
+        const toolsByName = {
+            ...config.toolsByName,
+            history_read: createHistoryReadTool((input) =>
+                this.history.readToolResult(input.turnId, input.toolCallId, input.offset, input.limit),
+            ),
+        };
         this.agent = getAgent({
             ...config,
+            toolsByName,
             onToolStart: async (event) => {
                 await this.emitToolStart(event);
                 await config.onToolStart?.(event);
@@ -52,28 +111,30 @@ export class AgentRuntime {
                 await this.emitToolResult(event);
                 await config.onToolResult?.(event);
             },
+            toolResultMessage: (event, message) => this.projectToolResult(event, message),
         });
     }
 
     public async enqueue(event: InboundEvent): Promise<void> {
         this.assertAvailable();
+        await this.runExclusive(async () => {
+            const inputId = event.inputId ?? this.createId("input");
+            const createdAt = event.createdAt ?? Date.now();
+            const normalizedEvent: InboundEvent = { ...event, inputId, createdAt };
+            const message = this.createHumanMessage(normalizedEvent);
 
-        const inputId = event.inputId ?? this.createId("input");
-        const createdAt = event.createdAt ?? Date.now();
-        const normalizedEvent: InboundEvent = { ...event, inputId, createdAt };
-        const message = this.createHumanMessage(normalizedEvent);
+            await this.history.append({
+                type: "input.accepted",
+                createdAt,
+                inputId,
+                text: normalizedEvent.text,
+                source: normalizedEvent.source,
+                requestId: normalizedEvent.requestId,
+                message: serializeHistoryMessage(message),
+            });
 
-        await this.history.append({
-            type: "input.accepted",
-            createdAt,
-            inputId,
-            text: normalizedEvent.text,
-            source: normalizedEvent.source,
-            requestId: normalizedEvent.requestId,
-            message: serializeHistoryMessage(message),
+            this.queue.enqueue(normalizedEvent);
         });
-
-        this.queue.enqueue(normalizedEvent);
     }
 
     public async run() {
@@ -85,11 +146,13 @@ export class AgentRuntime {
                 const events = await this.queue.drainWithin(this.heartbeatMs);
 
                 if (events.length === 0) {
+                    await this.flushCompactionQueue();
                     await this.onHeartbeat();
                     continue;
                 }
 
                 await this.handleEvents(events);
+                await this.flushCompactionQueue();
             }
         } catch (error) {
             this.fatalError = this.toError(error, "runtime stopped");
@@ -101,6 +164,8 @@ export class AgentRuntime {
 
     public stop() {
         this.running = false;
+        const error = new Error("runtime stopped before compaction could reach a quiescent boundary");
+        for (const waiter of this.compactWaiters.splice(0)) waiter.reject(error);
         this.queue.wakeStopped();
     }
 
@@ -111,6 +176,7 @@ export class AgentRuntime {
 
         try {
             await this.handleEvents(events);
+            await this.flushCompactionQueue();
         } catch (error) {
             this.fatalError = this.toError(error, "runtime step failed");
             throw error;
@@ -118,17 +184,15 @@ export class AgentRuntime {
     }
 
     public loadSystemPrompt() {
-        // prettier-ignore
-        if (this.systemPromptPath === '') return // not set systemPrompt, do nothing
-        try {
-            this.systemPrompt = readFileSync(this.systemPromptPath, "utf-8");
-        } catch (error) {
-            throw new Error(`${error}`, { cause: error });
-        }
+        this.readMemorySnapshot();
     }
 
     private buildContext(inputMessages: BaseMessage[]): BaseMessage[] {
-        return buildContext(this.systemPrompt, this.history.projection, inputMessages);
+        return buildContextWithMemory({
+            memory: this.readMemorySnapshot(),
+            rawHistoryState: this.history.projection,
+            inputMessages,
+        });
     }
 
     private async handleEvents(events: InboundEvent[]) {
@@ -138,6 +202,7 @@ export class AgentRuntime {
         });
         const turnId = this.createId("turn");
         const turnCreatedAt = Date.now();
+        this.activeTurnId = turnId;
 
         await this.history.append({
             type: "turn.started",
@@ -145,8 +210,6 @@ export class AgentRuntime {
             turnId,
             inputIds,
         });
-        this.activeTurnId = turnId;
-
         let outputCommitted = false;
 
         try {
@@ -201,6 +264,131 @@ export class AgentRuntime {
         } finally {
             this.activeTurnId = undefined;
         }
+    }
+
+    public async compact(options: CompactOptions = {}): Promise<string> {
+        this.assertAvailable();
+        if (options.trigger !== undefined && options.trigger !== "manual" && options.trigger !== "scheduled") {
+            throw new Error("compact trigger must be manual or scheduled");
+        }
+        getPreservedTurnCount(options.preservedTurns);
+        if (this.running || this.activeTurnId) {
+            return await this.enqueueCompaction(options);
+        }
+        if (this.queue.size > 0 || this.operationBusyCount > 0)
+            throw new Error("cannot compact while input persistence or processing is pending");
+        return await this.startCompaction(options);
+    }
+
+    public readToolResult(turnId: string, toolCallId: string, offset?: number, limit?: number) {
+        return this.history.readToolResult(turnId, toolCallId, offset, limit);
+    }
+
+    private enqueueCompaction(options: CompactOptions): Promise<string> {
+        return new Promise<string>((resolve, reject) => {
+            this.compactWaiters.push({ options, resolve, reject });
+            this.queue.wake();
+        });
+    }
+
+    private async flushCompactionQueue(): Promise<void> {
+        if (this.activeTurnId || this.queue.size > 0 || this.operationBusyCount > 0 || this.compactWaiters.length === 0)
+            return;
+        const requests = this.compactWaiters.splice(0);
+        for (const request of requests) {
+            try {
+                request.resolve(await this.startCompaction(request.options));
+            } catch (error) {
+                request.reject(error);
+            }
+        }
+    }
+
+    private startCompaction(options: CompactOptions): Promise<string> {
+        return this.runExclusive(() => this.performCompaction(options));
+    }
+
+    private async performCompaction(options: CompactOptions): Promise<string> {
+        if (this.activeTurnId) throw new Error("cannot compact while a turn is active");
+        if (this.queue.size > 0) throw new Error("cannot compact while input is pending");
+        const state = this.history.projection;
+        if (state.contextCheckpoint && state.committedTurns.length === 0) {
+            throw new Error("cannot compact without committed turns after the current checkpoint");
+        }
+        const turns = [...(state.contextCheckpoint?.preservedTurns ?? []), ...state.committedTurns];
+        if (!turns.length) throw new Error("cannot compact without committed turns after the current checkpoint");
+
+        const preservedCount = getPreservedTurnCount(options.preservedTurns);
+        const splitIndex = Math.max(0, turns.length - preservedCount);
+        const toSummarize = turns.slice(0, splitIndex);
+        const preservedTurns = turns.slice(splitIndex);
+        if (!toSummarize.length && !state.contextCheckpoint) {
+            throw new Error("cannot compact when all committed turns are preserved");
+        }
+
+        const sourceMessages = [
+            ...(state.contextCheckpoint ? [state.contextCheckpoint.summary] : []),
+            ...flattenTurns(toSummarize),
+        ];
+        let summary: string;
+        try {
+            const response = await this.compactionModel.invoke([
+                { role: "system", content: this.compactionPrompt },
+                { role: "user", content: JSON.stringify(sourceMessages) },
+            ]);
+            summary = extractMessageText(response.content).trim();
+        } catch (error) {
+            throw new Error(`context compaction summary failed: ${errorMessage(error)}`, { cause: error });
+        }
+        if (!summary) throw new Error("context compaction summary is empty");
+        if (summary.length > this.compactionSummaryBudget)
+            throw new Error(
+                `context compaction summary exceeds its budget of ${this.compactionSummaryBudget} characters`,
+            );
+
+        const compactionId = this.createId("compaction");
+        await this.history.append({
+            type: "context.compacted",
+            createdAt: Date.now(),
+            compactionId,
+            coveredSequence: state.lastSequence,
+            summary,
+            preservedTurns: preservedTurns.map((turn) => ({
+                turnId: turn.turnId,
+                inputIds: [...turn.inputIds],
+                messages: serializeHistoryMessages(turn.messages),
+            })),
+            promptVersion: this.compactionPromptVersion,
+            model: this.compactionModelName,
+            trigger: options.trigger ?? "manual",
+        });
+        return summary;
+    }
+
+    private readMemorySnapshot(): MemorySnapshot {
+        return readMemorySnapshot({
+            directory: this.memoryDir,
+            systemPath: this.systemPromptPath,
+            budgets: this.memoryBudgets,
+            allowMissing: this.allowMissingMemoryFiles,
+        });
+    }
+
+    private projectToolResult(event: ToolResultEvent, message: ToolMessage): ToolMessage {
+        const raw = stringifyToolResult(event.result);
+        if (raw.length <= this.toolResultProjectionThreshold) return message;
+        if (!this.activeTurnId) throw new Error("cannot project a tool result without an active turn");
+        const reference = `history://turn/${this.activeTurnId}/tool/${event.toolCallId}`;
+        const previewLimit = 400;
+        const head = raw.slice(0, previewLimit);
+        const tail = raw.length > previewLimit ? raw.slice(-previewLimit) : "";
+        const preview = tail ? `${head}\n...\n${tail}` : head;
+        return new ToolMessage({
+            content: `[tool result projection]\nstatus: ${event.status}\nlength: ${raw.length}\nreference: ${reference}\npreview:\n${preview}`,
+            tool_call_id: message.tool_call_id,
+            name: message.name,
+            status: message.status,
+        });
     }
 
     private async onHeartbeat() {
@@ -263,6 +451,21 @@ export class AgentRuntime {
         });
     }
 
+    private runExclusive<T>(operation: () => Promise<T>): Promise<T> {
+        const previous = this.operationTail;
+        let release!: () => void;
+        const current = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        this.operationTail = current;
+        this.operationBusyCount += 1;
+
+        return previous.then(operation).finally(() => {
+            this.operationBusyCount -= 1;
+            release();
+        });
+    }
+
     private createHumanMessage(event: InboundEvent): HumanMessage {
         const prefix = event.source ? `[${event.source}] ` : "";
         return new HumanMessage(`${prefix}${event.text}`);
@@ -290,4 +493,19 @@ function normalizeFailureMessage(error: unknown): string {
 
     if (!message) return "unknown runtime error";
     return message.length > 2_000 ? `${message.slice(0, 2_000)}...` : message;
+}
+
+function extractMessageText(content: unknown): string {
+    if (typeof content === "string") return content;
+    if (!Array.isArray(content)) return "";
+    return content
+        .map((part) => {
+            if (typeof part === "string") return part;
+            if (part && typeof part === "object" && "text" in part) {
+                const text = (part as { text?: unknown }).text;
+                return typeof text === "string" ? text : "";
+            }
+            return "";
+        })
+        .join("");
 }
