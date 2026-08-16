@@ -71,6 +71,37 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
 
+  apps/tui:
+    dependencies:
+      '@caicaiclaw/client-core':
+        specifier: workspace:*
+        version: link:../../packages/client-core
+      '@caicaiclaw/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@caicaiclaw/utils':
+        specifier: workspace:*
+        version: link:../../packages/utils
+      ink:
+        specifier: ^7.0.6
+        version: 7.0.6(@types/react@19.2.17)(react@19.2.7)
+      react:
+        specifier: ^19.2.7
+        version: 19.2.7
+    devDependencies:
+      '@types/node':
+        specifier: ^25.9.2
+        version: 25.9.2
+      '@types/react':
+        specifier: ^19.2.17
+        version: 19.2.17
+      tsx:
+        specifier: ^4.22.4
+        version: 4.22.4
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
   apps/web:
     dependencies:
       '@ant-design/nextjs-registry':

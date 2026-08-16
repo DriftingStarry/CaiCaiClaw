@@ -88,6 +88,7 @@ packages/agent-core   <- utils
 packages/client-core  <- protocol, utils
 apps/server           <- agent-core, protocol, utils
 apps/web              <- client-core, protocol, utils
+apps/tui              <- client-core, protocol, utils
 ```
 
 该表以各包 `package.json` 中的 `workspace:*` 条目为准，与 `touches` 使用同一套路径写法。新增或调整 workspace 依赖时同步本表；`harness/lanes.sh` 不读本表，它在运行时扫描 `pnpm-workspace.yaml` 覆盖的 `package.json` 并计算传递闭包。
