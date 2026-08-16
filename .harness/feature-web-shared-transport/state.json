@@ -1,0 +1,15 @@
+{
+    "featureId": "feat-002",
+    "branch": "feature/web-shared-transport",
+    "status": "done",
+    "startedAt": "2026-08-16",
+    "lastUpdated": "2026-08-16",
+    "verification": {
+        "command": "./init.sh",
+        "result": "pass",
+        "at": "2026-08-16"
+    },
+    "manualAcceptance": "已用浏览器 WebSocket mock 验收连接、clientId 恢复与服务端 hello；共享传输 fake socket 验收消息收发、500ms 首次退避重连与显式断开；版本不匹配收到 hello 后主动断开且不自动重连。",
+    "scopeNotes": "",
+    "evidence": "提交 be131bb 删除 apps/web 自带 wsClient/config，store 复用 @caicaiclaw/client-core 的 CaiCaiWsClient/buildWsUrl 并注入原生 WebSocket 工厂。./init.sh、pnpm --filter @caicaiclaw/web build 通过；一次性运行时验收覆盖 URL/clientId、连接、消息、发送、重连、协议版本断开。"
+}
