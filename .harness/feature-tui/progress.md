@@ -2,7 +2,7 @@
 
 ## Current State
 - **Last Updated:** 2026-08-16
-- **Status:** In Progress
+- **Status:** Done（已合并到 main：PR #37, merge 997dfce）
 
 ## What's Done
 - `packages/client-core` 提供跨运行时 WebSocket transport、URL 构建和 timeline selector。
@@ -11,11 +11,12 @@
 - 根 workspace 已同步 TUI package、TypeScript reference、启动脚本、依赖方向和环境变量。
 
 ## What's In Progress
-- 等待真实终端手动验收双端共享 runtime、连接重连、输入和设置 URL 重连。
+- 无。本 lane 已收尾并合并到 main。
 
-## What's Next
+## What's Next（移交给后续工作，不在本 lane 范围）
 - 用户在真实终端执行 `pnpm server` 与 `pnpm tui` 后记录交互验收结果。
 - 修 Blockers / Risks 里的鼠标序列消费缺陷（前缀式消费），这是本 lane 已知未修项。
+- feat-002 承接 `apps/web` 迁移到 client-core 传输层，注意 Handoff Notes 里的 `onError` 签名必改点。
 
 ## Verification Evidence
 | Check | Command | Result | Notes |
