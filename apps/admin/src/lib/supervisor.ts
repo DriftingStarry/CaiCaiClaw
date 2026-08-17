@@ -49,7 +49,6 @@ class AgentSupervisor {
     private startupTimer: ReturnType<typeof setTimeout> | undefined;
     private stopTimer: ReturnType<typeof setTimeout> | undefined;
     private stopReason: StopReason;
-    private restartAfterExit = false;
     private stopWaiters: Array<() => void> = [];
     private readonly pendingRequests = new Map<string, PendingRequest>();
     private stderrLines: string[] = [];
@@ -87,7 +86,6 @@ class AgentSupervisor {
         this.stderrLines = [];
         this.stderrRemainder = "";
         this.stopReason = undefined;
-        this.restartAfterExit = false;
         this.snapshot = { status: "starting", stderr: [], forcedKill: false, startedAt: new Date().toISOString() };
 
         const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
@@ -152,7 +150,6 @@ class AgentSupervisor {
     public async restart(): Promise<AgentSnapshot> {
         if (this.snapshot.status === "stopping") throw new Error("agent is already stopping");
         if (this.child) {
-            this.restartAfterExit = true;
             await this.requestStop("operator");
             return this.start();
         }
@@ -182,7 +179,6 @@ class AgentSupervisor {
 
     public async shutdown(): Promise<void> {
         this.clearTimers();
-        this.restartAfterExit = false;
         if (this.child) {
             await this.requestStop("operator");
         }
@@ -236,11 +232,6 @@ class AgentSupervisor {
         this.stopReason = undefined;
         const waiters = this.stopWaiters.splice(0);
         for (const resolvePromise of waiters) resolvePromise();
-
-        if (this.restartAfterExit) {
-            this.restartAfterExit = false;
-            this.start();
-        }
     }
 
     private failStartup(child: ChildProcess): void {
