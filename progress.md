@@ -13,8 +13,16 @@ feat-004 已补齐 server compact / daydreaming 入口与 scheduled compact 调�
 
 feat-005 于 2026-08-17 由用户决策置为 `done`：Shift+Enter 在其 Windows Terminal + tmux 3.4 环境实测失败，已定位为终端不支持 kitty 键盘协议（Enter 与 Shift+Enter 发出相同字节，属环境能力缺失而非代码缺陷，三组实测详见 Blockers / Risks）。用户选择换用支持 kitty 协议的终端而不改代码。**留痕：换行功能在支持 kitty 协议的终端上的实际按键确认尚未执行过**，代码路径的正确性目前只由喂入 kitty 编码的探针验证，见 Evidence 表。
 
-feat-006 的 apps/admin 已实现，apps/web 已在最后的独立删除范围中移除；静态检查与生产构建通过。start / hello→running / compact / stop 四步已由 Claude 在本机隔离端口实测通过（见 Evidence 表）；仍待人工验收的是 restart、崩溃 stderr UI 与 10MB 日志性能。
+feat-006 的 apps/admin 已实现，apps/web 已在最后的独立删除范围中移除；静态检查与生产构建通过。start / hello→running / compact / stop / **restart** / 崩溃语义均已由 Claude 在本机隔离端口实测通过（见 Evidence 表）；**唯一仍待人工验收的是 10MB 日志下 `/logs` 性能与 JSONL 字节只读**（外加「子进程写出 stderr 后异常退出时 UI 的实际渲染」这一未覆盖点，数据链路本身已验）。
 实现由 codex（`gpt-5.6-luna`）执行，其沙箱内 `git commit` 与 127.0.0.1 `listen` 均被拒绝，故它把改动留在工作树并如实标注了未执行的验收项。**这两条都是该沙箱的限制，不是仓库或本机的属性** —— 本机 `.git` 可写，提交由 Claude 在核对硬约束后完成。
+
+2026-08-17 本次修复 feat-006 三件事：
+
+1. **auth 死路径删除（Claude 手动执行）**。`readToken()` 原先支持 `Authorization: Bearer` 与 `x-caicai-admin-token`，但 `middleware.ts` 的 matcher 覆盖 `/api/*` 且只校验 cookie，纯 header 请求在进入路由前即被 401 —— 那两条分支对所有走 `requireAuth` 的路由都不可达。末尾手工解析 `cookie` 头的分支同样不可达（`requireAuth` 传入的永远是 `NextRequest`，会在上一行返回）。`readToken` 整个删除，`isAuthorized` 收窄为只接 `NextRequest` 且只读 cookie，新增 `verifyToken(token)` 供 `/api/auth` 直接校验（原先它为复用 `isAuthorized` 而伪造一个带 `authorization` 头的 `Request`，是绕路）。**结果是认证来源唯一化**：middleware 与路由层看同一个 cookie，不会再出现 middleware 拒绝而路由放行的分歧路径。
+2. **restart 误报修复**。根因是两条互相竞争的重启路径：`restart()` 置 `restartAfterExit = true` → `await requestStop()` → 自己再 `start()`，而 `handleExit()` 先 resolve stopWaiters、紧接着**同步**判断 `restartAfterExit` 也调了一次 `start()`。`resolvePromise()` 只把 await 续体排进微任务队列，`handleExit` 的同步尾部先跑完 → 状态变 `starting` → 续体那次 `start()` 撞上守卫抛 `cannot start agent while status is starting`。进程实际是被 `handleExit` 那次启起来的，所以「报错但重启成功」。修法：删除 `restartAfterExit` 字段与 `handleExit` 的自动重启分支，只留 `restart()` 一条路径。守卫能过是因为 `handleExit` 在 resolve waiters **之前**已 `this.child = undefined` 并把 status 置为 `stopped`；「等旧进程真正退出再 spawn」仍由 `stopWaiters` 保证，未被简化。
+3. **前端 agent 状态跨路由共享**。新增 `src/stores/useAgentSupervisorStore.ts`（zustand，无新增依赖）持有 snapshot、`activeAction`、`lastOperation`，action 的 promise 由 store 持有故不随组件卸载丢失；轮询由 `useAgentSupervisorPolling()` 以 `useEffect` 引用计数驱动，两页共用单一循环、全部卸载即停。`agent/page.tsx` 与 `chat/page.tsx` 改为消费该 store，Alert 类型改用结构化 `outcome`（原先靠 `message.includes("失败")` 猜）。**未引入 localStorage** —— 快照真相源是服务端 supervisor，客户端缓存旧快照只会造成显示与实际不一致。
+
+PRD 已检查，本次无产品、信息架构或协议语义变化，故不改 `docs/web-admin-prd.md`。
 
 2026-08-17 修复 feat-006 compact 缺陷：Next 16.2.10 webpack 曾将 `ws` 的 `Sender` / `buffer-util` 打进 server bundle，破坏 `buffer-util` 的延迟导出改写，最终在 compact 发送时抛出 `b.mask is not a function` 并被错误映射为 400。`serverExternalPackages: ["ws"]` 已生效；action API 现在只把明确的 supervisor 状态冲突映射为 409，其余内部异常为 500，输入校验仍为 400。
 
@@ -33,7 +41,7 @@ codex 曾额外加上 `experimental.esmExternals: false`（理由是让产物呈
 
 ### What's In Progress
 
-- [ ] **feat-006 M2 Web 后台管理（apps/admin）** — 核心实现、配置同步、apps/web 删除和本次 ws/错误映射修复已完成；`./init.sh` 与 admin 生产构建通过。剩余人工验收：hello 驱动的进程控制闭环、JSONL 字节只读、10MB 日志性能，以及受限环境下未能观察的 compact 真实回路与崩溃 stderr UI，详见 Evidence 表。
+- [ ] **feat-006 M2 Web 后台管理（apps/admin）** — 核心实现、配置同步、apps/web 删除、ws/错误映射修复、auth 死路径删除、restart 单一路径与跨路由 supervisor store 均已完成；`./init.sh` 与 admin 生产构建通过。start / running / compact / stop / restart / 崩溃语义已本机实测（见 Evidence 表）。**剩余人工验收只有一项：10MB 日志下 `/logs` 首屏与翻页可用 + JSONL 字节只读（字节数只增且增量均来自 runtime）。** 另有一个未覆盖点：子进程写出 stderr 后异常退出时 UI 的实际渲染（快照数据链路已验，缺的是浏览器里看一眼）。
 
   实现期需要注意的既有约束：
   - 依赖方向只能新增 `apps/admin <- client-core, protocol, utils`；**不得**新增 `apps/server <- client-core`。同步 `AGENTS.md` 依赖表与根 `tsconfig.json` references。
@@ -45,7 +53,7 @@ codex 曾额外加上 `experimental.esmExternals: false`（理由是让产物呈
 
 ### What's Next
 
-1. 在允许本机 127.0.0.1 监听的环境完成 feat-006 的四项运行时验收，结束前将本文件与 `feature_list.json` 标记为 `done` 或记录实际偏差。
+1. 完成 feat-006 最后一项运行时验收：造一个 10MB 量级的 `history.jsonl`，确认 `/logs` 首屏与翻页可用，并核对 admin 全程只读该文件（字节数只增且增量均来自 runtime）。通过后把本文件与 `feature_list.json` 的 feat-006 置为 `done`；顺手在浏览器里看一眼子进程写 stderr 后崩溃时 `/agent` 的渲染。
 2. 用户换到支持 kitty 协议的终端后，顺手确认一次 Shift+Enter 真能插入换行 —— 这是 feat-005 唯一未经真实按键确认的行为，代码路径已由探针验证但未在真机按过。若那时发现不工作，先读 Blockers / Risks 里的实测结论，特别是「不要打开 tmux `extended-keys`」这条反向警告。
 3. 改鼠标相关代码前先读 Blockers / Risks 里消费器的现有行为约定。
 
@@ -89,7 +97,9 @@ pnpm tui
 - [x] **compact 无服务端入口**：已由 feat-004 解决。server 提供单连接 WS compact / daydreaming 请求，`memoryDir` 和 scheduled compact 阈值由配置注入；scheduled 调度只消费 runtime `done` 输出事件。
 - [ ] **运行环境未隔离**：多个 server 实例同时启动会撞端口 8787 并共写 `~/.caicaiclaw/history.jsonl`。需要并行运行时自行配置 `.env`。
 - [x] **Codex 沙箱无法执行 admin 进程闭环（限制属沙箱，不属本机）**：codex 在其沙箱内的启动命令于 tsx IPC 管道 `/tmp/tsx-1000/16.pipe` 返回 `listen EPERM`，Node/WebSocket 127.0.0.1 listen 同样受限，child_process 的 piped stdout/stderr 也不转发。**本机无此限制** —— Claude 已在本机用隔离端口（admin=39001、ws=39002）与临时数据目录实测通过 start / hello→running / compact / stop，详见 Evidence 表。下次遇到「跑不起来」先分清是沙箱还是本机。
-- [ ] **feat-006 剩余三项运行时验收未执行**：restart、崩溃 stderr 在 UI 的呈现、10MB 日志下 `/logs` 响应与 JSONL 字节只读。前两项需要构造子进程异常退出，第三项需要生成大日志，均建议在本机手工执行。
+- [ ] **feat-006 剩余一项运行时验收未执行**：10MB 日志下 `/logs` 响应与 JSONL 字节只读，需要生成大日志，建议在本机手工执行。restart 与崩溃语义已于 2026-08-17 实测通过（见 Evidence 表）；仅「子进程写出 stderr 后异常退出时 UI 的实际渲染」尚未在浏览器中看过，快照数据链路本身已验。
+- [x] **admin 的 header 认证为死代码**：已修。`readToken()` 的 `Authorization: Bearer` / `x-caicai-admin-token` 分支因 middleware 只校验 cookie 且 matcher 覆盖 `/api/*` 而永不可达，已连同不可达的手工 cookie 解析一并删除；`isAuthorized` 收窄为只读 cookie，`/api/auth` 改用新的 `verifyToken`。**认证来源现已唯一化**，middleware 与路由层看同一个 cookie。脚本化调用 admin API 只能用 `Cookie: caicaiclaw_admin_token=<token>`。
+- [ ] **agent WS（默认 8787）无认证**：admin 面板本身有 token，但 agent 的 WebSocket 端口没有 —— 任何能访问本机该端口的页面或进程都可以向 agent 发送输入，而 agent 持有 `exec` 工具。当前依赖「只监听 127.0.0.1」作为唯一边界。本次未扩大范围处理，改动 agent 传输层前应先决定是否引入握手认证。
 
 ## Decisions Made
 
@@ -132,12 +142,18 @@ pnpm tui
 | feat-005 Shift+Enter 代码路径 | 一次性探针脚本（已删除） | pass | 喂入 kitty 编码 `CSI 13;2u` / `CSI 13;2:1u` / `CSI 13;2;13u`，复刻 ink `use-input.js` 的 key 派生逻辑后均得 `name=return, shift=true`，在 `editBuffer` 走 `insert-newline`；对照普通 `\r` 得 `submit`。**这是喂入编码的探针验证，不是真机按键。** |
 | feat-005 支持 kitty 终端上的真实按键换行 | 用户在支持 kitty 协议的终端操作 | **未执行** | 用户决策换终端但尚未在新终端回归此项。功能正确性目前仅由上一行的探针证据支撑。 |
 | feat-006 静态验证 | `./init.sh` | pass | 2026-08-17 本次修复后串行执行：`pnpm typecheck`、`pnpm lint`、`pnpm format:check` 全部通过，输出 `=== Verification complete ===`。并行跑 build 的一次缺失 `.next/types` 是构建清理竞争，随后串行重跑通过。 |
+| feat-006 supervisor store / 页面静态验证 | `./init.sh` | pass | 新增 store 的结构化响应校验、action 去重、hook 驱动的轮询生命周期通过 typecheck / lint / format；两个页面不再各自轮询 `/api/agent`，Alert 改用结构化 `outcome` 而非猜测文案。 |
+| feat-006 supervisor store 轮询生命周期 | 一次性探针：Node loader hook 将 `react` 换成立即执行 effect 的桩，`import` **真实** store 模块（跑完已删） | pass | 实际输出 `{"statusAfterPoll":"running","firstPollHappened":true,"pollsWithTwoConsumers":3,"singleLoopOnly":true,"stillPollingAfterOneUnmount":true,"noFetchAfterFullUnmount":true,"remountRestartsPolling":true,"noLeakAfterFinal":true}`。`statusAfterPoll:"running"` 证明轮询真的把服务端 snapshot 写进 store；2.3s 内两个 consumer 共 3 次 fetch 证明只有一个循环。 |
+| feat-006 action 跨路由存活 / 并发重入 | 同上探针机制（跑完已删） | pass | 实际输出 `{"activeWhileRunning":"compact","reentryRejected":true,"otherActionRejectedWhileBusy":true,"onlyOnePostSent":true,"actionSurvivedRouteChange":true,"actionResolvedOk":true,"finalOp":{"action":"compact","outcome":"success","message":"compact 完成：compacted 12 turns"},"activeClearedAfterDone":true}`。compact 进行中卸载 `/agent`、挂载 `/chat`，`activeAction` 仍为 `compact`，完成后结果正确落入 `lastOperation` —— 即本次要修的「切路由丢状态」。 |
+| feat-006 zustand 猴子补丁失效（已修回归） | 一次性探针（跑完已删） | **抓到并已修** | codex 初版用 `useAgentSupervisorStore.subscribe = ...` 做引用计数驱动轮询。zustand 5.0.14 的 `useStore` 捕获闭包内的 `api.subscribe`，`Object.assign` 只把引用拷到 hook 对象上，替换 hook 属性影响不到 React 实际调用的那个。探针实测 `{"patchedCallsAfterApiSubscribe":0,"patchedCallsAfterHookSubscribe":1}`，且两个页面都只用 selector、无人直调 `.subscribe` —— 轮询永不启动，snapshot 会永久停在 `stopped`。已改为显式的 `useAgentSupervisorPolling()` + `useEffect` 引用计数。**教训：不要为拿订阅生命周期而覆盖库导出的方法。** |
 | feat-006 admin build | `pnpm --filter @caicaiclaw/admin build` | pass | 2026-08-17：Next.js `16.2.10 (webpack)` 输出 `Compiled successfully`、`Finished TypeScript`、静态页 `9/9`，路由清单含 `/agent` 与 `/api/agent/action`。（codex 当时的构建含 `experimental.esmExternals: false` 及其“不推荐修改”警告；该开关随后经实测证否并移除，移除后重新 build 仍通过、无该警告。） |
 | feat-006 ws 外置 bundle 验证 | `rg` 检查 `apps/admin/.next/server` | pass | 实际输出：`route.js ... a.exports=require("ws")` 两处、`require_ws_count=2`；JS 内 `Sender=0`、`buffer-util=0`、`WS_NO_BUFFER_UTIL=0`。NFT 仅追踪 node_modules 下原始 `ws` 文件，未把实现内联进 JS。 |
 | feat-006 memory/logs 边界 | 一次性 Node + `tsx` 临时目录脚本 | pass | 2026-08-17：乐观锁冲突、原子替换无 `.tmp`、符号链接逃逸拒绝、反向日志分页、损坏行号和工具结果 offset/limit 均通过。 |
 | feat-006 supervisor 运行时（start / hello→running / compact / stop） | 隔离脚本：`node --import tsx/esm apps/admin/src/server.ts`，admin=39001、ws=39002、数据目录 `/tmp/caicai-fix-verify`（跑完已删） | pass | 2026-08-17 由 Claude 在本机实测（codex 沙箱 `listen EPERM` 跑不了，本机可以）。实际输出：admin 2s 内就绪；`{"action":"start"}` → HTTP 200 且 `status:"starting"`, pid 35257；t=1s `starting` → t=2s **`running`**（证明 control 连接收到 `hello`，非仅进程存活）；`{"action":"compact"}` → **无 mask 错误**，返回 `{"error":"cannot compact without committed turns after the current checkpoint"}`（空历史下的正确 runtime 拒绝，证明请求已成功抵达 runtime）；`{"action":"stop"}` → HTTP 200、`status:"stopped"`、`exitCode:0`、`forcedKill:false`（graceful 退出）。admin.log 全程无 `mask is not a function`。**未覆盖**：restart、崩溃 stderr UI、10MB 日志性能。 |
 | feat-006 ws mask 缺陷修复确认 | 上一行同一次实测 + 构建产物检查 | pass | 修复前点 compact 报 `b.mask is not a function` 并被误映射为 400；修复后真实回路不再抛该错。产物侧：`Sender`、`buffer-util`、`WS_NO_BUFFER_UTIL` 内联均为 0（`.nft.json` 里出现 `permessage-deflate` 属 Node File Trace 的部署清单，非内联代码）。 |
 | feat-006 `esmExternals: false` 必要性 | 移除该开关后重新 build + 上述运行时实测 | **确认不必要，已移除** | 去掉后构建通过，ws 仍为外部引用（形式由 `require("ws")` 变为 `import("ws")`），内联仍为 0，运行时 compact 正常。起作用的只有 `serverExternalPackages: ["ws"]`。 |
+| feat-006 restart 闭环（本次修复） | 隔离脚本：admin=39011、ws=39012、数据目录 `/tmp/caicai-restart-verify`（跑完已删） | pass | 2026-08-17 由 Claude 在本机实测（codex 沙箱 `listen EPERM` 跑不了）。实际输出：start → HTTP 200 `starting` pid 44749，t=2s `running`；**restart → HTTP 200**，返回快照为**新进程** `{"status":"starting","pid":44785}`，t=2s `running`；stop → `stopped`、`exitCode:0`、`forcedKill:false`。旧 pid 44749 ≠ 新 pid 44785，证明确实换了进程且 HTTP 不再误报 `cannot start agent while status is starting`。 |
+| feat-006 崩溃语义（stderr 快照数据链路） | 同一次隔离实测：对子进程 `kill -9`（跑完已删） | pass | 实际输出 `{"status":"crashed","exitCode":null,"signal":"SIGKILL","forcedKill":false,"error":"agent control connection lost"}`。区分了外部 SIGKILL（`forcedKill:false`）与 supervisor 自身超时强杀。SIGKILL 不产生 stderr，故 `stderr:[]` 属预期；**未覆盖**：子进程写出 stderr 后异常退出时 UI 的实际渲染。 |
 | feat-006 大日志性能 / JSONL 字节只读 | 10MB 手动验收 | **待人工验收** | 需要可监听且可运行 agent 的本机环境；本次未编造响应时间、内存或 hash 结果。 |
 
 ## Notes for Next Session
@@ -150,5 +166,8 @@ pnpm tui
 - ink 7 的 kitty 支持是 opt-in + auto 探测：`Ink.initKittyKeyboard` 在 `mode: "auto"` 下先写 `CSI ? u` 并只等 200ms，无回应即静默放弃。要判断某终端能否支持 Shift+Enter，直接在真实 pty 里发该查询看有无回应即可，比翻终端文档快。注意必须在真实 pty 中测：普通 tool shell 没有 TTY（`process.stdin.isTTY` 为 `undefined`），可用 `tmux new-session -d` 起一个 detached pane 拿到真实 pty。
 - 所有 feat-003 / feat-004 / feat-005 的验收脚本都是一次性的、跑完即删，**证据不可重跑**。要回归验证需重新搭建：protocol / config 相关的脚本必须放在 `apps/server` 下跑（workspace 依赖只在消费方目录内可解析），runtime 行为脚本放在 `packages/agent-core` 下跑且**不能 import protocol**（依赖方向不允许）；假模型要真的继承 `SimpleChatModel`，用 `{invoke, bindTools}` 裸对象会让 turn 直接 `turn.failed`。
 - 追加 checkpoint 的验收需要至少 4 个 committed turn：`DEFAULT_PRESERVED_TURNS = 3`，turn 数不足时 compact 不会产生 checkpoint，容易被误读成 bug。
-- feat-006 已完成代码交付但未满足运行时验收完成门槛；人工验收通过后再将 feature 状态改为 `done`。
-- feat-006 本次缺陷根因：Next webpack 的默认 ESM externals 将 `ws` 错误内联时，`buffer-util` 的 module.exports 事后 mask 改写丢失，`sender` 解构到非函数；修复后必须保留 `ws` 外置产物检查，避免只看 build 成功。
+- feat-006 已完成代码交付，仅剩 10MB 日志 / JSONL 只读一项人工验收；通过后再将 feature 状态改为 `done`。
+- feat-006 的 ws 缺陷根因：Next webpack 的默认 ESM externals 将 `ws` 错误内联时，`buffer-util` 的 module.exports 事后 mask 改写丢失，`sender` 解构到非函数；修复后必须保留 `ws` 外置产物检查，避免只看 build 成功。
+- **不要用覆盖库导出方法的方式去拿订阅生命周期。** zustand 的 `create` 是 `Object.assign(hook, api)`，React 的 `useStore` 用的是闭包里的 `api.subscribe`；替换 `hook.subscribe` 对 React 路径完全无效（实测 `patchedCallsAfterApiSubscribe: 0`），会静默得到一个永不启动的轮询。要引用计数就用显式的 `useEffect` hook，让生命周期由 React 驱动。
+- **admin 侧的行为验证不能只跑纯函数探针。** 上述回归之所以漏过，正是因为只验了 store 的纯函数部分和「直调 `.subscribe`」路径 —— 那条路径恰好绕过了 React 实际走的路径，测出来是绿的。仓库无测试框架也无 jsdom；本次可用的办法是用 Node loader hook（`module.register()`，**不是** `--import` 一个导出 `resolve` 的文件，那样不会注册）把 `react` 换成"立即执行 effect 并交出 cleanup"的桩，然后 `import` **真实的** store 模块，这样测的是产品代码本身。
+- **在本机跑 admin 隔离验收时，`pkill -f "apps/admin"` 这类宽模式会打到用户自己在跑的实例。** Next dev server 还有「同目录只允许一个实例」的限制，端口隔离不足以避开冲突。用精确 pid、或先 `ps -o args` 确认归属再动；本次因此误停了用户 admin 的 HTTP 监听（agent 子进程与 control 连接未受影响，但面板需重启才能打开）。

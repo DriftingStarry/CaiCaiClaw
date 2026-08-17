@@ -1,15 +1,16 @@
 "use client";
 
 import { Alert, Card, Space, Typography } from "antd";
-import { useEffect, useState } from "react";
-import type { AgentStatus } from "../../src/lib/supervisor";
+import { useEffect } from "react";
 import { AgentActivityPanel } from "../../src/components/AgentActivityPanel";
 import { ChatComposer } from "../../src/components/ChatComposer";
 import { ChatMessageList } from "../../src/components/ChatMessageList";
 import { ConnectionBadge } from "../../src/components/ConnectionBadge";
 import { useAgentClientStore } from "../../src/stores/useAgentClientStore";
+import { useAgentSupervisorPolling, useAgentSupervisorStore } from "../../src/stores/useAgentSupervisorStore";
 
 export default function ChatPage() {
+    useAgentSupervisorPolling();
     const activities = useAgentClientStore((state) => state.activities);
     const clientId = useAgentClientStore((state) => state.clientId);
     const connectionStatus = useAgentClientStore((state) => state.connectionStatus);
@@ -18,24 +19,13 @@ export default function ChatPage() {
     const errors = useAgentClientStore((state) => state.errors);
     const messages = useAgentClientStore((state) => state.messages);
     const sendInput = useAgentClientStore((state) => state.sendInput);
-    const [agentStatus, setAgentStatus] = useState<AgentStatus>("stopped");
+    const agentStatus = useAgentSupervisorStore((state) => state.snapshot.status);
 
     useEffect(() => {
-        const refresh = async () => {
-            const response = await fetch("/api/agent", { cache: "no-store" });
-            if (!response.ok) return;
-            const body = (await response.json()) as { status: AgentStatus };
-            setAgentStatus(body.status);
-            if (body.status === "running") connect();
-            else disconnect();
-        };
-        void refresh();
-        const timer = window.setInterval(() => void refresh(), 2_000);
-        return () => {
-            window.clearInterval(timer);
-            disconnect();
-        };
-    }, [connect, disconnect]);
+        if (agentStatus === "running") connect();
+        else disconnect();
+        return () => disconnect();
+    }, [agentStatus, connect, disconnect]);
 
     const connected = agentStatus === "running" && connectionStatus === "connected";
     return (

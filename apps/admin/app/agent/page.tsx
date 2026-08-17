@@ -1,47 +1,15 @@
 "use client";
 
 import { Alert, Button, Card, Descriptions, Space, Spin, Tag, Typography } from "antd";
-import { useCallback, useEffect, useState } from "react";
+import { useAgentSupervisorPolling, useAgentSupervisorStore } from "../../src/stores/useAgentSupervisorStore";
 import type { AgentSnapshot } from "../../src/lib/supervisor";
 
-const initialSnapshot: AgentSnapshot = { status: "stopped", stderr: [], forcedKill: false };
-
 export default function AgentPage() {
-    const [snapshot, setSnapshot] = useState<AgentSnapshot>(initialSnapshot);
-    const [message, setMessage] = useState<string>();
-    const [busy, setBusy] = useState<string>();
-
-    const refresh = useCallback(async () => {
-        const response = await fetch("/api/agent", { cache: "no-store" });
-        if (response.ok) setSnapshot((await response.json()) as AgentSnapshot);
-    }, []);
-
-    useEffect(() => {
-        void refresh();
-        const timer = window.setInterval(() => void refresh(), 1_000);
-        return () => window.clearInterval(timer);
-    }, [refresh]);
-
-    const act = async (action: string) => {
-        setBusy(action);
-        setMessage(undefined);
-        try {
-            const response = await fetch("/api/agent/action", {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({ action }),
-            });
-            const body = (await response.json()) as { snapshot?: AgentSnapshot; summary?: string; error?: string };
-            if (!response.ok) throw new Error(body.error ?? "操作失败");
-            if (body.snapshot) setSnapshot(body.snapshot);
-            setMessage(body.summary ? `${action} 完成：${body.summary}` : `${action} 已提交`);
-        } catch (error) {
-            setMessage(error instanceof Error ? error.message : "操作失败");
-        } finally {
-            setBusy(undefined);
-            void refresh();
-        }
-    };
+    useAgentSupervisorPolling();
+    const snapshot = useAgentSupervisorStore((state) => state.snapshot);
+    const activeAction = useAgentSupervisorStore((state) => state.activeAction);
+    const lastOperation = useAgentSupervisorStore((state) => state.lastOperation);
+    const runAction = useAgentSupervisorStore((state) => state.runAction);
 
     const active = ["starting", "running", "stopping"].includes(snapshot.status);
     const maintenanceAvailable = snapshot.status === "running";
@@ -74,47 +42,47 @@ export default function AgentPage() {
                                 showIcon
                             />
                         ) : null}
-                        {message ? (
+                        {lastOperation ? (
                             <Alert
-                                message={message}
+                                message={lastOperation.message}
                                 showIcon
-                                type={message.includes("失败") || message.includes("cannot") ? "error" : "info"}
+                                type={lastOperation.outcome === "error" ? "error" : "info"}
                             />
                         ) : null}
                         <Space wrap>
                             <Button
-                                disabled={active || (snapshot.status === "stopped" && Boolean(busy))}
-                                loading={busy === "start"}
-                                onClick={() => void act("start")}
+                                disabled={active || Boolean(activeAction)}
+                                loading={activeAction === "start"}
+                                onClick={() => void runAction("start")}
                                 type="primary"
                             >
                                 启动
                             </Button>
                             <Button
-                                disabled={!active || snapshot.status === "stopping"}
-                                loading={busy === "stop"}
-                                onClick={() => void act("stop")}
+                                disabled={!active || snapshot.status === "stopping" || Boolean(activeAction)}
+                                loading={activeAction === "stop"}
+                                onClick={() => void runAction("stop")}
                             >
                                 停止
                             </Button>
                             <Button
-                                disabled={snapshot.status === "stopping" || Boolean(busy)}
-                                loading={busy === "restart"}
-                                onClick={() => void act("restart")}
+                                disabled={snapshot.status === "stopping" || Boolean(activeAction)}
+                                loading={activeAction === "restart"}
+                                onClick={() => void runAction("restart")}
                             >
                                 重启
                             </Button>
                             <Button
-                                disabled={!maintenanceAvailable || Boolean(busy)}
-                                loading={busy === "compact"}
-                                onClick={() => void act("compact")}
+                                disabled={!maintenanceAvailable || Boolean(activeAction)}
+                                loading={activeAction === "compact"}
+                                onClick={() => void runAction("compact")}
                             >
                                 Compact
                             </Button>
                             <Button
-                                disabled={!maintenanceAvailable || Boolean(busy)}
-                                loading={busy === "daydreaming"}
-                                onClick={() => void act("daydreaming")}
+                                disabled={!maintenanceAvailable || Boolean(activeAction)}
+                                loading={activeAction === "daydreaming"}
+                                onClick={() => void runAction("daydreaming")}
                             >
                                 Daydreaming
                             </Button>
