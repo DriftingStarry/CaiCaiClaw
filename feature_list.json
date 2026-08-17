@@ -55,7 +55,7 @@
             "dependencies": [
                 "feat-003"
             ],
-            "status": "not-started",
+            "status": "done",
             "doneCriteria": [
                 "apps/server/src/config.ts 暴露 memoryDir（默认与现有 SYSTEM.md 所在目录一致）与 scheduled compact 阈值配置，并显式传给 AgentRuntime；缺省行为与本 feature 前一致",
                 "packages/protocol 新增 compact 与 daydreaming 的 client 请求与 server 结果消息，类型、Zod schema、parse 与 serialize 同步，WS_PROTOCOL_VERSION 递增",
@@ -66,7 +66,7 @@
                 "./init.sh 通过",
                 "记录手动验收：手动 compact 返回摘要、忙碌时排队、scheduled compact 按阈值触发、错误只回发起方、daydreaming 原子写入 Role.md"
             ],
-            "evidence": ""
+            "evidence": "2026-08-17 完成。apps/server 配置 `memoryDir` 默认复刻 dirname(systemPromptPath || rawHistoryPath)，显式传入 allowMissingMemoryFiles: true，并支持 CAICAI_COMPACT_EVERY_TURNS；protocol 将 WS_PROTOCOL_VERSION 从 2 升至 3，加入 compact/daydreaming 请求和严格结果消息；AgentRuntime 用共享 maintenance 队列串行 compact/daydreaming，daydreaming 只对 Role.md 做同目录临时文件 + renameSync 原子替换。实际 `./init.sh` 输出：pnpm typecheck、pnpm lint、pnpm format:check 全部通过，随后 `=== Verification complete ===`。实际 `pnpm exec tsx /tmp/caicaiclaw-feat-004-acceptance.ts` 输出并断言：protocol schema/unknown type/非法阈值通过；serverManualCompact、queuedCompact、isolatedErrors、daydreamingAtomicRoleWrite、systemFileUnchanged、runtimeContinuedAfterFailure 均 passed；scheduled compact 在第 4 个 done 触发一次（总 compact 模型调用 2 次，第二次为排队手动 compact）；阈值 0 输出 compactCalls:0；缺失 Role.md/Memory.md/tasks/Index.md 与默认 memoryDir 通过。实际 `git diff --check` 无输出且退出码 0。验收脚本已删除。残留风险：feat-005 的 TUI 鼠标序列与真实终端验收仍未处理；server 的 scheduled 计数按当前进程观察到的 done 事件累计，不扫描历史日志，符合本 feature 的调度边界。"
         },
         {
             "id": "feat-005",
