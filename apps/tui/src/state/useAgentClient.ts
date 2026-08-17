@@ -14,7 +14,7 @@ import { useEffect, useReducer, useRef } from "react";
 
 export type AgentClient = ClientState & { sendInput: (text: string) => void; reportError: (message: string) => void };
 
-export function useAgentClient(url: string): AgentClient {
+export function useAgentClient(url: string, token = ""): AgentClient {
     const [state, dispatch] = useReducer(reduceClientState, initialClientState);
     const clientId = useRef<string | undefined>(undefined);
     if (!clientId.current) clientId.current = `tui-${randomUUID()}`;
@@ -26,7 +26,7 @@ export function useAgentClient(url: string): AgentClient {
         let client: CaiCaiWsClient | undefined;
         try {
             client = new CaiCaiWsClient(
-                buildWsUrl(url, clientId.current),
+                buildWsUrl(url, clientId.current, token),
                 {
                     onOpen: () => dispatch({ type: "connection_status", status: "connected" }),
                     onClose: () => dispatch({ type: "connection_status", status: "closed" }),
@@ -83,7 +83,7 @@ export function useAgentClient(url: string): AgentClient {
             dispatch({ type: "connection_status", status: "closed" });
             if (clientRef.current === client) clientRef.current = undefined;
         };
-    }, [url]);
+    }, [url, token]);
 
     return {
         ...state,

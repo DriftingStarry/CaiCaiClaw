@@ -1,6 +1,6 @@
 import { Box, Key, Text, useApp, useInput, usePaste, useWindowSize } from "ink";
 import React, { useEffect, useRef, useState } from "react";
-import { getTuiWsUrl } from "../config";
+import { getTuiWsToken, getTuiWsUrl } from "../config";
 import { createMouseSequenceConsumer } from "../hooks/mouseSequence";
 import { useMouseTracking } from "../hooks/useMouseTracking";
 import { TextBuffer, useTextBuffer } from "../hooks/useTextBuffer";
@@ -15,11 +15,14 @@ export function App(): React.ReactElement {
     const { exit } = useApp();
     const { rows } = useWindowSize();
     const [url, setUrl] = useState(getTuiWsUrl());
+    const [token, setToken] = useState(getTuiWsToken());
+    const [settingsField, setSettingsField] = useState<"url" | "token">("url");
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [confirmExit, setConfirmExit] = useState(false);
-    const client = useAgentClient(url);
+    const client = useAgentClient(url, token);
     const input = useTextBuffer();
     const settings = useTextBuffer(url);
+    const tokenSettings = useTextBuffer(token);
     const controls = useScrollViewport();
     const mouseSequence = useRef(createMouseSequenceConsumer()).current;
     useMouseTracking();
@@ -48,12 +51,17 @@ export function App(): React.ReactElement {
         } else if (mouseResult.value !== rawValue) {
             // 组装被证伪后回吐的缓冲跨越了多个 chunk，当前 key 只描述最后一个 chunk。
             // 直接按文本插入，避免用错位的 key 走进 editBuffer 的特殊键分支而丢掉这段文本。
-            (settingsOpen ? settings : input).insert(mouseResult.value);
+            const targetBuffer = settingsOpen ? (settingsField === "url" ? settings : tokenSettings) : input;
+            targetBuffer.insert(mouseResult.value);
             return;
         }
         if (settingsOpen) {
-            if (key.escape || key.tab) {
+            if (key.escape) {
                 setSettingsOpen(false);
+                return;
+            }
+            if (key.tab) {
+                setSettingsField(settingsField === "url" ? "token" : "url");
                 return;
             }
             if (key.return) {
@@ -63,13 +71,14 @@ export function App(): React.ReactElement {
                     if (parsed.protocol !== "ws:" && parsed.protocol !== "wss:")
                         throw new Error("ws_url 必须使用 ws: 或 wss: 协议");
                     setUrl(nextUrl);
+                    setToken(tokenSettings.value);
                 } catch (error) {
                     client.reportError(error instanceof Error ? error.message : "ws_url 无效");
                 }
                 setSettingsOpen(false);
                 return;
             }
-            editBuffer(settings, value, key);
+            editBuffer(settingsField === "url" ? settings : tokenSettings, value, key);
             return;
         }
         if (key.ctrl && value === "d") {
@@ -79,6 +88,8 @@ export function App(): React.ReactElement {
         }
         if (key.tab) {
             settings.set(url);
+            tokenSettings.set(token);
+            setSettingsField("url");
             setSettingsOpen(true);
             return;
         }
@@ -94,15 +105,23 @@ export function App(): React.ReactElement {
     };
     useInput(handleInput);
     usePaste((text) => {
-        if (settingsOpen) settings.insert(text.replaceAll("\n", ""));
-        else input.insert(text);
+        if (settingsOpen) {
+            const targetBuffer = settingsField === "url" ? settings : tokenSettings;
+            targetBuffer.insert(text.replaceAll("\n", ""));
+        } else input.insert(text);
     });
     return (
         <Box flexDirection="column" height={rows}>
             <HeaderBar status={client.connectionStatus} />
             <Box flexGrow={1} minHeight={0} overflowY="hidden">
                 {settingsOpen ? (
-                    <SettingsModal buffer={settings} status={client.connectionStatus} clientId={client.clientId} />
+                    <SettingsModal
+                        urlBuffer={settings}
+                        tokenBuffer={tokenSettings}
+                        activeField={settingsField}
+                        status={client.connectionStatus}
+                        clientId={client.clientId}
+                    />
                 ) : (
                     <Transcript state={client} controls={controls} />
                 )}
