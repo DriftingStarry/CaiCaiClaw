@@ -11,7 +11,7 @@ import {
 import { runtimeOutputToServerMessages } from "./runtimeOutputMapper";
 import { loadServerConfig, type ServerConfig } from "./config";
 
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -100,7 +100,18 @@ export function createServer(serverConfig: ServerConfig, model?: AgentConfig["mo
         throw error;
     });
 
-    const wss = new WebSocketServer({ host: serverConfig.host, port: serverConfig.port });
+    const wss = new WebSocketServer({
+        host: serverConfig.host,
+        port: serverConfig.port,
+        verifyClient: ({ req }, callback) => {
+            if (!serverConfig.wsToken) {
+                callback(true);
+                return;
+            }
+            const token = getRequestToken(req.url);
+            callback(tokensEqual(token, serverConfig.wsToken), 401, "Unauthorized");
+        },
+    });
 
     wss.on("connection", (socket, request) => {
         const connectionId = createConnectionId();
@@ -203,6 +214,22 @@ export function createServer(serverConfig: ServerConfig, model?: AgentConfig["mo
             await runtimeTask.catch(() => {});
         },
     };
+}
+
+function getRequestToken(requestUrl: string | undefined): string | undefined {
+    if (!requestUrl) return undefined;
+    try {
+        return new URL(requestUrl, "ws://localhost").searchParams.get("token") ?? undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+function tokensEqual(left: string | undefined, right: string): boolean {
+    if (!left) return false;
+    const leftBuffer = Buffer.from(left);
+    const rightBuffer = Buffer.from(right);
+    return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
 }
 
 async function main(): Promise<void> {

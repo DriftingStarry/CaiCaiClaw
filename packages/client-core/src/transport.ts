@@ -125,11 +125,14 @@ function isMessageEvent(event: unknown): event is { data: unknown } {
     return typeof event === "object" && event !== null && "data" in event;
 }
 
-export function buildWsUrl(baseUrl: string, clientId?: string): string {
+export function buildWsUrl(baseUrl: string, clientId?: string, token?: string): string {
     const url = new URL(baseUrl);
 
     if (clientId) {
         url.searchParams.set("clientId", clientId);
+    }
+    if (token) {
+        url.searchParams.set("token", token);
     }
 
     return url.toString();

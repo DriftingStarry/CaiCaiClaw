@@ -11,6 +11,7 @@ export type ServerConfig = {
     compactEveryTurns: number;
     maxStepLimit: number;
     loopWarningLength: number;
+    wsToken: string;
 };
 
 const DEFAULT_HOST = "127.0.0.1";
@@ -62,6 +63,7 @@ export function loadServerConfig(env: NodeJS.ProcessEnv = process.env): ServerCo
             (value) => value >= 1,
             "CAICAI_LOOP_WARNING_LENGTH must be an integer >= 1",
         ),
+        wsToken: env.CAICAI_WS_TOKEN ?? "",
     };
 }
 
