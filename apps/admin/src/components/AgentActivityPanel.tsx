@@ -1,27 +1,10 @@
 "use client";
 
-import { AgentTurnActivity, ToolActivity } from "@caicaiclaw/client-core";
+import type { AgentTurnActivity, ToolActivity } from "@caicaiclaw/client-core";
 import { Card, Collapse, Empty, Space, Tag, Timeline, Typography } from "antd";
 
-type AgentActivityPanelProps = {
-    activities: AgentTurnActivity[];
-};
-
-const statusColor = {
-    running: "processing",
-    done: "success",
-    error: "error",
-} as const;
-
-const toolStatusColor = {
-    running: "processing",
-    success: "success",
-    error: "error",
-} as const;
-
-export function AgentActivityPanel({ activities }: AgentActivityPanelProps) {
+export function AgentActivityPanel({ activities }: { activities: AgentTurnActivity[] }) {
     const ordered = [...activities].reverse();
-
     return (
         <Card className="h-full bg-white/80" title="Agent Activity">
             {!ordered.length ? (
@@ -43,7 +26,13 @@ function TurnActivity({ activity }: { activity: AgentTurnActivity }) {
         <Space className="w-full" direction="vertical" size={8}>
             <Space wrap>
                 <Typography.Text strong>{activity.turnId}</Typography.Text>
-                <Tag color={statusColor[activity.status]}>{activity.status}</Tag>
+                <Tag
+                    color={
+                        activity.status === "error" ? "error" : activity.status === "done" ? "success" : "processing"
+                    }
+                >
+                    {activity.status}
+                </Tag>
             </Space>
             <Collapse
                 ghost
@@ -84,7 +73,9 @@ function ToolCard({ tool }: { tool: ToolActivity }) {
         <div className="rounded-2xl border border-stone-200 bg-stone-50 p-3">
             <Space className="mb-2" wrap>
                 <Typography.Text code>{tool.name}</Typography.Text>
-                <Tag color={toolStatusColor[tool.status]}>{tool.status}</Tag>
+                <Tag color={tool.status === "error" ? "error" : tool.status === "success" ? "success" : "processing"}>
+                    {tool.status}
+                </Tag>
             </Space>
             <Typography.Text type="secondary">Args</Typography.Text>
             <pre className="mt-1 max-h-32 overflow-auto rounded-xl bg-white p-2 text-xs">{formatJson(tool.args)}</pre>

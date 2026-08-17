@@ -61,7 +61,7 @@
   - `src/modelProvider.ts` —— 模型接入层。系统 prompt 从上层指定的 Markdown 路径加载。 `src/tools/` —— `exec` / `fileRead` / `fileEdit` / `fileWrite` + 注册入口（`toolsByName`）。
 - **`packages/client-core`** —— 与框架无关的客户端状态归约。
 - **`apps/server`** —— `src/server.ts` 提供单 agent 的 `WebSocketServer`。
-- **`apps/web`** —— Next.js Web 前端。
+- **`apps/admin`** —— Next.js Web 管理端与 agent supervisor。
 - **关键性质**：`this.agent`（编译出的图）、`rawHistoryState`（可回放的完整历史）与 `executionState`（单轮上下文）已分离——这正是核心不变式的雏形，M3 的 `reload` 因此几乎是加法。
 
 ## M1 · 最小可运行版本（MVP）

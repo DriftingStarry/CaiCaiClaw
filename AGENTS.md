@@ -54,7 +54,7 @@ packages/protocol     <- utils
 packages/agent-core   <- utils
 packages/client-core  <- protocol, utils
 apps/server           <- agent-core, protocol, utils
-apps/web              <- client-core, protocol, utils
+apps/admin            <- client-core, protocol, utils
 apps/tui              <- client-core, protocol, utils
 ```
 

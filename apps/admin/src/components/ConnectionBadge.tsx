@@ -1,14 +1,9 @@
 "use client";
 
-import { ConnectionStatus } from "@caicaiclaw/client-core";
 import { Badge, Button, Space, Typography } from "antd";
+import type { ConnectionStatus } from "@caicaiclaw/client-core";
 
-type ConnectionBadgeProps = {
-    status: ConnectionStatus;
-    clientId?: string;
-    onReconnect: () => void;
-};
-
+type Props = { status: ConnectionStatus; clientId?: string; onReconnect: () => void };
 const badgeStatus: Record<ConnectionStatus, "default" | "processing" | "success" | "warning" | "error"> = {
     idle: "default",
     connecting: "processing",
@@ -17,7 +12,7 @@ const badgeStatus: Record<ConnectionStatus, "default" | "processing" | "success"
     closed: "error",
 };
 
-export function ConnectionBadge({ status, clientId, onReconnect }: ConnectionBadgeProps) {
+export function ConnectionBadge({ status, clientId, onReconnect }: Props) {
     return (
         <Space align="center" wrap>
             <Badge status={badgeStatus[status]} text={`WS ${status}`} />

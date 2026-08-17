@@ -1,21 +1,15 @@
 "use client";
 
-import { ChatMessage } from "@caicaiclaw/client-core";
+import type { ChatMessage } from "@caicaiclaw/client-core";
 import { Empty, Tag, Typography } from "antd";
 
-type ChatMessageListProps = {
-    messages: ChatMessage[];
-};
-
-export function ChatMessageList({ messages }: ChatMessageListProps) {
-    if (!messages.length) {
+export function ChatMessageList({ messages }: { messages: ChatMessage[] }) {
+    if (!messages.length)
         return (
             <div className="flex min-h-80 items-center justify-center rounded-3xl border border-dashed border-stone-300 bg-white/45">
                 <Empty description="还没有对话，发送一条消息开始观察 agent。" />
             </div>
         );
-    }
-
     return (
         <div className="flex min-h-80 flex-col gap-3 overflow-y-auto pr-1">
             {messages.map((message) => (

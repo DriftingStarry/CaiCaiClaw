@@ -1,30 +1,34 @@
 {
-    "name": "@caicaiclaw/web",
+    "name": "@caicaiclaw/admin",
     "version": "0.0.0",
     "private": true,
     "type": "module",
     "scripts": {
-        "dev": "next dev",
-        "build": "next build",
-        "start": "next start",
+        "dev": "tsx --env-file-if-exists=.env src/server.ts",
+        "build": "next build --webpack",
+        "start": "NODE_ENV=production tsx --env-file-if-exists=.env src/server.ts",
         "typecheck": "tsc -p tsconfig.json"
     },
     "dependencies": {
         "@ant-design/nextjs-registry": "^1.1.0",
         "@caicaiclaw/client-core": "workspace:*",
-        "@caicaiclaw/utils": "workspace:*",
         "@caicaiclaw/protocol": "workspace:*",
+        "@caicaiclaw/utils": "workspace:*",
         "@tailwindcss/postcss": "^4.1.0",
         "antd": "^6.0.0",
         "next": "^16.0.0",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
         "tailwindcss": "^4.1.0",
+        "ws": "^8.21.0",
         "zustand": "^5.0.0"
     },
     "devDependencies": {
+        "@types/node": "^25.9.2",
         "@types/react": "^19.0.0",
         "@types/react-dom": "^19.0.0",
+        "@types/ws": "^8.18.1",
+        "tsx": "^4.22.4",
         "typescript": "^6.0.3"
     }
 }
