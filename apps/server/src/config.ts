@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 export type ServerConfig = {
     host: string;
@@ -7,6 +7,8 @@ export type ServerConfig = {
     openrouterModel: string;
     systemPromptPath: string;
     rawHistoryPath: string;
+    memoryDir: string;
+    compactEveryTurns: number;
     maxStepLimit: number;
     loopWarningLength: number;
 };
@@ -25,6 +27,9 @@ export function loadServerConfig(env: NodeJS.ProcessEnv = process.env): ServerCo
         throw new Error("OPENROUTER_MODEL must be set");
     }
 
+    const systemPromptPath = env.CAICAI_SYSTEM_PROMPT_PATH ?? DEFAULT_SYSTEM_PROMPT_PATH;
+    const rawHistoryPath = env.CAICAI_RAW_HISTORY_PATH ?? DEFAULT_RAW_HISTORY_PATH;
+
     return {
         host: env.CAICAI_WS_HOST ?? DEFAULT_HOST,
         port: parseInteger(
@@ -35,8 +40,16 @@ export function loadServerConfig(env: NodeJS.ProcessEnv = process.env): ServerCo
         ),
         openrouterModel,
         // 必须用 ?? 而不是 ||：空串是有意义的取值，表示不加载 system prompt。
-        systemPromptPath: env.CAICAI_SYSTEM_PROMPT_PATH ?? DEFAULT_SYSTEM_PROMPT_PATH,
-        rawHistoryPath: env.CAICAI_RAW_HISTORY_PATH ?? DEFAULT_RAW_HISTORY_PATH,
+        systemPromptPath,
+        rawHistoryPath,
+        // 默认值复刻 AgentRuntime 的 dirname(systemPromptPath || rawHistoryPath) 推导。
+        memoryDir: env.CAICAI_MEMORY_DIR ?? dirname(systemPromptPath || rawHistoryPath),
+        compactEveryTurns: parseInteger(
+            env.CAICAI_COMPACT_EVERY_TURNS,
+            0,
+            (value) => value >= 0,
+            "CAICAI_COMPACT_EVERY_TURNS must be an integer >= 0",
+        ),
         maxStepLimit: parseInteger(
             env.CAICAI_MAX_STEP_LIMIT,
             DEFAULT_MAX_STEP_LIMIT,

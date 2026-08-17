@@ -12,8 +12,10 @@ import { runtimeOutputToServerMessages } from "./runtimeOutputMapper";
 import { loadServerConfig, type ServerConfig } from "./config";
 
 import { randomUUID } from "node:crypto";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-type RunningServer = {
+export type RunningServer = {
     close: () => Promise<void>;
 };
 
@@ -22,14 +24,17 @@ type ClientConnection = {
     socket: WebSocket;
 };
 
-function createServer(serverConfig: ServerConfig): RunningServer {
+export function createServer(serverConfig: ServerConfig, model?: AgentConfig["model"]): RunningServer {
     const clients = new Map<string, ClientConnection>();
     let nextConnectionId = 1;
+    let closing = false;
+    let committedTurnCount = 0;
+    let scheduledCompactInFlight = false;
 
     const config: AgentConfig = {
         maxStepLimit: serverConfig.maxStepLimit,
         loopWarningLength: serverConfig.loopWarningLength,
-        model: createOpenrouterModel(serverConfig.openrouterModel),
+        model: model ?? createOpenrouterModel(serverConfig.openrouterModel),
         toolsByName,
     };
 
@@ -51,13 +56,40 @@ function createServer(serverConfig: ServerConfig): RunningServer {
     const runtime = new AgentRuntime(config, {
         rawHistoryPath: serverConfig.rawHistoryPath,
         systemPromptPath: serverConfig.systemPromptPath,
+        memoryDir: serverConfig.memoryDir,
+        // server 显式传入 memoryDir 后 runtime 默认会收紧缺失文件策略；保持服务端原有宽松行为。
+        allowMissingMemoryFiles: true,
         compactionModelName: serverConfig.openrouterModel,
         onOutput: async (event) => {
             for (const message of runtimeOutputToServerMessages(event)) {
                 broadcast(message);
             }
+            if (event.type === "done") {
+                scheduleCompactIfDue();
+            }
         },
     });
+
+    function scheduleCompactIfDue(): void {
+        if (closing || serverConfig.compactEveryTurns === 0) return;
+        committedTurnCount += 1;
+        if (scheduledCompactInFlight || committedTurnCount % serverConfig.compactEveryTurns !== 0) return;
+
+        scheduledCompactInFlight = true;
+        void runtime
+            .compact({ trigger: "scheduled" })
+            .then((summary) => {
+                broadcast({ type: "compact_result", summary, trigger: "scheduled" });
+            })
+            .catch((error: unknown) => {
+                const message = safeErrorMessage(error);
+                console.error(`[runtime] scheduled compact failed: ${message}`);
+                broadcast({ type: "error", message });
+            })
+            .finally(() => {
+                scheduledCompactInFlight = false;
+            });
+    }
 
     const runtimeTask = runtime.run();
     runtimeTask.catch((error: unknown) => {
@@ -94,6 +126,27 @@ function createServer(serverConfig: ServerConfig): RunningServer {
                     return;
                 }
 
+                if (message.type === "compact") {
+                    const summary = await runtime.compact({ trigger: "manual" });
+                    send(socket, {
+                        type: "compact_result",
+                        summary,
+                        trigger: "manual",
+                        requestId: message.requestId,
+                    });
+                    return;
+                }
+
+                if (message.type === "daydreaming") {
+                    const summary = await runtime.daydreaming();
+                    send(socket, {
+                        type: "daydreaming_result",
+                        summary,
+                        requestId: message.requestId,
+                    });
+                    return;
+                }
+
                 await runtime.enqueue({
                     text: message.text,
                     source: makeSource(clientId, message.source),
@@ -104,7 +157,7 @@ function createServer(serverConfig: ServerConfig): RunningServer {
             } catch (error) {
                 send(socket, {
                     type: "error",
-                    message: errorMessage(error),
+                    message: safeErrorMessage(error),
                     requestId,
                 });
             }
@@ -131,6 +184,7 @@ function createServer(serverConfig: ServerConfig): RunningServer {
 
     return {
         close: async () => {
+            closing = true;
             const serverClosed = new Promise<void>((resolve, reject) => {
                 wss.close((error) => (error ? reject(error) : resolve()));
             });
@@ -192,10 +246,12 @@ async function main(): Promise<void> {
     });
 }
 
-main().catch((error: unknown) => {
-    console.error(`[fatal] ${errorMessage(error)}`);
-    process.exitCode = 1;
-});
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+    main().catch((error: unknown) => {
+        console.error(`[fatal] ${errorMessage(error)}`);
+        process.exitCode = 1;
+    });
+}
 
 function createClientId(): string {
     return `client-${randomUUID()}`;
@@ -241,4 +297,15 @@ function send(socket: WebSocket, message: ServerMessage): void {
     if (socket.readyState === WebSocket.OPEN) {
         socket.send(serializeServerMessage(message));
     }
+}
+
+function safeErrorMessage(error: unknown): string {
+    const message = errorMessage(error)
+        .replace(/Bearer\s+\S+/gi, "Bearer [redacted]")
+        .replace(/(api[_-]?key|authorization|password|secret|token)\s*[:=]\s*\S+/gi, "$1=[redacted]")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    if (!message) return "unknown server error";
+    return message.length > 2_000 ? `${message.slice(0, 2_000)}...` : message;
 }
