@@ -31,6 +31,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
                                 <Link className="rounded-lg px-3 py-1 hover:bg-emerald-100" href="/logs">
                                     Logs
                                 </Link>
+                                <Link className="rounded-lg px-3 py-1 hover:bg-emerald-100" href="/settings">
+                                    Settings
+                                </Link>
                             </div>
                         </div>
                     </nav>

@@ -10,6 +10,7 @@ import {
     type ServerMessage,
 } from "@caicaiclaw/protocol";
 import { getAdminConfig, type AdminConfig } from "./adminConfig";
+import { getAgentWsToken } from "./agentAuth";
 import { safeErrorMessage } from "./error";
 
 export type AgentStatus = "stopped" | "starting" | "running" | "stopping" | "crashed";
@@ -92,12 +93,14 @@ class AgentSupervisor {
         const serverEntry = resolve(repositoryRoot, "apps/server/src/server.ts");
 
         try {
+            const agentToken = getAgentWsToken();
             const child = spawn(process.execPath, ["--import", "tsx/esm", serverEntry], {
                 cwd: repositoryRoot,
                 env: {
                     ...process.env,
                     CAICAI_WS_HOST: this.config.agentHost,
                     CAICAI_WS_PORT: String(this.config.agentPort),
+                    CAICAI_WS_TOKEN: agentToken,
                 },
                 stdio: ["ignore", "ignore", "pipe"],
             });
@@ -257,7 +260,10 @@ class AgentSupervisor {
     private connectControl(child: ChildProcess): void {
         if (this.control || this.controlConnecting || this.child !== child) return;
         this.controlConnecting = true;
-        const socket = new WebSocket(`ws://${this.config.agentHost}:${this.config.agentPort}`);
+        const controlUrl = new URL(`ws://${this.config.agentHost}:${this.config.agentPort}`);
+        const agentToken = getAgentWsToken();
+        if (agentToken) controlUrl.searchParams.set("token", agentToken);
+        const socket = new WebSocket(controlUrl.toString());
         let closed = false;
         socket.on("message", (data: WebSocket.RawData) => this.handleControlMessage(socket, data.toString()));
         socket.on("open", () => {

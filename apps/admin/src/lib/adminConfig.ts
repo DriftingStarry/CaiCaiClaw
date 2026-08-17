@@ -7,6 +7,8 @@ export type AdminConfig = {
     port: number;
     agentHost: "127.0.0.1";
     agentPort: number;
+    agentToken: string;
+    agentTokenPath: string;
     rawHistoryPath: string;
     memoryDir: string;
     stopGraceMs: number;
@@ -43,6 +45,8 @@ export function loadAdminConfig(env: NodeJS.ProcessEnv = process.env): AdminConf
             (value) => value >= 1 && value <= 65_535,
             "CAICAI_WS_PORT must be an integer between 1 and 65535",
         ),
+        agentToken: env.CAICAI_WS_TOKEN ?? "",
+        agentTokenPath: resolve(env.CAICAI_WS_TOKEN_PATH ?? join(dirname(rawHistoryPath), "agent-ws-token")),
         rawHistoryPath,
         memoryDir: resolve(env.CAICAI_MEMORY_DIR ?? dirname(systemPromptPath || rawHistoryPath)),
         stopGraceMs: parseInteger(

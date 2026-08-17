@@ -158,6 +158,8 @@ pnpm tui
 
 ## Notes for Next Session
 
+- **feat-007 已完成（2026-08-17）**：agent WS 在 HTTP Upgrade 阶段以 `verifyClient` + `timingSafeEqual` 校验 `?token=`，错误与缺失 token 均返回 401，未进入 `connection` 或 runtime；空 `CAICAI_WS_TOKEN` 仍保持仅限 127.0.0.1 的兼容行为。TUI Tab 设置页增加 `ws_token`，`client-core` 统一编码 query 参数。admin 新增 `/settings`，其读取接口仅返回是否已配置；浏览器直连需要的 token 仅从独立 cookie 鉴权 + `no-store` 连接接口即时取得，未编入 `NEXT_PUBLIC_*`、未落 Zustand/localStorage。admin 保存密钥使用默认位于 history 同目录的 `agent-ws-token` 原子替换（0600）；supervisor spawn 与 control WS 都动态读取该值，因此更新后在 `/agent` 重启即可生效。验收：真实 server 入口输出 `{\"missing\":\"error\",\"wrong\":\"error\",\"valid\":\"open\"}`；admin 覆盖文件的环境回退、保存覆盖、0600 权限、清空回退均 passed；admin production build 通过。首次并行执行 build 与 `./init.sh` 曾发生 Next 清理 `.next/types` 的既有竞态，随后串行 `./init.sh` 已通过 typecheck/lint/format，`git diff --check` 通过。运行配置已同步 `.env.example`。后续如同步 `docs/web-admin-prd.md`，建议补充 WS token 握手、`/settings` 的持久化/重启生效语义以及浏览器直连 token 的受限传递边界。
+
 - feat-001 的 runtime harness 是一次性脚本、跑完即删，**证据不可重跑**。若要回归验证滚动与输入行为需重新搭建，要点：ink 7 的 stdin 走 `readable` 事件 + `stdin.read()`，用 `data` 事件会导致按键完全不送达而产生假阴性。
 - feat-001 经两轮独立 review，14 条发现中 13 条已修且经真实 Ink 渲染复核可复现；鼠标序列消费一条只修了单 chunk 完整 SGR 的部分。用户已在此状态上验收，残留项转为 feat-005。
 - `packages/client-core/src/transport.ts` 保留 `onError?: (error: unknown) => void`。若后续新增消费方沿用更窄的 `Event | Error` 回调，需先调整回调参数类型或在注入处适配，避免 strictFunctionTypes 的 TS2322。
