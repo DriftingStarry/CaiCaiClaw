@@ -9,9 +9,3 @@ export function useMouseTracking(): void {
         };
     }, []);
 }
-
-export function parseMouseWheel(input: string): "up" | "down" | undefined {
-    const match = /^\[<(\d+);(\d+);(\d+)[Mm]$/.exec(input);
-    if (!match) return undefined;
-    return match[1] === "64" ? "up" : match[1] === "65" ? "down" : undefined;
-}

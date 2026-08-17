@@ -1,7 +1,8 @@
 import { Box, Key, Text, useApp, useInput, usePaste, useWindowSize } from "ink";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { getTuiWsUrl } from "../config";
-import { parseMouseWheel, useMouseTracking } from "../hooks/useMouseTracking";
+import { createMouseSequenceConsumer } from "../hooks/mouseSequence";
+import { useMouseTracking } from "../hooks/useMouseTracking";
 import { TextBuffer, useTextBuffer } from "../hooks/useTextBuffer";
 import { useScrollViewport } from "../hooks/useScrollViewport";
 import { useAgentClient } from "../state/useAgentClient";
@@ -20,6 +21,7 @@ export function App(): React.ReactElement {
     const input = useTextBuffer();
     const settings = useTextBuffer(url);
     const controls = useScrollViewport();
+    const mouseSequence = useRef(createMouseSequenceConsumer()).current;
     useMouseTracking();
     useEffect(() => {
         if (!confirmExit) return;
@@ -33,10 +35,20 @@ export function App(): React.ReactElement {
             input.clear();
         }
     };
-    const handleInput = (value: string, key: Key) => {
-        if (/^\[<\d+;\d+;\d+[Mm]$/.test(value)) {
-            const wheel = parseMouseWheel(value);
-            if (wheel) controls.scroll(wheel === "up" ? -3 : 3);
+    const handleInput = (rawValue: string, key: Key) => {
+        const mouseResult = mouseSequence.consume(rawValue);
+        // 组装中：整块吞掉，等后续 chunk 补全，不能落入任何输入缓冲。
+        if (mouseResult.status === "pending") return;
+
+        let value = rawValue;
+        if (mouseResult.status === "consumed") {
+            if (mouseResult.wheel) controls.scroll(mouseResult.wheel === "up" ? -3 : 3);
+            if (!mouseResult.remainder) return;
+            value = mouseResult.remainder;
+        } else if (mouseResult.value !== rawValue) {
+            // 组装被证伪后回吐的缓冲跨越了多个 chunk，当前 key 只描述最后一个 chunk。
+            // 直接按文本插入，避免用错位的 key 走进 editBuffer 的特殊键分支而丢掉这段文本。
+            (settingsOpen ? settings : input).insert(mouseResult.value);
             return;
         }
         if (settingsOpen) {
