@@ -113,7 +113,8 @@
                 "展示的 stderr 与错误信息经过与 apps/server safeErrorMessage 同级的脱敏（Bearer、api key、authorization、password、secret、token）",
                 "./init.sh 通过，且 apps/admin 生产构建通过",
                 "记录手动验收证据：进程控制闭环（启动→running→停止→stopped→重启→running 全程不碰终端）、memory 冲突拒绝保存零静默覆盖、JSONL 只读（字节数只增且增量均来自 runtime）、10MB 量级日志下 /logs 首屏与翻页可用"
-            ]
+            ],
+            "evidence": "实现已完成但暂保持 in-progress，等待人工运行时验收。静态证据：2026-08-17 实际 ./init.sh 通过（pnpm typecheck、pnpm lint、pnpm format:check），实际 pnpm --filter @caicaiclaw/admin build 通过（Next 16 webpack production build；路由清单包含 agent/chat/logs/memory 及其 API）。实际一次性临时目录脚本通过 memoryConflict=true、原子保存后无 .tmp、符号链接逃逸拒绝、logs 尾部 compaction 倒序、损坏行号 line 2、tool result offset/limit 返回 fghi。apps/web 已迁移并删除，pnpm-lock.yaml、根 tsconfig.json、AGENTS.md、根 package.json 已同步。已尝试 supervisor 真实启动，但当前执行沙箱禁止 127.0.0.1:38789 listen（EPERM），无法观察 hello→running→stop→restart 闭环；同一沙箱的 child_process pipe 不转发最小 Node stderr，故崩溃 stderr 展示、JSONL 字节只读和 10MB 日志性能留待人工验收。按类型提交也已尝试，但 `.git/index.lock` 所在挂载只读，未产生 commit。"
         }
     ]
 }
