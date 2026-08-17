@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const WS_PROTOCOL_VERSION = 2;
+export const WS_PROTOCOL_VERSION = 3;
 export const MAX_CLIENT_ID_LENGTH = 64;
 export const CLIENT_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
@@ -19,7 +19,26 @@ export const clientPingMessageSchema = z.object({
     requestId: requestIdSchema,
 });
 
-export const clientMessageSchema = z.discriminatedUnion("type", [clientInputMessageSchema, clientPingMessageSchema]);
+export const clientCompactMessageSchema = z
+    .object({
+        type: z.literal("compact"),
+        requestId: requestIdSchema,
+    })
+    .strict();
+
+export const clientDaydreamingMessageSchema = z
+    .object({
+        type: z.literal("daydreaming"),
+        requestId: requestIdSchema,
+    })
+    .strict();
+
+export const clientMessageSchema = z.discriminatedUnion("type", [
+    clientInputMessageSchema,
+    clientPingMessageSchema,
+    clientCompactMessageSchema,
+    clientDaydreamingMessageSchema,
+]);
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
 
@@ -102,6 +121,23 @@ export const serverPongMessageSchema = z.object({
     requestId: requestIdSchema,
 });
 
+export const serverCompactResultMessageSchema = z
+    .object({
+        type: z.literal("compact_result"),
+        summary: z.string().min(1),
+        trigger: z.enum(["manual", "scheduled"]),
+        requestId: requestIdSchema,
+    })
+    .strict();
+
+export const serverDaydreamingResultMessageSchema = z
+    .object({
+        type: z.literal("daydreaming_result"),
+        summary: z.string().min(1),
+        requestId: requestIdSchema,
+    })
+    .strict();
+
 export const serverMessageSchema = z.discriminatedUnion("type", [
     serverHelloMessageSchema,
     serverAckMessageSchema,
@@ -114,6 +150,8 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
     serverAgentTurnDoneMessageSchema,
     serverErrorMessageSchema,
     serverPongMessageSchema,
+    serverCompactResultMessageSchema,
+    serverDaydreamingResultMessageSchema,
 ]);
 
 export type ServerMessage = z.infer<typeof serverMessageSchema>;
