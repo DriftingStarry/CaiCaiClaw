@@ -3,7 +3,7 @@
 ## Current State
 
 **Last Updated:** 2026-08-17
-**Active Feature:** feat-006 M2 Web 后台管理（apps/admin），实现完成、运行时验收待人工执行，仍为 `in-progress`。feat-001 ~ feat-005 全部 `done`。
+**Active Feature:** 无。feat-001 ~ feat-006 全部 `done` —— feat-006 的人工验收已由用户于 2026-08-17 执行并通过。下一步由用户选定新 feature。
 
 feat-006 的完整需求已固化在 `docs/web-admin-prd.md`（PRD，quality score 92/100），`feature_list.json` 的 15 条 doneCriteria 与该文档一一对应。实现交由 codex（model `gpt-5.6-luna`）执行。
 
@@ -13,7 +13,7 @@ feat-004 已补齐 server compact / daydreaming 入口与 scheduled compact 调�
 
 feat-005 于 2026-08-17 由用户决策置为 `done`：Shift+Enter 在其 Windows Terminal + tmux 3.4 环境实测失败，已定位为终端不支持 kitty 键盘协议（Enter 与 Shift+Enter 发出相同字节，属环境能力缺失而非代码缺陷，三组实测详见 Blockers / Risks）。用户选择换用支持 kitty 协议的终端而不改代码。**留痕：换行功能在支持 kitty 协议的终端上的实际按键确认尚未执行过**，代码路径的正确性目前只由喂入 kitty 编码的探针验证，见 Evidence 表。
 
-feat-006 的 apps/admin 已实现，apps/web 已在最后的独立删除范围中移除；静态检查与生产构建通过。start / hello→running / compact / stop / **restart** / 崩溃语义均已由 Claude 在本机隔离端口实测通过（见 Evidence 表）；**唯一仍待人工验收的是 10MB 日志下 `/logs` 性能与 JSONL 字节只读**（外加「子进程写出 stderr 后异常退出时 UI 的实际渲染」这一未覆盖点，数据链路本身已验）。
+feat-006 的 apps/admin 已实现并于 2026-08-17 **完成人工验收、置为 `done`**，apps/web 已在最后的独立删除范围中移除。start / hello→running / compact / stop / restart / 崩溃语义由 Claude 在本机隔离端口实测通过（见 Evidence 表）；10MB 日志下 `/logs` 性能、JSONL 字节只读与崩溃 stderr 的 UI 呈现由用户人工验收通过。收尾时补全了 `.env.example` 的五个缺失变量并加注约束。
 实现由 codex（`gpt-5.6-luna`）执行，其沙箱内 `git commit` 与 127.0.0.1 `listen` 均被拒绝，故它把改动留在工作树并如实标注了未执行的验收项。**这两条都是该沙箱的限制，不是仓库或本机的属性** —— 本机 `.git` 可写，提交由 Claude 在核对硬约束后完成。
 
 2026-08-17 本次修复 feat-006 三件事：
@@ -38,24 +38,23 @@ codex 曾额外加上 `experimental.esmExternals: false`（理由是让产物呈
 - [x] **feat-004 Server compact 与 memory 调度入口** — server 配置 `memoryDir` 与 `CAICAI_COMPACT_EVERY_TURNS`，WS compact / daydreaming 单连接入口，按 `done` 事件计数的 scheduled compact，AgentRuntime 共享维护队列与 Role.md 原子反思写入。已完成，证据见下表与 `feature_list.json`。
 - [x] **feat-005 TUI 鼠标序列消费与真实终端验收** — 新增 `apps/tui/src/hooks/mouseSequence.ts` 独立状态机消费器，`App.tsx` 只做分发，删除 `parseMouseWheel`。X10 降级与 SGR 跨 chunk 分片两条泄漏路径已封死；组装被证伪或超长时回吐缓冲，不吞后续按键。commit f89ac99。真实终端验收三项通过（备用屏、真实鼠标滚轮、双端共享 runtime）；Shift+Enter 一项在用户环境失败，根因为终端不支持 kitty 协议，用户决策换终端、代码不动，据此置为 `done`。
 - [x] **Harness 迁移** — 从多 worktree lane 变式回到 harness-creator 原本的单 lane 模式：删除 `harness/lanes.sh`、`harness/wt.sh`、`harness/lib/workspace.cjs` 与 `.harness/<slug>/` 分片，状态合并进根级 `feature_list.json` 与本文件。
+- [x] **feat-006 M2 Web 后台管理（apps/admin）** — 新增 `apps/admin`（Next.js SSR + supervisor，常驻）spawn `apps/server` 作为子进程，提供 chat / memory / logs / agent 四个路由与进程生命周期控制；`apps/web` 已迁入并删除。含 ws 外置（compact mask 修复）、错误映射（400/409/500）、auth 死路径删除、restart 单一路径、跨路由 supervisor store。2026-08-17 人工验收通过后置为 `done`，收尾补全 `.env.example`。
 
-### What's In Progress
-
-- [ ] **feat-006 M2 Web 后台管理（apps/admin）** — 核心实现、配置同步、apps/web 删除、ws/错误映射修复、auth 死路径删除、restart 单一路径与跨路由 supervisor store 均已完成；`./init.sh` 与 admin 生产构建通过。start / running / compact / stop / restart / 崩溃语义已本机实测（见 Evidence 表）。**剩余人工验收只有一项：10MB 日志下 `/logs` 首屏与翻页可用 + JSONL 字节只读（字节数只增且增量均来自 runtime）。** 另有一个未覆盖点：子进程写出 stderr 后异常退出时 UI 的实际渲染（快照数据链路已验，缺的是浏览器里看一眼）。
-
-  实现期需要注意的既有约束：
-  - 依赖方向只能新增 `apps/admin <- client-core, protocol, utils`；**不得**新增 `apps/server <- client-core`。同步 `AGENTS.md` 依赖表与根 `tsconfig.json` references。
-  - `running` 判定用 control 连接收到 `hello`，不是「进程还在」——否则进程起来但 WS 未就绪也会被误报为 running。
-  - 重启必须等前一子进程真正 `exit` 后再 spawn，否则会撞端口 8787 并共写 `history.jsonl`（对应本文件 Blockers / Risks 里「运行环境未隔离」那条）。
-  - `CAICAI_ADMIN_TOKEN` 缺失时 admin 拒绝启动，不留无认证降级路径。这是个高权限面板：可写 agent 人格、可启停进程，而 agent 自身持有 `exec` 工具。
-  - memory 写入复刻 runtime `daydreaming()` 的同目录临时文件 + `rename` 原子替换；乐观锁冲突即拒绝保存，不做自动合并。
+  **维护 admin 时必须守住的约束**（改这块代码前先读）：
+  - 依赖方向只有 `apps/admin <- client-core, protocol, utils`；**不得**新增 `apps/server <- client-core`。调整时同步 `AGENTS.md` 依赖表与根 `tsconfig.json` references。
+  - `running` 判定用 control 连接收到 `hello`，不是「进程还在」—— 否则进程起来但 WS 未就绪也会被误报为 running。
+  - 重启必须等前一子进程真正 `exit` 后再 spawn，否则会撞端口 8787 并共写 `history.jsonl`（对应 Blockers / Risks 里「运行环境未隔离」那条）。当前由 `stopWaiters` 保证，且**只允许存在一条重启路径** —— 曾因 `restart()` 与 `handleExit()` 各调一次 `start()` 而误报状态冲突。
+  - `CAICAI_ADMIN_TOKEN` 缺失时 admin 拒绝启动，不留无认证降级路径。这是个高权限面板：可写 agent 人格、可启停进程，而 agent 自身持有 `exec` 工具。凭据只从 httpOnly cookie 读取，middleware 与路由层必须看同一来源。
+  - memory 写入复刻 runtime `daydreaming()` 的同目录临时文件 + `rename` 原子替换；乐观锁冲突即拒绝保存，不做自动合并。路径需先解析符号链接再校验是否落在 `memoryDir` 内，且只允许 `.md`。
   - `history.jsonl` 对 admin 严格只读，admin 侧不得存在写/截断/补写路径。
+  - `ws` 必须留在 `serverExternalPackages` 里。一旦被 webpack 内联，`buffer-util` 的事后 `mask` 改写会丢失并在 compact 时抛 `b.mask is not a function`；改 `next.config.ts` 后要检查产物而非只看 build 成功。
 
 ### What's Next
 
-1. 完成 feat-006 最后一项运行时验收：造一个 10MB 量级的 `history.jsonl`，确认 `/logs` 首屏与翻页可用，并核对 admin 全程只读该文件（字节数只增且增量均来自 runtime）。通过后把本文件与 `feature_list.json` 的 feat-006 置为 `done`；顺手在浏览器里看一眼子进程写 stderr 后崩溃时 `/agent` 的渲染。
+1. 由用户选定下一个 feature。`feature_list.json` 现无未完成条目。
 2. 用户换到支持 kitty 协议的终端后，顺手确认一次 Shift+Enter 真能插入换行 —— 这是 feat-005 唯一未经真实按键确认的行为，代码路径已由探针验证但未在真机按过。若那时发现不工作，先读 Blockers / Risks 里的实测结论，特别是「不要打开 tmux `extended-keys`」这条反向警告。
 3. 改鼠标相关代码前先读 Blockers / Risks 里消费器的现有行为约定。
+4. 若要让 admin 面板可被同网段访问，先解决 Blockers / Risks 里「agent WS 无认证」那条 —— 当前安全边界只有「仅监听 127.0.0.1」。
 
 ## 真实终端验收结果（2026-08-17，用户执行）
 
@@ -97,7 +96,7 @@ pnpm tui
 - [x] **compact 无服务端入口**：已由 feat-004 解决。server 提供单连接 WS compact / daydreaming 请求，`memoryDir` 和 scheduled compact 阈值由配置注入；scheduled 调度只消费 runtime `done` 输出事件。
 - [ ] **运行环境未隔离**：多个 server 实例同时启动会撞端口 8787 并共写 `~/.caicaiclaw/history.jsonl`。需要并行运行时自行配置 `.env`。
 - [x] **Codex 沙箱无法执行 admin 进程闭环（限制属沙箱，不属本机）**：codex 在其沙箱内的启动命令于 tsx IPC 管道 `/tmp/tsx-1000/16.pipe` 返回 `listen EPERM`，Node/WebSocket 127.0.0.1 listen 同样受限，child_process 的 piped stdout/stderr 也不转发。**本机无此限制** —— Claude 已在本机用隔离端口（admin=39001、ws=39002）与临时数据目录实测通过 start / hello→running / compact / stop，详见 Evidence 表。下次遇到「跑不起来」先分清是沙箱还是本机。
-- [ ] **feat-006 剩余一项运行时验收未执行**：10MB 日志下 `/logs` 响应与 JSONL 字节只读，需要生成大日志，建议在本机手工执行。restart 与崩溃语义已于 2026-08-17 实测通过（见 Evidence 表）；仅「子进程写出 stderr 后异常退出时 UI 的实际渲染」尚未在浏览器中看过，快照数据链路本身已验。
+- [x] **feat-006 运行时验收**：已全部完成。start / running / compact / stop / restart / 崩溃语义由 Claude 在本机隔离端口实测；10MB 日志下 `/logs` 性能、JSONL 字节只读与崩溃 stderr 的 UI 呈现由用户于 2026-08-17 人工验收通过。
 - [x] **admin 的 header 认证为死代码**：已修。`readToken()` 的 `Authorization: Bearer` / `x-caicai-admin-token` 分支因 middleware 只校验 cookie 且 matcher 覆盖 `/api/*` 而永不可达，已连同不可达的手工 cookie 解析一并删除；`isAuthorized` 收窄为只读 cookie，`/api/auth` 改用新的 `verifyToken`。**认证来源现已唯一化**，middleware 与路由层看同一个 cookie。脚本化调用 admin API 只能用 `Cookie: caicaiclaw_admin_token=<token>`。
 - [ ] **agent WS（默认 8787）无认证**：admin 面板本身有 token，但 agent 的 WebSocket 端口没有 —— 任何能访问本机该端口的页面或进程都可以向 agent 发送输入，而 agent 持有 `exec` 工具。当前依赖「只监听 127.0.0.1」作为唯一边界。本次未扩大范围处理，改动 agent 传输层前应先决定是否引入握手认证。
 
@@ -154,7 +153,8 @@ pnpm tui
 | feat-006 `esmExternals: false` 必要性 | 移除该开关后重新 build + 上述运行时实测 | **确认不必要，已移除** | 去掉后构建通过，ws 仍为外部引用（形式由 `require("ws")` 变为 `import("ws")`），内联仍为 0，运行时 compact 正常。起作用的只有 `serverExternalPackages: ["ws"]`。 |
 | feat-006 restart 闭环（本次修复） | 隔离脚本：admin=39011、ws=39012、数据目录 `/tmp/caicai-restart-verify`（跑完已删） | pass | 2026-08-17 由 Claude 在本机实测（codex 沙箱 `listen EPERM` 跑不了）。实际输出：start → HTTP 200 `starting` pid 44749，t=2s `running`；**restart → HTTP 200**，返回快照为**新进程** `{"status":"starting","pid":44785}`，t=2s `running`；stop → `stopped`、`exitCode:0`、`forcedKill:false`。旧 pid 44749 ≠ 新 pid 44785，证明确实换了进程且 HTTP 不再误报 `cannot start agent while status is starting`。 |
 | feat-006 崩溃语义（stderr 快照数据链路） | 同一次隔离实测：对子进程 `kill -9`（跑完已删） | pass | 实际输出 `{"status":"crashed","exitCode":null,"signal":"SIGKILL","forcedKill":false,"error":"agent control connection lost"}`。区分了外部 SIGKILL（`forcedKill:false`）与 supervisor 自身超时强杀。SIGKILL 不产生 stderr，故 `stderr:[]` 属预期；**未覆盖**：子进程写出 stderr 后异常退出时 UI 的实际渲染。 |
-| feat-006 大日志性能 / JSONL 字节只读 | 10MB 手动验收 | **待人工验收** | 需要可监听且可运行 agent 的本机环境；本次未编造响应时间、内存或 hash 结果。 |
+| feat-006 大日志性能 / JSONL 字节只读 / 崩溃 stderr UI | 用户人工验收 | pass | 2026-08-17 用户确认通过：10MB 量级日志下 `/logs` 首屏与翻页可用、admin 全程只读 `history.jsonl`、崩溃时 stderr 在 `/agent` 正常呈现。据此将 feat-006 置为 `done`。 |
+| feat-006 `.env.example` 完备性 | 双向 `grep` 比对示例文件与源码引用 | pass | 补全 `CAICAI_MEMORY_DIR`、`CAICAI_COMPACT_EVERY_TURNS`、`CAICAI_ADMIN_PORT`、`CAICAI_ADMIN_STOP_GRACE_MS`、`CAICAI_ADMIN_STARTUP_TIMEOUT_MS` 五项后，「代码用到但示例未记录」为空。反向仅剩 `OPENROUTER_API_KEY` —— 它由 `@langchain/openrouter` 自行读环境（`createOpenrouterModel` 只传 `model`），源码无字面引用属预期。 |
 
 ## Notes for Next Session
 
@@ -166,7 +166,8 @@ pnpm tui
 - ink 7 的 kitty 支持是 opt-in + auto 探测：`Ink.initKittyKeyboard` 在 `mode: "auto"` 下先写 `CSI ? u` 并只等 200ms，无回应即静默放弃。要判断某终端能否支持 Shift+Enter，直接在真实 pty 里发该查询看有无回应即可，比翻终端文档快。注意必须在真实 pty 中测：普通 tool shell 没有 TTY（`process.stdin.isTTY` 为 `undefined`），可用 `tmux new-session -d` 起一个 detached pane 拿到真实 pty。
 - 所有 feat-003 / feat-004 / feat-005 的验收脚本都是一次性的、跑完即删，**证据不可重跑**。要回归验证需重新搭建：protocol / config 相关的脚本必须放在 `apps/server` 下跑（workspace 依赖只在消费方目录内可解析），runtime 行为脚本放在 `packages/agent-core` 下跑且**不能 import protocol**（依赖方向不允许）；假模型要真的继承 `SimpleChatModel`，用 `{invoke, bindTools}` 裸对象会让 turn 直接 `turn.failed`。
 - 追加 checkpoint 的验收需要至少 4 个 committed turn：`DEFAULT_PRESERVED_TURNS = 3`，turn 数不足时 compact 不会产生 checkpoint，容易被误读成 bug。
-- feat-006 已完成代码交付，仅剩 10MB 日志 / JSONL 只读一项人工验收；通过后再将 feature 状态改为 `done`。
+- feat-006 已交付并通过人工验收，`feature_list.json` 中六个 feature 全部 `done`。开始新工作前先与用户确认下一个 feature，不要自行挑选。
+- `.env.example` 与源码引用可用双向 `grep` 比对保持同步（提取 `CAICAI_`/`OPENROUTER_`/`NEXT_PUBLIC_CAICAI_` 前缀后 `comm` 两侧）。唯一预期的单向差异是 `OPENROUTER_API_KEY`：它由 `@langchain/openrouter` 自行读环境，源码里没有字面引用，**不要因此把它从示例文件删掉**。
 - feat-006 的 ws 缺陷根因：Next webpack 的默认 ESM externals 将 `ws` 错误内联时，`buffer-util` 的 module.exports 事后 mask 改写丢失，`sender` 解构到非函数；修复后必须保留 `ws` 外置产物检查，避免只看 build 成功。
 - **不要用覆盖库导出方法的方式去拿订阅生命周期。** zustand 的 `create` 是 `Object.assign(hook, api)`，React 的 `useStore` 用的是闭包里的 `api.subscribe`；替换 `hook.subscribe` 对 React 路径完全无效（实测 `patchedCallsAfterApiSubscribe: 0`），会静默得到一个永不启动的轮询。要引用计数就用显式的 `useEffect` hook，让生命周期由 React 驱动。
 - **admin 侧的行为验证不能只跑纯函数探针。** 上述回归之所以漏过，正是因为只验了 store 的纯函数部分和「直调 `.subscribe`」路径 —— 那条路径恰好绕过了 React 实际走的路径，测出来是绿的。仓库无测试框架也无 jsdom；本次可用的办法是用 Node loader hook（`module.register()`，**不是** `--import` 一个导出 `resolve` 的文件，那样不会注册）把 `react` 换成"立即执行 effect 并交出 cleanup"的桩，然后 `import` **真实的** store 模块，这样测的是产品代码本身。
