@@ -1,7 +1,7 @@
 # Lane: feature/m2-context (feat-003)
 
 ## Current State
-- **Last Updated:** 2026-08-16
+- **Last Updated:** 2026-08-17
 - **Status:** Done
 
 ## What's Done
@@ -10,12 +10,13 @@
 - 增加 append-only `context.compacted` checkpoint、严格回放、quiescent 串行压缩和二次 compaction 合并。
 - 增加 runtime 注入的受限 `history_read` 工具，供模型按稳定引用分页读取原始长工具结果。
 - `apps/server` 仅传入真实 `openrouterModel` 作为 checkpoint 审计字段，不增加后台或 WS 接口。
+- feature 分支已通过 merge commit `4704266` 集成至 `main`。
 
 ## What's In Progress
-- 无；当前 lane 已完成，等待集成。
+- 无；当前 lane 已完成并集成。
 
 ## What's Next
-- 后续 lane 可补 server 的 memoryDir/compact/daydreaming 调度入口及 Web 后台 UI。
+- 无；server 的 memoryDir/compact/daydreaming 调度入口与 Web 后台 UI 属于后续独立 lane。
 
 ## Verification Evidence
 | Check | Command | Result | Notes |
@@ -34,4 +35,4 @@
 - 本 lane 只写入自己的分片，不修改根级 `feature_list.json`、`README.md` 或其他 lane。
 
 ## Handoff Notes
-- 当前 lane 可集成；Web 后台和 server compact/daydreaming 入口明确留给后续 lane。
+- 当前 lane 已完成并集成，无需后续 handoff；Web 后台和 server compact/daydreaming 入口明确留给后续 lane。

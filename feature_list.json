@@ -50,7 +50,7 @@
             "name": "M2 上下文精进",
             "description": "实现文件式记忆快照、滚动摘要 checkpoint、可串行化 compaction 与长工具结果引用，使 runtime 从滑动窗口演进为可恢复的分层上下文。Web 后台另行拆分。",
             "dependencies": [],
-            "status": "claimed",
+            "status": "done",
             "touches": [
                 "packages/agent-core",
                 "apps/server"
@@ -63,7 +63,8 @@
                 "AgentRuntime.compact() 与输入处理串行化，在 quiescent boundary 运行；摘要失败或预算校验失败不改变 checkpoint",
                 "长工具结果完整保存在 tool.completed，模型可见消息使用稳定 history 引用与有界预览，并可按 turnId、toolCallId、offset、limit 只读查询",
                 "./init.sh 通过，并记录 compaction 重启恢复、失败原子性、完整 turn 保留和长工具结果分页的手动验收证据"
-            ]
+            ],
+            "evidence": "已通过 merge commit 4704266 集成：Markdown memory snapshot、固定顺序上下文、append-only context.compacted checkpoint、严格回放、quiescent 串行 compaction、二次摘要合并及 history:// 长工具结果分页均已落地。连续三次 compact/重启、失败原子性、并发等待和 10,000 字符工具结果验收通过；最终 ./init.sh 通过。"
         }
     ]
 }
