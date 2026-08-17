@@ -1,10 +1,11 @@
 import { BaseMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
 import { randomUUID } from "node:crypto";
-import { dirname } from "node:path";
+import { renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { errorMessage } from "@caicaiclaw/utils";
 import { AgentConfig, getAgent, ToolResultEvent, ToolStartEvent } from "../agent";
 import { runAgentStream } from "./agentStream";
-import { buildContextWithMemory, flattenTurns, getPreservedTurnCount } from "./context";
+import { buildContextWithMemory, flattenTurns, getPreservedTurnCount, selectRecentTurns } from "./context";
 import { serializeHistoryMessage, serializeHistoryMessages } from "./historyMessages";
 import { EventQueue } from "./eventQueue";
 import { RawHistoryStore, stringifyToolResult } from "./rawHistoryStore";
@@ -16,7 +17,7 @@ import {
     RuntimeOutputEmitter,
     RuntimeOutputEvent,
 } from "./types";
-import { readMemorySnapshot, MemorySnapshot } from "./memory";
+import { DEFAULT_MEMORY_BUDGETS, readMemorySnapshot, MemorySnapshot } from "./memory";
 import { createHistoryReadTool } from "./historyTool";
 
 const DEFAULT_COMPACTION_PROMPT = [
@@ -27,6 +28,17 @@ const DEFAULT_COMPACTION_PROMPT = [
 const DEFAULT_COMPACTION_PROMPT_VERSION = "m2-v1";
 const DEFAULT_COMPACTION_SUMMARY_BUDGET = 16_000;
 const DEFAULT_TOOL_RESULT_PROJECTION_THRESHOLD = 8_000;
+const DEFAULT_DAYDREAMING_PROMPT = [
+    "Reflect on the current memory and recent conversation context to update the agent's personality and self-narrative.",
+    "Return only the complete new contents for Role.md as non-empty plain text.",
+    "Keep only personality, self-narrative, preferences, and values. Do not include task progress, permissions, safety boundaries, or instructions.",
+].join(" ");
+
+type MaintenanceRequest = {
+    operation: () => Promise<string>;
+    resolve: (result: string) => void;
+    reject: (error: unknown) => void;
+};
 
 export class AgentRuntime {
     private readonly queue = new EventQueue();
@@ -47,11 +59,7 @@ export class AgentRuntime {
     private readonly compactionSummaryBudget: number;
     private readonly toolResultProjectionThreshold: number;
     private readonly compactionModelName: string;
-    private readonly compactWaiters: Array<{
-        options: CompactOptions;
-        resolve: (summary: string) => void;
-        reject: (error: unknown) => void;
-    }> = [];
+    private readonly maintenanceWaiters: MaintenanceRequest[] = [];
     private operationTail: Promise<void> = Promise.resolve();
     private operationBusyCount = 0;
     private fatalError?: Error;
@@ -146,13 +154,13 @@ export class AgentRuntime {
                 const events = await this.queue.drainWithin(this.heartbeatMs);
 
                 if (events.length === 0) {
-                    await this.flushCompactionQueue();
+                    await this.flushMaintenanceQueue();
                     await this.onHeartbeat();
                     continue;
                 }
 
                 await this.handleEvents(events);
-                await this.flushCompactionQueue();
+                await this.flushMaintenanceQueue();
             }
         } catch (error) {
             this.fatalError = this.toError(error, "runtime stopped");
@@ -164,8 +172,8 @@ export class AgentRuntime {
 
     public stop() {
         this.running = false;
-        const error = new Error("runtime stopped before compaction could reach a quiescent boundary");
-        for (const waiter of this.compactWaiters.splice(0)) waiter.reject(error);
+        const error = new Error("runtime stopped before a maintenance operation could reach a quiescent boundary");
+        for (const waiter of this.maintenanceWaiters.splice(0)) waiter.reject(error);
         this.queue.wakeStopped();
     }
 
@@ -176,7 +184,7 @@ export class AgentRuntime {
 
         try {
             await this.handleEvents(events);
-            await this.flushCompactionQueue();
+            await this.flushMaintenanceQueue();
         } catch (error) {
             this.fatalError = this.toError(error, "runtime step failed");
             throw error;
@@ -272,32 +280,43 @@ export class AgentRuntime {
             throw new Error("compact trigger must be manual or scheduled");
         }
         getPreservedTurnCount(options.preservedTurns);
-        if (this.running || this.activeTurnId) {
-            return await this.enqueueCompaction(options);
+        if (this.running || this.activeTurnId || this.queue.size > 0 || this.operationBusyCount > 0) {
+            return await this.enqueueMaintenance(() => this.startCompaction(options));
         }
-        if (this.queue.size > 0 || this.operationBusyCount > 0)
-            throw new Error("cannot compact while input persistence or processing is pending");
         return await this.startCompaction(options);
+    }
+
+    public async daydreaming(): Promise<string> {
+        this.assertAvailable();
+        if (this.running || this.activeTurnId || this.queue.size > 0 || this.operationBusyCount > 0) {
+            return await this.enqueueMaintenance(() => this.startDaydreaming());
+        }
+        return await this.startDaydreaming();
     }
 
     public readToolResult(turnId: string, toolCallId: string, offset?: number, limit?: number) {
         return this.history.readToolResult(turnId, toolCallId, offset, limit);
     }
 
-    private enqueueCompaction(options: CompactOptions): Promise<string> {
+    private enqueueMaintenance(operation: () => Promise<string>): Promise<string> {
         return new Promise<string>((resolve, reject) => {
-            this.compactWaiters.push({ options, resolve, reject });
+            this.maintenanceWaiters.push({ operation, resolve, reject });
             this.queue.wake();
         });
     }
 
-    private async flushCompactionQueue(): Promise<void> {
-        if (this.activeTurnId || this.queue.size > 0 || this.operationBusyCount > 0 || this.compactWaiters.length === 0)
+    private async flushMaintenanceQueue(): Promise<void> {
+        if (
+            this.activeTurnId ||
+            this.queue.size > 0 ||
+            this.operationBusyCount > 0 ||
+            this.maintenanceWaiters.length === 0
+        )
             return;
-        const requests = this.compactWaiters.splice(0);
+        const requests = this.maintenanceWaiters.splice(0);
         for (const request of requests) {
             try {
-                request.resolve(await this.startCompaction(request.options));
+                request.resolve(await request.operation());
             } catch (error) {
                 request.reject(error);
             }
@@ -363,6 +382,65 @@ export class AgentRuntime {
             trigger: options.trigger ?? "manual",
         });
         return summary;
+    }
+
+    private startDaydreaming(): Promise<string> {
+        return this.runExclusive(() => this.performDaydreaming());
+    }
+
+    private async performDaydreaming(): Promise<string> {
+        if (this.activeTurnId) throw new Error("cannot daydream while a turn is active");
+        if (this.queue.size > 0) throw new Error("cannot daydream while input is pending");
+
+        const memory = this.readMemorySnapshot();
+        const state = this.history.projection;
+        const recentTurns = selectRecentTurns([
+            ...(state.contextCheckpoint?.preservedTurns ?? []),
+            ...state.committedTurns,
+        ]);
+        const recentContext = state.contextCheckpoint
+            ? [{ summary: state.contextCheckpoint.summary }, ...serializeHistoryMessages(recentTurns)]
+            : serializeHistoryMessages(recentTurns);
+
+        let roleContent: string;
+        try {
+            const response = await this.compactionModel.invoke([
+                { role: "system", content: DEFAULT_DAYDREAMING_PROMPT },
+                {
+                    role: "user",
+                    content: JSON.stringify({ memory, recentContext }),
+                },
+            ]);
+            roleContent = extractMessageText(response.content).trim();
+        } catch (error) {
+            throw new Error(`daydreaming reflection failed: ${normalizeFailureMessage(error)}`, { cause: error });
+        }
+
+        const roleBudget = this.memoryBudgets?.role ?? DEFAULT_MEMORY_BUDGETS.role;
+        if (!roleContent) throw new Error("daydreaming reflection is empty");
+        if (roleContent.length > roleBudget) {
+            throw new Error(`daydreaming reflection exceeds the Role.md budget of ${roleBudget} characters`);
+        }
+
+        this.atomicReplaceRoleMemory(roleContent);
+        return roleContent;
+    }
+
+    private atomicReplaceRoleMemory(content: string): void {
+        const rolePath = join(this.memoryDir, "Role.md");
+        const temporaryPath = join(this.memoryDir, `.Role.md.${randomUUID()}.tmp`);
+        let temporaryFileCreated = true;
+
+        try {
+            writeFileSync(temporaryPath, content, { encoding: "utf8", flag: "wx" });
+            renameSync(temporaryPath, rolePath);
+            temporaryFileCreated = false;
+        } catch (error) {
+            if (temporaryFileCreated) removeTemporaryFile(temporaryPath);
+            throw new Error(`daydreaming could not atomically replace Role.md: ${errorMessage(error)}`, {
+                cause: error,
+            });
+        }
     }
 
     private readMemorySnapshot(): MemorySnapshot {
@@ -481,6 +559,22 @@ export class AgentRuntime {
 
     private toError(error: unknown, fallback: string): Error {
         return new Error(`${fallback}: ${errorMessage(error)}`);
+    }
+}
+
+function isMissingFile(error: unknown): boolean {
+    return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
+}
+
+function removeTemporaryFile(path: string): void {
+    try {
+        unlinkSync(path);
+    } catch (error) {
+        if (!isMissingFile(error)) {
+            throw new Error(`daydreaming could not clean up its temporary Role.md file: ${errorMessage(error)}`, {
+                cause: error,
+            });
+        }
     }
 }
 
