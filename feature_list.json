@@ -87,6 +87,33 @@
                 "在真实终端完成 feat-001 遗留的交互验收：备用屏、kitty Shift+Enter 换行、真实鼠标滚轮、Web 与 TUI 双端共享同一 runtime"
             ],
             "evidence": "代码部分已完成（commit f89ac99）。真实终端验收已于 2026-08-17 由用户执行，四项中三项通过（备用屏启动与退出恢复、真实鼠标滚轮在 transcript 与设置面板均无转义字符泄漏、Web 与 TUI 双端共享同一 runtime），故 doneCriteria 中的鼠标相关门槛在真实终端得到确认。唯一未通过项是 kitty Shift+Enter 换行：用户环境为 Windows Terminal → tmux 3.4 → WSL，实测失败。经三组探针实测（脚本跑完已删）定位为终端能力缺失而非代码缺陷：(1) 喂入 kitty 编码 CSI 13;2u / 13;2:1u / 13;2;13u 并复刻 ink use-input.js 的 key 派生逻辑，均得到 name=return, shift=true 并在 editBuffer 走 insert-newline，代码路径正确；(2) 在真实 pty（detached tmux pane, stdin.isTTY=true）发 ink auto 模式的能力查询 CSI ? u，回应 0 字节，Ink.initKittyKeyboard 200ms 超时后静默放弃，kittyProtocolEnabled 保持 false；(3) 对照组用 tmux passthrough 把查询直送外层终端并同时发 primary DA，DA 正常回 ESC[?1;2;4c 而 kitty 查询仍无回应，证明回应通道通畅、是外层 Windows Terminal 不支持该协议（tmux 3.4 亦为 extended-keys off）。无 kitty 协议时终端对 Enter 与 Shift+Enter 发出相同的 \\r，应用层无法区分，属物理信息缺失。当下可用替代键为 Ctrl+J（发 \\n，ink 解析为 name=enter，enter 不在 nonAlphanumericKeys 中故 input 保留 \\n 并走 buffer.insert(\"\\n\")，探针实测 insert-text:\"\\n\"），无需改代码即可用但 Composer 提示未告知。反向警告：不要打开 tmux 的 extended-keys on，那会让 Shift+Enter 变成 xterm modifyOtherKeys 的 CSI 27;2;13~，ink 7 不解析该形式，整串会以字面量 [27;2;13~ 落入输入框，比现状更糟。用户于 2026-08-17 决策：换用支持 kitty 协议的终端，代码保持不动（否决了把 Ctrl+J 提升为一等换行键的备选，理由是不愿引入第二个换行键位与额外文案维护面），据此把本 feature 置为 done。**留痕：换行在支持 kitty 协议的终端上尚未经过真实按键确认**，支撑其正确性的是上述第 (1) 组喂入编码的探针证据，而非真机按键；用户换终端后建议顺手回归一次。此外「无 kitty 协议的终端上换行不可用」作为已知终端要求保留在 progress.md 的 Blockers / Risks 中，不计为缺陷。新增 apps/tui/src/hooks/mouseSequence.ts 作为独立状态机消费器，App.tsx 只做分发，parseMouseWheel 已删除。消费器验收：临时表驱动脚本 27/27 通过（已删除），覆盖单 chunk SGR 的 button 64/65/0 与小写 m、SGR 跨 2 与 3 chunk 分片、X10 单 chunk 与三字节跨 chunk、序列后 remainder 回流、连续两序列不串台；普通文本回归覆盖 a、[hello]、裸 [、[<abc、[<12+xyz；不吞键覆盖超长垃圾、累积超限与证伪中断后紧随按键仍生效。真实 Ink 集成验收：临时脚本用真实 Ink 7 render + 真实 stdin readable 管道，8/8 通过（已删除），确认 X10 不进输入缓冲且触发滚动、设置面板下 X10 与分片 SGR 均不污染 ws_url、分片 SGR 首片不落入缓冲且组装后滚动、普通字符仍可输入。./init.sh 与 git diff --check 通过。修复过程中发现并修正了消费器初版的一个回归：裸 [ 被当作序列起始导致 [a 两个字符都被吞掉。残留：真实终端交互验收待用户执行，步骤见 progress.md。"
+        },
+        {
+            "id": "feat-006",
+            "name": "M2 Web 后台管理（apps/admin）",
+            "description": "新建 apps/admin：Next.js SSR 管理端兼进程 supervisor，常驻运行并以子进程方式完全掌管 apps/server（agent 进程）的生命周期。提供 chat / memory / logs / agent 四个路由：chat 迁自 apps/web 的会话界面，memory 读写 .caicaiclaw 下 Markdown（乐观锁 + 原子替换），logs 只读分页浏览 history.jsonl，agent 展示进程状态并提供启/停/重启与 compact/daydreaming 入口。apps/web 内容迁入后删除。完整需求见 docs/web-admin-prd.md。",
+            "dependencies": [
+                "feat-003",
+                "feat-004"
+            ],
+            "status": "in-progress",
+            "doneCriteria": [
+                "新增 apps/admin（Next.js SSR），仅监听 127.0.0.1，缺少 CAICAI_ADMIN_TOKEN 时拒绝启动，不提供无认证降级路径；所有路由与写操作校验该 token",
+                "依赖方向新增 apps/admin <- client-core, protocol, utils，且未新增 apps/server <- client-core；AGENTS.md 依赖表与根 tsconfig.json references 同步",
+                "supervisor 维护 stopped/starting/running/stopping/crashed 状态机，单例管理唯一 agent 子进程；running 的判定依据是 admin 的 control 连接收到子进程 hello，而非进程存活",
+                "启动/停止/重启可用：停止走 SIGTERM 与 apps/server 既有 graceful shutdown，超出宽限期（默认 10s）SIGKILL 并在 UI 明示；重启必须等待前一进程真正 exit 后再 spawn，不允许两个子进程并存",
+                "非 operator 主动停止的退出进入 crashed 且不自动重启，展示退出码、信号、退出时间与最后 N 行（默认 200）stderr 环形缓冲；启动即失败（如缺 OPENROUTER_MODEL）的错误文本可见；admin 自身退出时先收子进程，不留孤儿",
+                "/memory 可读写 SYSTEM.md、Role.md、Memory.md、tasks/*.md 与 tasks/archived/*.md；路径解析（含符号链接）限制在 memoryDir 内，仅允许 .md，history.jsonl 不在可写集合",
+                "/memory 保存使用乐观锁（mtime + 内容哈希）：磁盘已变更时拒绝保存并提示重新加载，不做自动合并、不静默覆盖；写入用同目录临时文件 + rename 原子替换，不留 .tmp 残留",
+                "/logs 对 history.jsonl 严格只读，admin 侧无写/截断/补写路径；从文件尾部反向流式扫描分页，按 turn 分组倒序展示，内存不随日志大小线性增长",
+                "/logs 可展开 tool.completed 工具结果原文并支持 offset/limit 分页；context.compacted 事件可见（compactionId、sequence 区间、trigger、model、摘要）；损坏行报告行号并跳过而不阻断其余展示；agent 停止时日志仍可浏览",
+                "/agent 提供 compact 与 daydreaming 按钮，经 control 连接发送 protocol 已定义的客户端消息路由到 runtime 公开方法，不直接改写持久化文件；失败时展示脱敏错误且 runtime 保持存活；进程未运行时按钮不可用",
+                "/chat 行为与迁移前等价（连接状态、消息列表、活动面板、composer、clientId 持久化、重连退避、协议版本不匹配主动断开），复用 client-core 的 transport 与 reduceClientState；agent 未运行时显示明确未连接状态并引导至 /agent",
+                "apps/web 在取得用户显式二次确认后删除，并同步 pnpm-workspace.yaml（若需）、根 tsconfig.json references、AGENTS.md 依赖表、根 package.json 脚本",
+                "展示的 stderr 与错误信息经过与 apps/server safeErrorMessage 同级的脱敏（Bearer、api key、authorization、password、secret、token）",
+                "./init.sh 通过，且 apps/admin 生产构建通过",
+                "记录手动验收证据：进程控制闭环（启动→running→停止→stopped→重启→running 全程不碰终端）、memory 冲突拒绝保存零静默覆盖、JSONL 只读（字节数只增且增量均来自 runtime）、10MB 量级日志下 /logs 首屏与翻页可用"
+            ]
         }
     ]
 }

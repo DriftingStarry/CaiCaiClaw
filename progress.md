@@ -3,7 +3,11 @@
 ## Current State
 
 **Last Updated:** 2026-08-17
-**Active Feature:** 无。feat-001 ~ feat-005 全部 `done`，M1 与 M2 第一阶段收尾。
+**Active Feature:** feat-006 M2 Web 后台管理（apps/admin），`in-progress`。feat-001 ~ feat-005 全部 `done`。
+
+feat-006 的完整需求已固化在 `docs/web-admin-prd.md`（PRD，quality score 92/100），`feature_list.json` 的 15 条 doneCriteria 与该文档一一对应。实现交由 codex（model `gpt-5.6-luna`）执行。
+
+**关键拓扑决策**：用户原计划「在 `apps/server` 基础上做管理端」与「完全控制 agent 进程启停」不能同时成立 —— `apps/server` 本身就是 agent 进程（进程内 `new AgentRuntime()` 并持有 WS server），同进程的管理端在停掉 agent 后自己也不复存在，就没有后台可以点「启动」。故定为 **新增 `apps/admin`（Next.js SSR + supervisor，常驻）+ `apps/server` 作为被 spawn 的子进程**，`apps/server` 职责与代码不变。这同时避免了新增 `apps/server <- client-core` 破坏 Architecture Invariants 的依赖表。
 
 feat-004 已补齐 server compact / daydreaming 入口与 scheduled compact 调度并通过独立复核。feat-005 的鼠标消费器代码已完成，纯函数、真实 Ink 集成与真实终端三项交互验收（备用屏、真实鼠标滚轮、双端共享 runtime）均已通过。
 
@@ -24,11 +28,19 @@ feat-005 于 2026-08-17 由用户决策置为 `done`：Shift+Enter 在其 Window
 
 ### What's In Progress
 
-无。`feature_list.json` 中已登记的 feature 全部 `done`。
+- [ ] **feat-006 M2 Web 后台管理（apps/admin）** — 已登记为 `in-progress`，需求见 `docs/web-admin-prd.md`，15 条 doneCriteria 见 `feature_list.json`。实现交由 codex（`gpt-5.6-luna`）执行。实现顺序按 PRD 的优先级：supervisor + `/agent` → `/logs` → `/memory` → `/chat` 迁移与 `apps/web` 删除（不可逆，放最后且需用户二次确认）。
+
+  实现期需要注意的既有约束：
+  - 依赖方向只能新增 `apps/admin <- client-core, protocol, utils`；**不得**新增 `apps/server <- client-core`。同步 `AGENTS.md` 依赖表与根 `tsconfig.json` references。
+  - `running` 判定用 control 连接收到 `hello`，不是「进程还在」——否则进程起来但 WS 未就绪也会被误报为 running。
+  - 重启必须等前一子进程真正 `exit` 后再 spawn，否则会撞端口 8787 并共写 `history.jsonl`（对应本文件 Blockers / Risks 里「运行环境未隔离」那条）。
+  - `CAICAI_ADMIN_TOKEN` 缺失时 admin 拒绝启动，不留无认证降级路径。这是个高权限面板：可写 agent 人格、可启停进程，而 agent 自身持有 `exec` 工具。
+  - memory 写入复刻 runtime `daydreaming()` 的同目录临时文件 + `rename` 原子替换；乐观锁冲突即拒绝保存，不做自动合并。
+  - `history.jsonl` 对 admin 严格只读，admin 侧不得存在写/截断/补写路径。
 
 ### What's Next
 
-1. 登记并实现 README 里的 Web 后台管理（M2 剩余方向，尚未登记为 feature）。
+1. 完成 feat-006（见上），结束前同步本文件 Evidence 表与 `feature_list.json` 的 `evidence`。
 2. 用户换到支持 kitty 协议的终端后，顺手确认一次 Shift+Enter 真能插入换行 —— 这是 feat-005 唯一未经真实按键确认的行为，代码路径已由探针验证但未在真机按过。若那时发现不工作，先读 Blockers / Risks 里的实测结论，特别是「不要打开 tmux `extended-keys`」这条反向警告。
 3. 改鼠标相关代码前先读 Blockers / Risks 里消费器的现有行为约定。
 
