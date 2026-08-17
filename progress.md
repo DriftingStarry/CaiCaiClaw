@@ -3,9 +3,9 @@
 ## Current State
 
 **Last Updated:** 2026-08-17
-**Active Feature:** feat-004 Server compact 与 memory 调度入口（已完成）
+**Active Feature:** feat-005 TUI 鼠标序列消费与真实终端验收（代码已完成，卡在真实终端人工验收）
 
-M1 与 M2 第一阶段已收尾，feat-004 已补齐 server compact / daydreaming 入口与 scheduled compact 调度。下一步可选 feat-005。
+M1 与 M2 第一阶段已收尾。feat-004 已补齐 server compact / daydreaming 入口与 scheduled compact 调度并通过独立复核。feat-005 的鼠标消费器代码已完成并通过纯函数与真实 Ink 集成验证，但最后一条 doneCriteria（真实终端交互验收）必须由用户本人在真实终端操作，因此该 feature 状态为 `blocked` 而非 `done`。**唯一待办是用户执行下方「用户待执行：真实终端验收」清单。**
 
 ## Status
 
@@ -15,22 +15,43 @@ M1 与 M2 第一阶段已收尾，feat-004 已补齐 server compact / daydreamin
 - [x] **feat-002 Web 迁移到 client-core 传输层** — 删除 `apps/web` 自带 WebSocket adapter，store 改用 `@caicaiclaw/client-core` transport 并注入浏览器原生 WebSocket 工厂；保留 `NEXT_PUBLIC_CAICAI_WS_URL` 配置与 `clientIdentity` 持久化；更新 `apps/web/README.md`。已合并（commit be131bb, merge e12992f）。
 - [x] **feat-003 M2 上下文精进** — Markdown memory snapshot（独立预算 / 明确错误）、固定顺序 `buildContext`、append-only `context.compacted` checkpoint 与严格回放、quiescent 串行 compaction、二次 compaction 合并、受限 `history_read` 工具供模型按稳定引用分页读取原始长工具结果。`apps/server` 仅传入真实 `openrouterModel` 作为 checkpoint 审计字段。已合并（merge 4704266）。
 - [x] **feat-004 Server compact 与 memory 调度入口** — server 配置 `memoryDir` 与 `CAICAI_COMPACT_EVERY_TURNS`，WS compact / daydreaming 单连接入口，按 `done` 事件计数的 scheduled compact，AgentRuntime 共享维护队列与 Role.md 原子反思写入。已完成，证据见下表与 `feature_list.json`。
+- [x] **feat-005 TUI 鼠标序列消费（代码部分）** — 新增 `apps/tui/src/hooks/mouseSequence.ts` 独立状态机消费器，`App.tsx` 只做分发，删除 `parseMouseWheel`。X10 降级与 SGR 跨 chunk 分片两条泄漏路径已封死；组装被证伪或超长时回吐缓冲，不吞后续按键。commit f89ac99。
 - [x] **Harness 迁移** — 从多 worktree lane 变式回到 harness-creator 原本的单 lane 模式：删除 `harness/lanes.sh`、`harness/wt.sh`、`harness/lib/workspace.cjs` 与 `.harness/<slug>/` 分片，状态合并进根级 `feature_list.json` 与本文件。
 
 ### What's In Progress
 
-- [ ] 无。当前没有 `in-progress` feature。
+- [ ] **feat-005** 代码已完成，等待用户执行真实终端验收（见下方清单）。除此之外无进行中的工作。
 
 ### What's Next
 
-1. 选定下一个 feature（当前剩余 feat-005 TUI 鼠标修复与真实终端验收）。
-2. 开工前运行 `./init.sh` 建立基线。
-3. feat-005 若被选中，先读下方 Blockers / Risks 里鼠标序列消费的具体修法。
+1. 用户按下方「用户待执行：真实终端验收」清单在真实终端确认四项，通过后把 feat-005 置为 `done`。
+2. 若验收发现问题，先读 Blockers / Risks 里鼠标消费器的现有行为约定再改。
+3. feat-005 收尾后，M2 剩余方向是 README 的 Web 后台管理（尚未登记为 feature）。
+
+## 用户待执行：真实终端验收
+
+这是 feat-005 唯一的剩余门槛。**所有自动化验证都在假 TTY 或真实 Ink + 管道 stdin 的 harness 里完成，没有任何一项在真实终端跑过**，因此以下四项必须由人在真实终端操作确认：
+
+```bash
+# 终端 A
+pnpm server
+# 终端 B（真实终端，非 IDE 内嵌伪终端更佳）
+pnpm tui
+```
+
+逐项确认：
+
+1. **备用屏**：TUI 启动后占据备用屏，退出（Ctrl+D 两次）后原终端内容完整恢复，无残留渲染。
+2. **kitty Shift+Enter 换行**：在支持 kitty 键盘协议的终端里，Shift+Enter 在输入框内插入换行而不是提交；Enter 仍然提交。
+3. **真实鼠标滚轮**：在 transcript 区域滚动滚轮能上下移动视口；滚动过程中输入框保持为空，不出现 `[<64;...M` 之类的转义字符。再打开设置面板（Tab）滚动一次，确认 `ws_url` 输入框没有被污染。
+4. **双端共享同一 runtime**：浏览器打开 Web 端（`pnpm --filter @caicaiclaw/web dev`）与 TUI 同时连接，在任一端发送输入，两端都能看到同一轮对话与工具调用，说明观察和操作的是同一个 `AgentRuntime`。
+
+如果第 3 项在你的终端里仍出现转义字符泄漏，请记录终端类型（`echo $TERM`）与泄漏的具体字符，那说明该终端的上报格式尚未被消费器覆盖。
 
 ## Blockers / Risks
 
-- [ ] **TUI 鼠标序列消费不完整（feat-001 已知残留，未修）**：`apps/tui/src/components/App.tsx` 的分发器用全量锚定正则 `/^\[<\d+;\d+;\d+[Mm]$/` 判定鼠标上报，只覆盖「单个 chunk 内完整投递的 SGR(1006)」。两条泄漏路径经独立复核实测确认：① 终端忽略 `?1006h` 而降级到 X10 格式（`\x1b[M` + 三字节）时不匹配，序列会被当普通文本插进输入框，设置面板打开时会污染 `ws_url`；② SGR 序列跨 chunk 分片（两段间隔 ≥25ms 越过 ink 的 escape flush 窗口）时被拆成 `[<0;1` 与 `0;5M`，两段均不匹配，整串落入缓冲。修法：改成前缀式消费 —— `^\[[<M]` 起头即视为鼠标流整块丢弃，仅在完整匹配且 button 为 64/65 时滚动；或维持一个「序列组装中」标志跨 chunk 补全。
-- [ ] **TUI 真实终端交互验收未执行**：所有运行时验证都在假 TTY 的 harness 里完成，**没有任何一项在真实终端跑过**。待用户在真实终端执行 `pnpm server` 与 `pnpm tui`，确认备用屏、kitty Shift+Enter、真实鼠标滚轮和双端共享 runtime。
+- [x] **TUI 鼠标序列消费不完整**：已由 feat-005 修复（commit f89ac99）。改为 `apps/tui/src/hooks/mouseSequence.ts` 的跨 chunk 状态机消费器：SGR(1006) 与 X10 各有独立的组装路径，X10 按固定 5 字节长度消费并以 `charCode - 32` 映射滚轮。**行为约定**（改动前先读）：组装被证伪或累积超过 `MAX_MOUSE_SEQUENCE_LENGTH`（64）时，缓冲**原样回吐为普通输入**而非丢弃 —— 那些字符可能是用户真敲的，静默丢弃会造成可见的输入丢失。裸 `[` 不进入组装状态（判别前缀只有 `[<` 与 `[M`），否则 `[a` 会被整体吞掉；这正是消费器初版引入、后被表驱动测试抓到的回归。`App.tsx` 在回吐跨越多 chunk 时直接 `insert` 文本而不复用 `key`，因为此时 `key` 只描述最后一个 chunk。
+- [ ] **TUI 真实终端交互验收未执行**：所有运行时验证都在假 TTY 或真实 Ink + 管道 stdin 的 harness 里完成，**没有任何一项在真实终端跑过**。这是 feat-005 保持 `blocked` 的唯一原因，待用户执行上方「用户待执行：真实终端验收」清单。
 - [ ] **输入缓冲按码点而非字素簇切分**：`Array.from` 切分导致 ZWJ 组合 emoji（如 `👨‍👩‍👧`）退格只删掉最后一个码点，组合符 `é`（e + U+0301）退格只去掉重音。纯显示问题，无崩溃、无孤立代理对，BMP 与单码点 emoji 场景正确。彻底修需改用 `Intl.Segmenter` 统一封装字素切分供 buffer 与 Composer 共用。
 - [ ] **reasoning 交错信息丢失**：client-core 中每轮 reasoning 累加为一个字符串，无法还原 think → tool → think 的真实交错，当前每轮只呈现工具调用前的一个 thinking 块。要还原需扩展 `packages/protocol`。
 - [x] **compact 无服务端入口**：已由 feat-004 解决。server 提供单连接 WS compact / daydreaming 请求，`memoryDir` 和 scheduled compact 阈值由配置注入；scheduled 调度只消费 runtime `done` 输出事件。
@@ -63,10 +84,22 @@ M1 与 M2 第一阶段已收尾，feat-004 已补齐 server compact / daydreamin
 | feat-004 静态验证 | `./init.sh` | pass | 2026-08-17：实际输出为 `pnpm typecheck`、`pnpm lint`、`pnpm format:check` 全部通过，随后输出 `=== Verification complete ===`。 |
 | feat-004 server/runtime 验收 | `pnpm exec tsx /tmp/caicaiclaw-feat-004-acceptance.ts` | pass | 实际输出包含 `{"protocolVersionAndSchemas":"passed","unknownServerTypeCompatibility":"passed","invalidThreshold":"passed"}`、`{"serverManualCompact":"passed","queuedCompact":"passed","scheduledCompactCalls":2,"isolatedErrors":"passed","daydreamingAtomicRoleWrite":"passed","systemFileUnchanged":"passed","runtimeContinuedAfterFailure":"passed"}`、`{"scheduledCompactThresholdZero":"passed","compactCalls":0}` 与缺失 memory 通过；脚本断言第 4 个 done 触发 scheduled compact 一次，`scheduledCompactCalls:2` 的第二次调用为排队手动 compact；脚本已删除。 |
 | feat-004 diff hygiene | `git diff --check` | pass | 实际无输出且退出码为 0。 |
+| feat-004 独立复核（协议 / 配置） | 一次性 `tsx` 脚本（已删除） | pass | 11/11。除版本号 2→3、round-trip、未知 type 前向兼容外，额外覆盖空 summary 被 schema 拒绝、阈值负值被拒、`memoryDir` 在空 `systemPromptPath` 时回落到 history 目录。 |
+| feat-004 独立复核（runtime 行为） | 一次性 `tsx` 脚本（已删除） | pass | 23/23。Role.md 原子替换、SYSTEM.md 不变、无 `.tmp` 残留、Memory.md 与 tasks 未被误创建；模型失败 / 空反思 / 超预算三种情况下 Role.md 均保持原样；缺失 memory 文件仍可工作。 |
+| feat-004 独立复核（排队 compact） | 一次性 `tsx` 脚本（已删除） | pass | 11/11。4 个 committed turn 下排队 compact 返回摘要；checkpoint 追加在完整 turn 之后且无 turn 跨越 checkpoint；manual 与 scheduled trigger 均正确落盘；原始 `input.accepted` 不被改写。 |
+| feat-004 独立复核（真实 ws 端到端） | 一次性 `tsx` 脚本 + 真实 `ws` 双连接（已删除） | pass | 15/15。compact / daydreaming 回执与失败错误只回发起连接，第二连接收不到；失败后 runtime 仍接受输入；scheduled compact 阈值前不触发、达阈值触发一次、阈值 0 六轮输入后仍无 checkpoint。 |
+| feat-004 依赖方向 | `grep -rn "@caicaiclaw/protocol" packages/agent-core/src/` | pass | 无匹配，agent-core 未引入 protocol。 |
+| feat-005 消费器纯函数 | 一次性表驱动 `tsx` 脚本（已删除） | pass | 27/27。单 chunk SGR 的 button 64/65/0 与小写 `m`；SGR 跨 2 与 3 chunk 分片；X10 单 chunk 与三字节跨 chunk；序列后 remainder 回流；连续两序列不串台。普通文本回归：`a`、`[hello]`、裸 `[`、`[<abc`、`[<12`+`xyz`。不吞键：超长垃圾、累积超限、证伪中断后紧随按键仍生效。 |
+| feat-005 真实 Ink 集成 | 一次性 `tsx` 脚本 + 真实 Ink 7 render + 真实 stdin `readable` 管道（已删除） | pass | 8/8。X10 不进输入缓冲且触发滚动；设置面板下 X10 与分片 SGR 均不污染 `ws_url`；分片 SGR 首片不落入缓冲、组装后滚动；普通字符仍可输入。 |
+| feat-005 静态验证 | `./init.sh` | pass | 2026-08-17：三项检查全部通过并输出 `=== Verification complete ===`。 |
+| feat-005 真实终端验收 | 用户在真实终端操作 | **未执行** | feat-005 保持 `blocked` 的唯一原因。步骤见「用户待执行：真实终端验收」。 |
 
 ## Notes for Next Session
 
 - feat-001 的 runtime harness 是一次性脚本、跑完即删，**证据不可重跑**。若要回归验证滚动与输入行为需重新搭建，要点：ink 7 的 stdin 走 `readable` 事件 + `stdin.read()`，用 `data` 事件会导致按键完全不送达而产生假阴性。
 - feat-001 经两轮独立 review，14 条发现中 13 条已修且经真实 Ink 渲染复核可复现；鼠标序列消费一条只修了单 chunk 完整 SGR 的部分。用户已在此状态上验收，残留项转为 feat-005。
 - `packages/client-core/src/transport.ts` 保留 `onError?: (error: unknown) => void`。若后续新增消费方沿用更窄的 `Event | Error` 回调，需先调整回调参数类型或在注入处适配，避免 strictFunctionTypes 的 TS2322。
-- feat-004 已完成；feat-005 的 `doneCriteria` 与具体鼠标验收门槛已记录在 `feature_list.json`，开工前需按其范围执行。
+- feat-004 与 feat-005 的代码部分均已完成，`feature_list.json` 里两者的 `doneCriteria` 与证据已写实。feat-005 停在 `blocked` 只因真实终端人工验收未执行，**不要在用户确认前把它改成 `done`**。
+- 所有 feat-003 / feat-004 / feat-005 的验收脚本都是一次性的、跑完即删，**证据不可重跑**。要回归验证需重新搭建：protocol / config 相关的脚本必须放在 `apps/server` 下跑（workspace 依赖只在消费方目录内可解析），runtime 行为脚本放在 `packages/agent-core` 下跑且**不能 import protocol**（依赖方向不允许）；假模型要真的继承 `SimpleChatModel`，用 `{invoke, bindTools}` 裸对象会让 turn 直接 `turn.failed`。
+- 追加 checkpoint 的验收需要至少 4 个 committed turn：`DEFAULT_PRESERVED_TURNS = 3`，turn 数不足时 compact 不会产生 checkpoint，容易被误读成 bug。
+- 下一个方向是 README 里的 Web 后台管理，尚未登记为 feature。
