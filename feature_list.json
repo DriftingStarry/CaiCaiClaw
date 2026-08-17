@@ -1,8 +1,4 @@
 {
-    "schemaVersion": 2,
-    "parallel": {
-        "maxLanes": 3
-    },
     "features": [
         {
             "id": "feat-001",
@@ -10,11 +6,6 @@
             "description": "补齐 M1 剩余的 TUI 端，通过 WebSocket 观察和输入同一个 AgentRuntime，不在客户端创建独立会话或持有核心状态。",
             "dependencies": [],
             "status": "done",
-            "touches": [
-                "apps/tui",
-                "packages/client-core"
-            ],
-            "branch": "feature/tui",
             "doneCriteria": [
                 "TUI 能连接现有 WebSocket server，并清晰呈现连接状态",
                 "TUI 能发送用户输入并展示共享 runtime 的消息与活动状态",
@@ -23,7 +14,7 @@
                 "pnpm typecheck、pnpm lint、pnpm format:check 全部通过",
                 "记录双端共享 runtime 的手动验收结果"
             ],
-            "evidence": "已合并到 main（PR #37, merge 997dfce）。apps/tui 提供 Ink 7 三栏界面并复用 packages/client-core 的 reduceClientState；传输层已提升到 client-core/src/transport.ts。./init.sh 通过；滚动与输入行为经一次性真实 Ink harness 实测。两项残留记在 .harness/feature-tui/progress.md：SGR 鼠标消费未覆盖 X10 降级与跨 chunk 分片；真实终端交互验收（含双端共享 runtime）尚未执行。"
+            "evidence": "已合并到 main（PR #37, merge 997dfce）。apps/tui 提供 Ink 7 三栏界面并复用 packages/client-core 的 reduceClientState；传输层已提升到 client-core/src/transport.ts。./init.sh 于 2026-08-16 通过。滚动与输入行为经一次性真实 Ink 7.0.6 + parse-keypress harness 实测（脚本写在 /tmp，跑完即删，不可重跑）。两项残留见 progress.md 的 Blockers / Risks：SGR 鼠标消费未覆盖 X10 降级与跨 chunk 分片；真实终端交互验收（含双端共享 runtime）尚未执行。"
         },
         {
             "id": "feat-002",
@@ -33,17 +24,13 @@
                 "feat-001"
             ],
             "status": "done",
-            "touches": [
-                "apps/web"
-            ],
-            "branch": "feature/web-shared-transport",
             "doneCriteria": [
                 "apps/web/src/adapters/ws 下的 wsClient 与 config 已删除，store 从 @caicaiclaw/client-core 引入传输层并注入浏览器 WebSocket 工厂",
                 "重连退避、协议版本不匹配主动断开、clientId 持久化行为与迁移前一致",
                 "pnpm typecheck、pnpm lint、pnpm format:check 全部通过",
                 "记录 Web 端连接、断线重连与消息收发的手动验收结果"
             ],
-            "evidence": "已合并到 main（merge e12992f）。apps/web 删除自带 wsClient/config，store 复用 @caicaiclaw/client-core 的 CaiCaiWsClient/buildWsUrl 并注入浏览器 WebSocket 工厂；clientId 持久化、重连、消息收发和协议版本不匹配主动断开行为保持。./init.sh 与 Web production build 通过；用户于 2026-08-17 确认完成真实手动验收。"
+            "evidence": "已合并到 main（commit be131bb，merge e12992f）。apps/web 删除自带 wsClient/config，store 复用 @caicaiclaw/client-core 的 CaiCaiWsClient/buildWsUrl 并注入浏览器原生 WebSocket 工厂；clientId 持久化、重连退避、消息收发和协议版本不匹配主动断开行为保持。./init.sh 与 pnpm --filter @caicaiclaw/web build 通过；用户于 2026-08-17 确认完成真实手动验收。无已知残余风险。"
         },
         {
             "id": "feat-003",
@@ -51,20 +38,55 @@
             "description": "实现文件式记忆快照、滚动摘要 checkpoint、可串行化 compaction 与长工具结果引用，使 runtime 从滑动窗口演进为可恢复的分层上下文。Web 后台另行拆分。",
             "dependencies": [],
             "status": "done",
-            "touches": [
-                "packages/agent-core",
-                "apps/server"
-            ],
-            "branch": "feature/m2-context",
             "doneCriteria": [
-                "buildContext 按 README 固定顺序注入唯一 SystemMessage、最新摘要、checkpoint 保留 turns、其后新 turns与当前输入",
+                "buildContext 按 README 固定顺序注入唯一 SystemMessage、最新摘要、checkpoint 保留 turns、其后新 turns 与当前输入",
                 "SYSTEM.md、Role.md、Memory.md 与 tasks/Index.md 每轮读取一致快照，并对各文件执行明确的独立大小预算",
                 "context.compacted 事件可严格校验、追加与回放，重启后 active context 从最新 checkpoint 恢复且原始 JSONL 不被改写或截断",
                 "AgentRuntime.compact() 与输入处理串行化，在 quiescent boundary 运行；摘要失败或预算校验失败不改变 checkpoint",
                 "长工具结果完整保存在 tool.completed，模型可见消息使用稳定 history 引用与有界预览，并可按 turnId、toolCallId、offset、limit 只读查询",
                 "./init.sh 通过，并记录 compaction 重启恢复、失败原子性、完整 turn 保留和长工具结果分页的手动验收证据"
             ],
-            "evidence": "已通过 merge commit 4704266 集成：Markdown memory snapshot、固定顺序上下文、append-only context.compacted checkpoint、严格回放、quiescent 串行 compaction、二次摘要合并及 history:// 长工具结果分页均已落地。连续三次 compact/重启、失败原子性、并发等待和 10,000 字符工具结果验收通过；最终 ./init.sh 通过。"
+            "evidence": "已合并到 main（merge 4704266）。Markdown memory snapshot（独立预算与明确错误）、固定顺序 buildContext、append-only context.compacted checkpoint 与严格回放、quiescent 串行 compaction、二次摘要合并、history:// 长工具结果有界投影、runtime.readToolResult 与受限 history_read 工具均已落地。临时 TypeScript 验收脚本完成连续三次 compact 与重启回放，输出 {\"checkpoints\":3,\"replayCommittedTurns\":3,\"longResultLength\":10000,\"historyPage\":\"xxxxx\"}，并验证唯一 SystemMessage、compact 期间 enqueue 串行等待、摘要失败不追加 checkpoint、长工具结果仅存于 tool.completed、history_read 分页与越界错误、memory 预算错误及缺失 SYSTEM.md 错误；脚本已删除。最终 ./init.sh 与 git diff --check 通过。"
+        },
+        {
+            "id": "feat-004",
+            "name": "Server compact 与 memory 调度入口",
+            "description": "为 apps/server 增加显式的 compact / memoryDir / daydreaming 调度入口，使 feat-003 已落地的 runtime 能力可以从服务端触发，而不只是通过库 API 调用。",
+            "dependencies": [
+                "feat-003"
+            ],
+            "status": "not-started",
+            "doneCriteria": [
+                "apps/server/src/config.ts 暴露 memoryDir（默认与现有 SYSTEM.md 所在目录一致）与 scheduled compact 阈值配置，并显式传给 AgentRuntime；缺省行为与本 feature 前一致",
+                "packages/protocol 新增 compact 与 daydreaming 的 client 请求与 server 结果消息，类型、Zod schema、parse 与 serialize 同步，WS_PROTOCOL_VERSION 递增",
+                "server 把 compact 请求路由到 runtime.compact({ trigger: \"manual\" })，把 daydreaming 请求路由到 runtime.daydreaming()，成功与失败都只回给发起连接，且失败不使 runtime 或进程进入 fatal 状态",
+                "server 按已提交 turn 数自动触发 runtime.compact({ trigger: \"scheduled\" })，阈值可配置，调度只调用 runtime 公开方法，不直接读写 JSONL 或 Markdown",
+                "AgentRuntime.daydreaming() 在 quiescent boundary 串行执行，只写允许的记忆文件（Role.md）并使用原子替换，M2 不自动调用",
+                "依赖方向不变：agent-core 不引入 protocol；server 不绕过 runtime 改写持久化文件",
+                "./init.sh 通过",
+                "记录手动验收：手动 compact 返回摘要、忙碌时排队、scheduled compact 按阈值触发、错误只回发起方、daydreaming 原子写入 Role.md"
+            ],
+            "evidence": ""
+        },
+        {
+            "id": "feat-005",
+            "name": "TUI 鼠标序列消费与真实终端验收",
+            "description": "修复 apps/tui 已知的鼠标上报消费缺陷（X10 降级与跨 chunk 分片会把转义序列注入输入框），并在真实终端完成 feat-001 遗留的交互验收。详见 progress.md 的 Blockers / Risks。",
+            "dependencies": [
+                "feat-001"
+            ],
+            "status": "not-started",
+            "doneCriteria": [
+                "鼠标序列识别与消费从 App.tsx 的内联正则提取为可独立调用的纯函数消费器，App 只做分发",
+                "X10 格式（ESC [ M 后跟三字节）被完整消费，不进入输入缓冲，也不污染设置面板的 ws_url",
+                "SGR(1006) 序列跨 chunk 分片时被跨调用组装，任一分片都不落入输入缓冲；完整组装后 button 64/65 才触发滚动",
+                "不完整的序列不会永久吞掉后续普通按键：组装状态在收到非法字节或超出最大序列长度时被丢弃并恢复正常输入",
+                "普通文本（含以 [ 开头的粘贴文本与方向键等已由 ink 解析的按键）行为不回归",
+                "./init.sh 通过",
+                "记录消费器针对 X10、跨 chunk SGR、非鼠标文本与超长垃圾序列的验证证据",
+                "在真实终端完成 feat-001 遗留的交互验收：备用屏、kitty Shift+Enter 换行、真实鼠标滚轮、Web 与 TUI 双端共享同一 runtime"
+            ],
+            "evidence": ""
         }
     ]
 }
