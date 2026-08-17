@@ -1,30 +1,26 @@
 import { timingSafeEqual } from "node:crypto";
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import { getAdminConfig } from "./adminConfig";
 
 export const ADMIN_TOKEN_COOKIE = "caicaiclaw_admin_token";
 
-export function isAuthorized(request: Request | NextRequest): boolean {
-    const token = readToken(request);
-    return token !== undefined && tokensEqual(token, getAdminConfig().token);
+/**
+ * 凭据只从 httpOnly cookie 读取。middleware 用同一个 cookie 拦下所有未认证请求，
+ * 路由层这次校验是纵深防御；两侧必须看同一个来源，否则会出现 middleware 拒绝而
+ * 路由放行的分歧路径。
+ */
+export function isAuthorized(request: NextRequest): boolean {
+    const token = request.cookies.get(ADMIN_TOKEN_COOKIE)?.value;
+    return token !== undefined && verifyToken(token);
+}
+
+export function verifyToken(token: string): boolean {
+    return tokensEqual(token, getAdminConfig().token);
 }
 
 export function unauthorizedResponse(): NextResponse {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-}
-
-export function readToken(request: Request | NextRequest): string | undefined {
-    const authorization = request.headers.get("authorization");
-    if (authorization?.startsWith("Bearer ")) return authorization.slice("Bearer ".length);
-    const headerToken = request.headers.get("x-caicai-admin-token");
-    if (headerToken) return headerToken;
-    if (request instanceof NextRequest) return request.cookies.get(ADMIN_TOKEN_COOKIE)?.value;
-    const cookieHeader = request.headers.get("cookie") ?? "";
-    return cookieHeader
-        .split(";")
-        .map((part) => part.trim())
-        .find((part) => part.startsWith(`${ADMIN_TOKEN_COOKIE}=`))
-        ?.slice(ADMIN_TOKEN_COOKIE.length + 1);
 }
 
 export function setAuthCookie(response: NextResponse, token: string): void {
