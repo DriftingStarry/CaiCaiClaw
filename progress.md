@@ -13,8 +13,12 @@ feat-004 已补齐 server compact / daydreaming 入口与 scheduled compact 调�
 
 feat-005 于 2026-08-17 由用户决策置为 `done`：Shift+Enter 在其 Windows Terminal + tmux 3.4 环境实测失败，已定位为终端不支持 kitty 键盘协议（Enter 与 Shift+Enter 发出相同字节，属环境能力缺失而非代码缺陷，三组实测详见 Blockers / Risks）。用户选择换用支持 kitty 协议的终端而不改代码。**留痕：换行功能在支持 kitty 协议的终端上的实际按键确认尚未执行过**，代码路径的正确性目前只由喂入 kitty 编码的探针验证，见 Evidence 表。
 
-feat-006 的 apps/admin 已实现，apps/web 已在最后的独立删除范围中移除；静态检查与生产构建通过，进程控制闭环和大日志性能因当前沙箱禁止本地 listen 留待人工验收。
+feat-006 的 apps/admin 已实现，apps/web 已在最后的独立删除范围中移除；静态检查与生产构建通过。start / hello→running / compact / stop 四步已由 Claude 在本机隔离端口实测通过（见 Evidence 表）；仍待人工验收的是 restart、崩溃 stderr UI 与 10MB 日志性能。
 实现由 codex（`gpt-5.6-luna`）执行，其沙箱内 `git commit` 与 127.0.0.1 `listen` 均被拒绝，故它把改动留在工作树并如实标注了未执行的验收项。**这两条都是该沙箱的限制，不是仓库或本机的属性** —— 本机 `.git` 可写，提交由 Claude 在核对硬约束后完成。
+
+2026-08-17 修复 feat-006 compact 缺陷：Next 16.2.10 webpack 曾将 `ws` 的 `Sender` / `buffer-util` 打进 server bundle，破坏 `buffer-util` 的延迟导出改写，最终在 compact 发送时抛出 `b.mask is not a function` 并被错误映射为 400。`serverExternalPackages: ["ws"]` 已生效；action API 现在只把明确的 supervisor 状态冲突映射为 409，其余内部异常为 500，输入校验仍为 400。
+
+codex 曾额外加上 `experimental.esmExternals: false`（理由是让产物呈现 CommonJS 外部引用），**该开关经实测确认不必要，已移除**：去掉后 ws 仍是外部引用，只是形式从 `require("ws")` 变为 `import("ws")`，`Sender` / `buffer-util` / `WS_NO_BUFFER_UTIL` 内联均为 0，且真实运行时 compact 不再抛 mask 错误。真正起作用的只有 `serverExternalPackages`。保留该实验开关会引入 Next 的“不推荐修改”警告和一处无收益的配置面。
 
 ## Status
 
@@ -29,7 +33,7 @@ feat-006 的 apps/admin 已实现，apps/web 已在最后的独立删除范围�
 
 ### What's In Progress
 
-- [ ] **feat-006 M2 Web 后台管理（apps/admin）** — 核心实现、配置同步和 apps/web 删除已完成；`./init.sh` 与 admin 生产构建通过。剩余人工验收：hello 驱动的进程控制闭环、JSONL 字节只读、10MB 日志性能，以及受限环境下未能观察的崩溃 stderr UI，详见 Evidence 表。
+- [ ] **feat-006 M2 Web 后台管理（apps/admin）** — 核心实现、配置同步、apps/web 删除和本次 ws/错误映射修复已完成；`./init.sh` 与 admin 生产构建通过。剩余人工验收：hello 驱动的进程控制闭环、JSONL 字节只读、10MB 日志性能，以及受限环境下未能观察的 compact 真实回路与崩溃 stderr UI，详见 Evidence 表。
 
   实现期需要注意的既有约束：
   - 依赖方向只能新增 `apps/admin <- client-core, protocol, utils`；**不得**新增 `apps/server <- client-core`。同步 `AGENTS.md` 依赖表与根 `tsconfig.json` references。
@@ -84,7 +88,8 @@ pnpm tui
 - [ ] **reasoning 交错信息丢失**：client-core 中每轮 reasoning 累加为一个字符串，无法还原 think → tool → think 的真实交错，当前每轮只呈现工具调用前的一个 thinking 块。要还原需扩展 `packages/protocol`。
 - [x] **compact 无服务端入口**：已由 feat-004 解决。server 提供单连接 WS compact / daydreaming 请求，`memoryDir` 和 scheduled compact 阈值由配置注入；scheduled 调度只消费 runtime `done` 输出事件。
 - [ ] **运行环境未隔离**：多个 server 实例同时启动会撞端口 8787 并共写 `~/.caicaiclaw/history.jsonl`。需要并行运行时自行配置 `.env`。
-- [ ] **当前 Codex 沙箱无法执行 admin 进程闭环**：Node/WebSocket `listen` 在 127.0.0.1 上返回 `EPERM`，child_process 的 piped stdout/stderr 也不转发；代码已完成静态检查和临时文件边界验收，需在正常本机环境补做启动、停止、重启、stderr 与大日志实测。
+- [x] **Codex 沙箱无法执行 admin 进程闭环（限制属沙箱，不属本机）**：codex 在其沙箱内的启动命令于 tsx IPC 管道 `/tmp/tsx-1000/16.pipe` 返回 `listen EPERM`，Node/WebSocket 127.0.0.1 listen 同样受限，child_process 的 piped stdout/stderr 也不转发。**本机无此限制** —— Claude 已在本机用隔离端口（admin=39001、ws=39002）与临时数据目录实测通过 start / hello→running / compact / stop，详见 Evidence 表。下次遇到「跑不起来」先分清是沙箱还是本机。
+- [ ] **feat-006 剩余三项运行时验收未执行**：restart、崩溃 stderr 在 UI 的呈现、10MB 日志下 `/logs` 响应与 JSONL 字节只读。前两项需要构造子进程异常退出，第三项需要生成大日志，均建议在本机手工执行。
 
 ## Decisions Made
 
@@ -126,10 +131,13 @@ pnpm tui
 | feat-005 真实终端 Shift+Enter | 用户在真实终端操作（Windows Terminal + tmux 3.4） | **fail（环境不支持）** | 2026-08-17。经三组探针实测定位为终端不支持 kitty 键盘协议（`CSI ? u` 回应 0 字节，而对照 primary DA 正常回 `ESC[?1;2;4c`，证明回应通道通畅），非代码缺陷。用户决策换终端、代码不动，据此不阻塞 feat-005。 |
 | feat-005 Shift+Enter 代码路径 | 一次性探针脚本（已删除） | pass | 喂入 kitty 编码 `CSI 13;2u` / `CSI 13;2:1u` / `CSI 13;2;13u`，复刻 ink `use-input.js` 的 key 派生逻辑后均得 `name=return, shift=true`，在 `editBuffer` 走 `insert-newline`；对照普通 `\r` 得 `submit`。**这是喂入编码的探针验证，不是真机按键。** |
 | feat-005 支持 kitty 终端上的真实按键换行 | 用户在支持 kitty 协议的终端操作 | **未执行** | 用户决策换终端但尚未在新终端回归此项。功能正确性目前仅由上一行的探针证据支撑。 |
-| feat-006 静态验证 | `./init.sh` | pass | 2026-08-17：typecheck、lint、format:check 全部通过。 |
-| feat-006 admin build | `pnpm --filter @caicaiclaw/admin build` | pass | 2026-08-17：Next 16 webpack production build 编译、类型检查、页面生成通过；Turbopack 在本沙箱因 CSS 子进程端口权限失败，build script 固定使用 webpack。 |
+| feat-006 静态验证 | `./init.sh` | pass | 2026-08-17 本次修复后串行执行：`pnpm typecheck`、`pnpm lint`、`pnpm format:check` 全部通过，输出 `=== Verification complete ===`。并行跑 build 的一次缺失 `.next/types` 是构建清理竞争，随后串行重跑通过。 |
+| feat-006 admin build | `pnpm --filter @caicaiclaw/admin build` | pass | 2026-08-17：Next.js `16.2.10 (webpack)` 输出 `Compiled successfully`、`Finished TypeScript`、静态页 `9/9`，路由清单含 `/agent` 与 `/api/agent/action`。（codex 当时的构建含 `experimental.esmExternals: false` 及其“不推荐修改”警告；该开关随后经实测证否并移除，移除后重新 build 仍通过、无该警告。） |
+| feat-006 ws 外置 bundle 验证 | `rg` 检查 `apps/admin/.next/server` | pass | 实际输出：`route.js ... a.exports=require("ws")` 两处、`require_ws_count=2`；JS 内 `Sender=0`、`buffer-util=0`、`WS_NO_BUFFER_UTIL=0`。NFT 仅追踪 node_modules 下原始 `ws` 文件，未把实现内联进 JS。 |
 | feat-006 memory/logs 边界 | 一次性 Node + `tsx` 临时目录脚本 | pass | 2026-08-17：乐观锁冲突、原子替换无 `.tmp`、符号链接逃逸拒绝、反向日志分页、损坏行号和工具结果 offset/limit 均通过。 |
-| feat-006 supervisor 运行时 | 一次性 Node + `tsx` supervisor harness | **待人工验收** | 本沙箱对 127.0.0.1 listen 返回 `EPERM`，无法建立 control hello；另 child_process piped stderr 不转发，无法据此验收崩溃 stderr UI。 |
+| feat-006 supervisor 运行时（start / hello→running / compact / stop） | 隔离脚本：`node --import tsx/esm apps/admin/src/server.ts`，admin=39001、ws=39002、数据目录 `/tmp/caicai-fix-verify`（跑完已删） | pass | 2026-08-17 由 Claude 在本机实测（codex 沙箱 `listen EPERM` 跑不了，本机可以）。实际输出：admin 2s 内就绪；`{"action":"start"}` → HTTP 200 且 `status:"starting"`, pid 35257；t=1s `starting` → t=2s **`running`**（证明 control 连接收到 `hello`，非仅进程存活）；`{"action":"compact"}` → **无 mask 错误**，返回 `{"error":"cannot compact without committed turns after the current checkpoint"}`（空历史下的正确 runtime 拒绝，证明请求已成功抵达 runtime）；`{"action":"stop"}` → HTTP 200、`status:"stopped"`、`exitCode:0`、`forcedKill:false`（graceful 退出）。admin.log 全程无 `mask is not a function`。**未覆盖**：restart、崩溃 stderr UI、10MB 日志性能。 |
+| feat-006 ws mask 缺陷修复确认 | 上一行同一次实测 + 构建产物检查 | pass | 修复前点 compact 报 `b.mask is not a function` 并被误映射为 400；修复后真实回路不再抛该错。产物侧：`Sender`、`buffer-util`、`WS_NO_BUFFER_UTIL` 内联均为 0（`.nft.json` 里出现 `permessage-deflate` 属 Node File Trace 的部署清单，非内联代码）。 |
+| feat-006 `esmExternals: false` 必要性 | 移除该开关后重新 build + 上述运行时实测 | **确认不必要，已移除** | 去掉后构建通过，ws 仍为外部引用（形式由 `require("ws")` 变为 `import("ws")`），内联仍为 0，运行时 compact 正常。起作用的只有 `serverExternalPackages: ["ws"]`。 |
 | feat-006 大日志性能 / JSONL 字节只读 | 10MB 手动验收 | **待人工验收** | 需要可监听且可运行 agent 的本机环境；本次未编造响应时间、内存或 hash 结果。 |
 
 ## Notes for Next Session
@@ -143,3 +151,4 @@ pnpm tui
 - 所有 feat-003 / feat-004 / feat-005 的验收脚本都是一次性的、跑完即删，**证据不可重跑**。要回归验证需重新搭建：protocol / config 相关的脚本必须放在 `apps/server` 下跑（workspace 依赖只在消费方目录内可解析），runtime 行为脚本放在 `packages/agent-core` 下跑且**不能 import protocol**（依赖方向不允许）；假模型要真的继承 `SimpleChatModel`，用 `{invoke, bindTools}` 裸对象会让 turn 直接 `turn.failed`。
 - 追加 checkpoint 的验收需要至少 4 个 committed turn：`DEFAULT_PRESERVED_TURNS = 3`，turn 数不足时 compact 不会产生 checkpoint，容易被误读成 bug。
 - feat-006 已完成代码交付但未满足运行时验收完成门槛；人工验收通过后再将 feature 状态改为 `done`。
+- feat-006 本次缺陷根因：Next webpack 的默认 ESM externals 将 `ws` 错误内联时，`buffer-util` 的 module.exports 事后 mask 改写丢失，`sender` 解构到非函数；修复后必须保留 `ws` 外置产物检查，避免只看 build 成功。

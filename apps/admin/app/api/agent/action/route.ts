@@ -5,6 +5,14 @@ import { getSupervisor, type MaintenanceAction } from "../../../../src/lib/super
 
 export const dynamic = "force-dynamic";
 
+function isAgentStateConflict(message: string): boolean {
+    return (
+        message === "agent is already stopping" ||
+        message.startsWith("cannot start agent while status is ") ||
+        message.startsWith("cannot stop agent while status is ")
+    );
+}
+
 export async function POST(request: NextRequest): Promise<NextResponse> {
     const unauthorized = requireAuth(request);
     if (unauthorized) return unauthorized;
@@ -26,7 +34,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         return NextResponse.json({ snapshot: supervisor.getSnapshot(), summary });
     } catch (error) {
         const message = safeErrorMessage(error);
-        const status = message.includes("already") || message.includes("cannot") ? 409 : 400;
+        const status = isAgentStateConflict(message) ? 409 : 500;
         return errorResponse(message, status);
     }
 }
