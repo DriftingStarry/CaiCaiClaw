@@ -32,7 +32,7 @@
             "dependencies": [
                 "feat-001"
             ],
-            "status": "planned",
+            "status": "done",
             "touches": [
                 "apps/web"
             ],
@@ -43,7 +43,7 @@
                 "pnpm typecheck、pnpm lint、pnpm format:check 全部通过",
                 "记录 Web 端连接、断线重连与消息收发的手动验收结果"
             ],
-            "evidence": "依赖已就绪：feat-001 已合并，传输层位于 packages/client-core/src/transport.ts（导出 CaiCaiWsClient、WebSocketLike、WebSocketFactory、buildWsUrl）。迁移时注意 onError 签名已放宽为 (error: unknown) => void，受 strictFunctionTypes 逆变检查，apps/web 现有的 (e: Event | Error) 回调需先调整类型才能赋值。apps/web 当前仍在使用自己的 adapter 副本。"
+            "evidence": "已合并到 main（merge e12992f）。apps/web 删除自带 wsClient/config，store 复用 @caicaiclaw/client-core 的 CaiCaiWsClient/buildWsUrl 并注入浏览器 WebSocket 工厂；clientId 持久化、重连、消息收发和协议版本不匹配主动断开行为保持。./init.sh 与 Web production build 通过；用户于 2026-08-17 确认完成真实手动验收。"
         },
         {
             "id": "feat-003",
