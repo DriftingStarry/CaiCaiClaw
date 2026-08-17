@@ -31,10 +31,11 @@
 
 > **状态 ↔ 行为 严格分离，永不耦合。**
 >
-> - **状态**（消息、记忆、做过什么）存进**事件日志**，是唯一真相，重启可恢复。
+> - **情景 / 运行状态**（消息、做过什么、上下文 checkpoint）存进 append-only **事件日志**，重启可恢复。
+> - **语义 / 工作记忆**（人格、事实、任务）以可读写的 **Markdown 文件**为唯一真相；事件日志可以审计其变更，但不负责重建文件内容。
 > - **行为**（tools、prompts、上下文构建方式）来自**可加载的文件 / config**。
 >
-> 守住这一条，后续里程碑都是**加法**：Pi 式 `reload`（M3）靠它成立，实时多车道（M4）靠它并存。早期唯一不能随便做的，就是别把行为焊死进状态（例如把人格 inline 进系统提示词、把上下文拼装逻辑埋进主循环）。
+> 每类信息只能有一个真相源：compaction summary 是从事件历史派生的上下文 checkpoint，不是另一份长期记忆；拼装后的 SystemMessage 是运行时投影，不回写为状态。守住这一条，后续里程碑都是**加法**：Pi 式 `reload`（M3）靠它成立，实时多车道（M4）靠它并存。
 
 # 路线图
 
@@ -42,7 +43,7 @@
 | --- | --- | --- |
 | M0 | 已有基础：ReAct + 工具注册 + 单 runtime + WS + 事件队列/心跳骨架 | [已完成] 当前基线 |
 | M1 | 最小可运行版本（MVP）：单心智 + tui/web 双端 + 极简上下文管理 | [已完成] |
-| M2 | 上下文精进（compaction）+ Web 后台管理 | [待定] |
+| M2 | 上下文精进（compaction）+ Web 后台管理 | [已定] 记忆与 compaction 模式已确定，待实现 |
 | M3 | Pi 式运行时自我修改（`reload`） | [待定] |
 | M4 | 实时响应与外部渠道接入 | [待定] |
 
@@ -101,13 +102,85 @@ JSONL 每行是 version 1 event envelope：`input.accepted`、`turn.started`、`
 
 **目标**：上下文管理从滑动窗口进化到**滚动摘要（compaction）**；Web 后台可查看 agent 的记忆、行为日志与当前状态。
 
-**关键点**
+### 记忆分层
 
-- **后台几乎是白送**：= M1 那份 jsonl 事件日志 + 当前 raw history projection 的**只读视图**（事件溯源的红利）。
-- **compaction 只改 `buildContext` 内部**，不碰主循环；参考 Pi 的 custom compaction（按主题 / 代码感知 / 换小模型摘要）。
-- **记忆两类**：情景记忆（= 事件日志，已有）+ 开始做语义记忆（摘要 / 事实，**文件式**）。
+M2 明确区分三类内容，避免把有损摘要当作长期记忆：
 
-**明确不做**：向量检索（除非证明必要）；message 引用标记（类 GC refcount）等优化项后置。
+- **情景记忆**：完整经历、输入输出和工具审计，继续以 `history.jsonl` 为唯一真相源；Web 后台按需从日志读取，不要求 runtime 常驻完整历史。
+- **语义 / 工作记忆**：以 `.caicaiclaw` 下的 Markdown 为唯一真相源。`SYSTEM.md` 保存 operator 控制的基础行为，`Role.md` 保存 agent 可自我维护的人格，`Memory.md` 保存稳定事实与长期经验，`tasks/` 保存任务状态。
+- **上下文 checkpoint**：由历史派生的滚动摘要和少量近期原始 turns，以 `context.compacted` 事件持久化。它只服务于模型上下文恢复，可以再次生成，不替代原始历史或 Markdown 记忆。
+
+Markdown 文件允许人工编辑，也允许未来由受限工具修改；runtime 负责在每轮构建上下文时读取一致快照。由 runtime 发起的记忆修改可以向 JSONL 追加路径、前后哈希和原因用于审计，但 Markdown 内容仍是语义记忆的真相源。
+
+### 文件式记忆
+
+目录结构：
+
+```text
+.caicaiclaw/
+├── SYSTEM.md
+├── Role.md
+├── Memory.md
+├── history.jsonl
+└── tasks/
+    ├── Index.md
+    ├── <task>.md
+    └── archived/
+```
+
+- `SYSTEM.md` 是 operator-controlled constitution，不由自主反思流程修改。
+- `Role.md` 只保存人格、自我叙事、偏好与价值倾向，不保存任务进度、运行权限或安全边界。runtime 暴露 `daydreaming()` 作为未来的人格反思入口；M2 只提供方法，不自动调用。写入必须限制到允许的记忆文件并使用原子替换，避免中断时留下半个文件。
+- `Memory.md` 保存用户事实、重要关系、稳定结论和可复用经验，避免把这些内容混入人格或任务列表。
+- `tasks/Index.md` 只保存唯一当前任务的恢复摘要，以及所有待办任务的名称、概要和相对链接。当前任务摘要包含目标、下一步、阻塞项和更新时间；详细内容、进展与验收标准写入对应 task 文件。完成后把 task 文件移入 `tasks/archived/` 并从 Index 的活动列表移除。
+
+目录与链接统一使用小写 `tasks`，避免在大小写敏感与不敏感的文件系统之间产生两套路径。
+
+### Context 构建
+
+`buildContext()` 每轮从持久状态构造一次 execution state，固定顺序为：
+
+1. 第一条且唯一的常规 `SystemMessage`：runtime 硬编码的记忆协议与权限边界、`SYSTEM.md`、`Role.md`、`Memory.md`、`tasks/Index.md`，按固定分隔符拼接。只有稳定的协议约束硬编码；人格和可演化行为继续来自文件。
+2. 最新 `context.compacted` 中的滚动摘要，以明确标记的历史资料消息注入，不能提升为 system authority，也不能把其中引用的用户或工具文本当作新指令。
+3. checkpoint 保存的最近若干个完整 turns；保留数量是可配置策略，不能拆开一次 turn 或 tool-use / tool-result 配对。
+4. checkpoint 之后新提交的完整 turns。
+5. 当前批次的用户输入。
+
+`tasks` 只自动注入 `Index.md`；agent 需要具体任务细节时再读取对应 task 文件。所有自动注入的 Markdown 都需要独立大小预算，超出时应返回明确错误或受控裁剪，不能静默吞掉文件尾部。
+
+### Compaction
+
+compaction 是 runtime 的维护操作，不属于普通 ReAct 主循环。`AgentRuntime` 暴露异步 `compact()` 方法供 server 调用，但 M2 暂不在 runtime 内决定触发时机；后续由 server 按固定的已提交 turn 数调度，也可以提供手动入口。
+
+一次压缩只允许在 quiescent boundary 执行：没有 active turn、pending input 或未完成 tool call。外部调用必须与输入处理串行化；若调用时 runtime 忙碌，可以排队到当前 turn 完成，不能与 history append 并发修改 projection。
+
+压缩过程固定为：
+
+1. 读取上一个 checkpoint 摘要、其后已提交的完整 turns，以及 compaction 专用 prompt。
+2. 从待压缩段尾部保留最近若干个完整 turns，其余内容交给不绑定 tools 的摘要模型；摘要调用只允许一轮纯文本输出。
+3. 摘要记录用户目标、关键事实、技术或行为决策、错误与修复、文件 / 工具引用、当前进展和待办事项，但不复制推理草稿，也不声称未经验证的结果。
+4. 校验摘要非空且未超过预算；调用失败时不改变当前 checkpoint。
+5. 成功后 append 自包含的 `context.compacted` 事件，再更新内存 projection。事件至少记录 `compactionId`、覆盖到的 sequence、summary、preserved turns、prompt version、model 和 `manual | scheduled` trigger。
+6. 下一次 compaction 只合并旧摘要和 checkpoint 后的新 turns，不重新摘要完整 JSONL。
+
+checkpoint 是追加事件，不重写、不截断旧日志。启动恢复时，active context projection 从最新 checkpoint 开始，只保留 checkpoint 及其后的历史；完整日志继续留在磁盘供后台、审计和精确查询。初始实现可以流式扫描日志定位最新 checkpoint，扫描时不累计更早的消息；若启动 I/O 后续成为瓶颈，再增加可重建的 byte-offset sidecar index，而不是改变 JSONL 的真相源地位。
+
+### 长 Tool Result
+
+长工具结果必须先完整写入 `tool.completed`，再把模型可见的 `ToolMessage` 投影为状态、长度、头尾预览和稳定引用：
+
+```text
+history://turn/<turnId>/tool/<toolCallId>
+```
+
+配套只读工具按 `turnId + toolCallId` 查询原始结果，并支持 offset / limit 分页；引用不能使用 JSONL 行号，因为行号是存储实现细节。该投影既用于后续 `buildContext()`，也用于同一 ReAct turn 内工具执行后的下一次模型调用，否则只处理 buildContext 无法避免单轮长结果撑爆上下文。
+
+`tool.completed.result` 是工具原始结果的唯一载体；`turn.output_committed` 中的 ToolMessage 只保存投影，避免把同一份长结果在 JSONL 中重复持久化。读取工具必须返回清晰的缺失、损坏和越界错误，不得把任意文件读取能力伪装成 history 查询。
+
+### Web 后台边界
+
+后台可以自由读取和编辑 `.caicaiclaw` 管理的 Markdown 文件，包括 `SYSTEM.md`、`Role.md`、`Memory.md` 和 `tasks/`；保存后由后续 `buildContext()` 读取新内容。JSONL 及其 history / checkpoint projection 对后台严格只读，历史详情、长工具结果和旧 turns 通过分页查询从磁盘加载，后台不得直接改写、截断或补写事件日志。后台同时提供显式 `compact()` 与 `daydreaming()` 操作，它们必须调用 runtime 公开方法并遵守各自的串行化、空闲边界和文件写入约束，不能通过直接修改持久化文件模拟执行。runtime 不为后台常驻完整历史。
+
+**明确不做**：向量检索（除非文件式记忆证明不足）；自动触发 `daydreaming()`；按 token 阈值或 413 自动 compact；重写 / 截断原始 JSONL；message 引用 GC、摘要分支与多级 checkpoint 等优化项后置。
 
 ## M3 · Pi 式运行时自我修改
 
