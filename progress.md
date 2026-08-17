@@ -3,11 +3,13 @@
 ## Current State
 
 **Last Updated:** 2026-08-17
-**Active Feature:** feat-005 TUI 鼠标序列消费与真实终端验收（代码已完成，卡在真实终端人工验收）
+**Active Feature:** 无。feat-001 ~ feat-005 全部 `done`，M1 与 M2 第一阶段收尾。
 
-M1 与 M2 第一阶段已收尾。feat-004 已补齐 server compact / daydreaming 入口与 scheduled compact 调度并通过独立复核。feat-005 的鼠标消费器代码已完成，纯函数、真实 Ink 集成与真实终端三项交互验收（备用屏、真实鼠标滚轮、双端共享 runtime）均已通过。
+feat-004 已补齐 server compact / daydreaming 入口与 scheduled compact 调度并通过独立复核。feat-005 的鼠标消费器代码已完成，纯函数、真实 Ink 集成与真实终端三项交互验收（备用屏、真实鼠标滚轮、双端共享 runtime）均已通过。
 
-**feat-005 仍为 `blocked`，唯一未通过项是 kitty Shift+Enter 换行**：用户于 2026-08-17 在 Windows Terminal + tmux 3.4 环境实测失败。已定位为终端不支持 kitty 键盘协议导致 Enter 与 Shift+Enter 发出相同字节，属环境能力缺失而非代码缺陷（三组实测详见 Blockers / Risks）。**唯一待办是用户在两条处置方案间做决策**，见 Decisions Made 中该条的 2026-08-17 更新。
+feat-005 于 2026-08-17 由用户决策置为 `done`：Shift+Enter 在其 Windows Terminal + tmux 3.4 环境实测失败，已定位为终端不支持 kitty 键盘协议（Enter 与 Shift+Enter 发出相同字节，属环境能力缺失而非代码缺陷，三组实测详见 Blockers / Risks）。用户选择换用支持 kitty 协议的终端而不改代码。**留痕：换行功能在支持 kitty 协议的终端上的实际按键确认尚未执行过**，代码路径的正确性目前只由喂入 kitty 编码的探针验证，见 Evidence 表。
+
+下一步是 README 里的 Web 后台管理，尚未登记为 feature。
 
 ## Status
 
@@ -17,19 +19,18 @@ M1 与 M2 第一阶段已收尾。feat-004 已补齐 server compact / daydreamin
 - [x] **feat-002 Web 迁移到 client-core 传输层** — 删除 `apps/web` 自带 WebSocket adapter，store 改用 `@caicaiclaw/client-core` transport 并注入浏览器原生 WebSocket 工厂；保留 `NEXT_PUBLIC_CAICAI_WS_URL` 配置与 `clientIdentity` 持久化；更新 `apps/web/README.md`。已合并（commit be131bb, merge e12992f）。
 - [x] **feat-003 M2 上下文精进** — Markdown memory snapshot（独立预算 / 明确错误）、固定顺序 `buildContext`、append-only `context.compacted` checkpoint 与严格回放、quiescent 串行 compaction、二次 compaction 合并、受限 `history_read` 工具供模型按稳定引用分页读取原始长工具结果。`apps/server` 仅传入真实 `openrouterModel` 作为 checkpoint 审计字段。已合并（merge 4704266）。
 - [x] **feat-004 Server compact 与 memory 调度入口** — server 配置 `memoryDir` 与 `CAICAI_COMPACT_EVERY_TURNS`，WS compact / daydreaming 单连接入口，按 `done` 事件计数的 scheduled compact，AgentRuntime 共享维护队列与 Role.md 原子反思写入。已完成，证据见下表与 `feature_list.json`。
-- [x] **feat-005 TUI 鼠标序列消费（代码部分）** — 新增 `apps/tui/src/hooks/mouseSequence.ts` 独立状态机消费器，`App.tsx` 只做分发，删除 `parseMouseWheel`。X10 降级与 SGR 跨 chunk 分片两条泄漏路径已封死；组装被证伪或超长时回吐缓冲，不吞后续按键。commit f89ac99。
+- [x] **feat-005 TUI 鼠标序列消费与真实终端验收** — 新增 `apps/tui/src/hooks/mouseSequence.ts` 独立状态机消费器，`App.tsx` 只做分发，删除 `parseMouseWheel`。X10 降级与 SGR 跨 chunk 分片两条泄漏路径已封死；组装被证伪或超长时回吐缓冲，不吞后续按键。commit f89ac99。真实终端验收三项通过（备用屏、真实鼠标滚轮、双端共享 runtime）；Shift+Enter 一项在用户环境失败，根因为终端不支持 kitty 协议，用户决策换终端、代码不动，据此置为 `done`。
 - [x] **Harness 迁移** — 从多 worktree lane 变式回到 harness-creator 原本的单 lane 模式：删除 `harness/lanes.sh`、`harness/wt.sh`、`harness/lib/workspace.cjs` 与 `.harness/<slug>/` 分片，状态合并进根级 `feature_list.json` 与本文件。
 
 ### What's In Progress
 
-- [ ] **feat-005** 代码已完成，真实终端验收四项中三项通过；Shift+Enter 一项因终端能力缺失失败，等待用户在两条处置方案间决策。除此之外无进行中的工作。
+无。`feature_list.json` 中已登记的 feature 全部 `done`。
 
 ### What's Next
 
-1. 用户就 Shift+Enter 做决策：(a) 换用支持 kitty 协议的终端后按原路径回归验收，代码不动；(b) 把 Ctrl+J 提升为一等换行键并更新 `Composer` 提示文案。决策后 feat-005 即可置为 `done`。
-2. 若选 (b)，改动前先读 Blockers / Risks 里那条实测结论 —— 特别是「不要打开 tmux `extended-keys`」这一反向警告。
+1. 登记并实现 README 里的 Web 后台管理（M2 剩余方向，尚未登记为 feature）。
+2. 用户换到支持 kitty 协议的终端后，顺手确认一次 Shift+Enter 真能插入换行 —— 这是 feat-005 唯一未经真实按键确认的行为，代码路径已由探针验证但未在真机按过。若那时发现不工作，先读 Blockers / Risks 里的实测结论，特别是「不要打开 tmux `extended-keys`」这条反向警告。
 3. 改鼠标相关代码前先读 Blockers / Risks 里消费器的现有行为约定。
-4. feat-005 收尾后，M2 剩余方向是 README 的 Web 后台管理（尚未登记为 feature）。
 
 ## 真实终端验收结果（2026-08-17，用户执行）
 
@@ -38,7 +39,7 @@ M1 与 M2 第一阶段已收尾。feat-004 已补齐 server compact / daydreamin
 | 项目 | 结果 |
 | --- | --- |
 | 备用屏启动与退出恢复 | pass |
-| kitty Shift+Enter 换行 | **fail** —— 环境不支持，见 Blockers / Risks 与 Decisions Made |
+| kitty Shift+Enter 换行 | **fail** —— 该环境不支持 kitty 协议，非代码缺陷；见 Blockers / Risks 与 Decisions Made |
 | 真实鼠标滚轮（transcript 与设置面板均不泄漏转义字符） | pass |
 | Web 与 TUI 双端共享同一 runtime | pass |
 
@@ -51,13 +52,15 @@ pnpm server
 pnpm tui
 ```
 
-四项中三项通过，feat-005 的鼠标序列消费部分至此在真实终端得到确认。唯一失败项 Shift+Enter 已定位为终端能力缺失而非代码缺陷，处置方案待定，因此 feat-005 仍保持 `blocked`。
+四项中三项通过，feat-005 的鼠标序列消费部分至此在真实终端得到确认。唯一失败项 Shift+Enter 已定位为终端能力缺失而非代码缺陷；用户决策换用支持 kitty 协议的终端、代码不动，据此把 feat-005 置为 `done`。
+
+**留痕**：换行在支持 kitty 协议的终端上尚未经过真实按键确认。目前支撑该功能正确性的证据是探针实测（喂入 `CSI 13;2u` 等编码后 ink 派生 `name=return, shift=true` 并走 `insert-newline`），不是真机按键。用户换终端后建议顺手确认一次。
 
 ## Blockers / Risks
 
 - [x] **TUI 鼠标序列消费不完整**：已由 feat-005 修复（commit f89ac99）。改为 `apps/tui/src/hooks/mouseSequence.ts` 的跨 chunk 状态机消费器：SGR(1006) 与 X10 各有独立的组装路径，X10 按固定 5 字节长度消费并以 `charCode - 32` 映射滚轮。**行为约定**（改动前先读）：组装被证伪或累积超过 `MAX_MOUSE_SEQUENCE_LENGTH`（64）时，缓冲**原样回吐为普通输入**而非丢弃 —— 那些字符可能是用户真敲的，静默丢弃会造成可见的输入丢失。裸 `[` 不进入组装状态（判别前缀只有 `[<` 与 `[M`），否则 `[a` 会被整体吞掉；这正是消费器初版引入、后被表驱动测试抓到的回归。`App.tsx` 在回吐跨越多 chunk 时直接 `insert` 文本而不复用 `key`，因为此时 `key` 只描述最后一个 chunk。
 - [x] **TUI 真实终端交互验收**：已于 2026-08-17 由用户执行。备用屏、真实鼠标滚轮、双端共享 runtime 三项通过；Shift+Enter 换行失败，另立下一条。
-- [ ] **Shift+Enter 换行在无 kitty 键盘协议的终端上不可能工作**：不是代码缺陷，是终端能力缺失。三组实测（探针脚本跑完已删）：
+- [ ] **Shift+Enter 换行在无 kitty 键盘协议的终端上不可能工作**：不是代码缺陷，是终端能力缺失。用户已决策换用支持该协议的终端、代码保持不动，故 feat-005 不因此项停留在 `blocked`；但只要有人在不支持的终端上跑 TUI，此限制依旧存在，因此保留为开放风险。三组实测（探针脚本跑完已删）：
     1. 喂入 kitty 编码 `CSI 13;2u` / `CSI 13;2:1u` / `CSI 13;2;13u`，复刻 ink `use-input.js` 的 key 派生逻辑后均得到 `name=return, shift=true`，进 `editBuffer` 走 `insert-newline`。**代码路径正确**。
     2. 在真实 pty（detached tmux pane，`stdin.isTTY=true`）里发 ink auto 模式使用的能力查询 `CSI ? u`，回应 **0 字节**。`Ink.initKittyKeyboard` 在 auto 模式下靠该回应决定是否 `enableKittyProtocol`，200ms 超时后静默放弃，`kittyProtocolEnabled` 保持 false。
     3. 对照组：用 tmux passthrough（`DCS tmux; …ST`，ESC 加倍）把查询直送外层终端，同时发 primary DA。DA 正常回 `ESC[?1;2;4c`，kitty 查询仍无回应 —— **回应通道是通的，是外层 Windows Terminal 不支持该协议**。tmux 3.4 亦为 `extended-keys off`。
@@ -76,7 +79,7 @@ pnpm tui
   - Alternatives considered: 保留 lane 脚本但简化字段表；结论是并行开发的实际需求不足以支撑这套机制。
 - **传输层归属 client-core**：transport 提升到 `packages/client-core`，Web 与 TUI 共用，不在各端重复重连与解析逻辑。
 - **TUI 换行只做 Shift+Enter**，需 kitty 键盘协议；`ws_url` 仅进程内生效，不落盘。
-  - 2026-08-17 更新：该决策在用户的实际终端（Windows Terminal + tmux 3.4）上不成立，Shift+Enter 无法与 Enter 区分。处置方案**待用户决策**，两条候选：(a) 换用支持 kitty 协议的终端（WezTerm / kitty / Ghostty）后此项自然通过，代码不动；(b) 把 Ctrl+J 提升为一等换行键并写进 `Composer` 的提示文案，使换行在所有终端可用。在决策前不改代码，避免猜测用户的终端取向。
+  - 2026-08-17 更新：该决策在用户当时的终端（Windows Terminal + tmux 3.4）上不成立，Shift+Enter 无法与 Enter 区分。**用户决策：换用支持 kitty 协议的终端（WezTerm / kitty / Ghostty），代码保持不动。** 被否决的备选是把 Ctrl+J 提升为一等换行键并写进 `Composer` 提示文案 —— 那会让换行在所有终端可用，但引入第二个换行键位和额外的文案维护面。因此本决策原样保留：**换行依赖 kitty 键盘协议是一个明确的、已知的终端要求，不是缺陷**。
 - **仓库不设 `test` 命令**：测试覆盖率不是完成门槛，行为变更靠与风险相称的手动验收，证据记录在本文件。
 
 ## Evidence of Completion
@@ -106,14 +109,17 @@ pnpm tui
 | feat-005 真实 Ink 集成 | 一次性 `tsx` 脚本 + 真实 Ink 7 render + 真实 stdin `readable` 管道（已删除） | pass | 8/8。X10 不进输入缓冲且触发滚动；设置面板下 X10 与分片 SGR 均不污染 `ws_url`；分片 SGR 首片不落入缓冲、组装后滚动；普通字符仍可输入。 |
 | feat-005 静态验证 | `./init.sh` | pass | 2026-08-17：三项检查全部通过并输出 `=== Verification complete ===`。 |
 | feat-005 真实终端验收（备用屏 / 鼠标滚轮 / 双端共享 runtime） | 用户在真实终端操作 | pass | 2026-08-17 用户确认三项通过：备用屏启动与退出恢复；真实滚轮在 transcript 与设置面板均滚动正常且无转义字符泄漏（真实终端确认了消费器的 X10 / 分片修复）；Web 与 TUI 双端观察到同一 runtime。 |
-| feat-005 真实终端 Shift+Enter | 用户在真实终端操作 | **fail** | 2026-08-17 在 Windows Terminal + tmux 3.4 下失败。经三组探针实测定位为终端不支持 kitty 键盘协议（`CSI ? u` 回应 0 字节，而对照 primary DA 正常回 `ESC[?1;2;4c`），非代码缺陷：喂入 kitty 编码时 ink 派生出 `name=return, shift=true` 并走 `insert-newline`，路径正确。feat-005 保持 `blocked` 的唯一原因，待决策。 |
+| feat-005 真实终端 Shift+Enter | 用户在真实终端操作（Windows Terminal + tmux 3.4） | **fail（环境不支持）** | 2026-08-17。经三组探针实测定位为终端不支持 kitty 键盘协议（`CSI ? u` 回应 0 字节，而对照 primary DA 正常回 `ESC[?1;2;4c`，证明回应通道通畅），非代码缺陷。用户决策换终端、代码不动，据此不阻塞 feat-005。 |
+| feat-005 Shift+Enter 代码路径 | 一次性探针脚本（已删除） | pass | 喂入 kitty 编码 `CSI 13;2u` / `CSI 13;2:1u` / `CSI 13;2;13u`，复刻 ink `use-input.js` 的 key 派生逻辑后均得 `name=return, shift=true`，在 `editBuffer` 走 `insert-newline`；对照普通 `\r` 得 `submit`。**这是喂入编码的探针验证，不是真机按键。** |
+| feat-005 支持 kitty 终端上的真实按键换行 | 用户在支持 kitty 协议的终端操作 | **未执行** | 用户决策换终端但尚未在新终端回归此项。功能正确性目前仅由上一行的探针证据支撑。 |
 
 ## Notes for Next Session
 
 - feat-001 的 runtime harness 是一次性脚本、跑完即删，**证据不可重跑**。若要回归验证滚动与输入行为需重新搭建，要点：ink 7 的 stdin 走 `readable` 事件 + `stdin.read()`，用 `data` 事件会导致按键完全不送达而产生假阴性。
 - feat-001 经两轮独立 review，14 条发现中 13 条已修且经真实 Ink 渲染复核可复现；鼠标序列消费一条只修了单 chunk 完整 SGR 的部分。用户已在此状态上验收，残留项转为 feat-005。
 - `packages/client-core/src/transport.ts` 保留 `onError?: (error: unknown) => void`。若后续新增消费方沿用更窄的 `Event | Error` 回调，需先调整回调参数类型或在注入处适配，避免 strictFunctionTypes 的 TS2322。
-- feat-004 与 feat-005 的代码部分均已完成，`feature_list.json` 里两者的 `doneCriteria` 与证据已写实。feat-005 停在 `blocked` 只因 Shift+Enter 一项验收失败且处置方案待用户决策，**不要在用户决策前把它改成 `done`，也不要自行改换行键位**。
+- feat-001 ~ feat-005 全部 `done`。feat-005 是在 Shift+Enter 一项验收失败的情况下由用户决策置 `done` 的（根因为终端能力缺失，用户选择换终端而非改代码）。**换行在支持 kitty 协议的终端上从未经真实按键确认过** —— 若日后有人报"换行不工作"，先按 Blockers / Risks 里的三步探针确认终端是否支持该协议，再怀疑代码。
+- **不要自行把 Ctrl+J 提升为换行键位。** 该备选已被用户明确否决，理由是不想引入第二个换行键位与额外文案维护面。
 - ink 7 的 kitty 支持是 opt-in + auto 探测：`Ink.initKittyKeyboard` 在 `mode: "auto"` 下先写 `CSI ? u` 并只等 200ms，无回应即静默放弃。要判断某终端能否支持 Shift+Enter，直接在真实 pty 里发该查询看有无回应即可，比翻终端文档快。注意必须在真实 pty 中测：普通 tool shell 没有 TTY（`process.stdin.isTTY` 为 `undefined`），可用 `tmux new-session -d` 起一个 detached pane 拿到真实 pty。
 - 所有 feat-003 / feat-004 / feat-005 的验收脚本都是一次性的、跑完即删，**证据不可重跑**。要回归验证需重新搭建：protocol / config 相关的脚本必须放在 `apps/server` 下跑（workspace 依赖只在消费方目录内可解析），runtime 行为脚本放在 `packages/agent-core` 下跑且**不能 import protocol**（依赖方向不允许）；假模型要真的继承 `SimpleChatModel`，用 `{invoke, bindTools}` 裸对象会让 turn 直接 `turn.failed`。
 - 追加 checkpoint 的验收需要至少 4 个 committed turn：`DEFAULT_PRESERVED_TURNS = 3`，turn 数不足时 compact 不会产生 checkpoint，容易被误读成 bug。
