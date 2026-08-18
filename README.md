@@ -35,7 +35,7 @@
 > - **语义 / 工作记忆**（人格、事实、任务）以可读写的 **Markdown 文件**为唯一真相；事件日志可以审计其变更，但不负责重建文件内容。
 > - **行为**（tools、prompts、上下文构建方式）来自**可加载的文件 / config**。
 >
-> 每类信息只能有一个真相源：compaction summary 是从事件历史派生的上下文 checkpoint，不是另一份长期记忆；拼装后的 SystemMessage 是运行时投影，不回写为状态。守住这一条，后续里程碑都是**加法**：Pi 式 `reload`（M3）靠它成立，实时多车道（M4）靠它并存。
+> 每类信息只能有一个真相源：compaction summary 是从事件历史派生的上下文 checkpoint，不是另一份长期记忆；拼装后的 SystemMessage 是运行时投影，不回写为状态。守住这一条，后续里程碑都是**加法**：实时多车道（M3）靠它并存，Pi 式 `reload`（M4）靠它成立。
 
 # 路线图
 
@@ -44,8 +44,8 @@
 | M0 | 已有基础：ReAct + 工具注册 + 单 runtime + WS + 事件队列/心跳骨架 | [已完成] 当前基线 |
 | M1 | 最小可运行版本（MVP）：单心智 + tui/web 双端 + 极简上下文管理 | [已完成] |
 | M2 | 上下文精进（compaction）+ Web 后台管理 | [已定] 记忆与 compaction 模式已确定，待实现 |
-| M3 | Pi 式运行时自我修改（`reload`） | [待定] |
-| M4 | 实时响应与外部渠道接入 | [待定] |
+| M3 | 实时响应与外部渠道接入 | [待定] |
+| M4 | Pi 式运行时自我修改（`reload`） | [待定] |
 
 ---
 
@@ -62,7 +62,7 @@
 - **`packages/client-core`** —— 与框架无关的客户端状态归约。
 - **`apps/server`** —— `src/server.ts` 提供单 agent 的 `WebSocketServer`。
 - **`apps/admin`** —— Next.js Web 管理端与 agent supervisor。
-- **关键性质**：`this.agent`（编译出的图）、`rawHistoryState`（可回放的完整历史）与 `executionState`（单轮上下文）已分离——这正是核心不变式的雏形，M3 的 `reload` 因此几乎是加法。
+- **关键性质**：`this.agent`（编译出的图）、`rawHistoryState`（可回放的完整历史）与 `executionState`（单轮上下文）已分离——这正是核心不变式的雏形，M4 的 `reload` 因此几乎是加法。
 
 ## M1 · 最小可运行版本（MVP）
 
@@ -79,7 +79,7 @@
 
 1. **抽出上下文构建函数** `buildContext(state) -> messages[]`：从完整 raw history 按完整 turn 选择约最近 30 条消息，再拼 system 与当前输入；execution state 只服务于当前 LangGraph 调用。
 2. **人格 / prompt 文件化**：以 Markdown 存储、运行时读取，**不 inline** 进代码（人格本质是角色扮演）。
-3. **事件日志落 jsonl**：使用 version 1 的 append-only 领域事件记录 input、turn、tool 审计和完整输出消息，启动时严格校验并回放恢复；未完成轮次标记 interrupted，不自动重试。这是「长期运行 agent」与「聊天 demo」的分界线，也是 M2 后台、M3 `reload` 的共同依赖。
+3. **事件日志落 jsonl**：使用 version 1 的 append-only 领域事件记录 input、turn、tool 审计和完整输出消息，启动时严格校验并回放恢复；未完成轮次标记 interrupted，不自动重试。这是「长期运行 agent」与「聊天 demo」的分界线，也是 M2 后台、M4 `reload` 的共同依赖。
 
 **明确不做**：`reload`、语义记忆 / 检索、多子图、概率唤醒、后台管理 UI。tools 保持现有静态 `toolsByName`（已集中，日后改扫目录是局部改动）。
 
@@ -182,24 +182,7 @@ history://turn/<turnId>/tool/<toolCallId>
 
 **明确不做**：向量检索（除非文件式记忆证明不足）；自动触发 `daydreaming()`；按 token 阈值或 413 自动 compact；重写 / 截断原始 JSONL；message 引用 GC、摘要分支与多级 checkpoint 等优化项后置。
 
-## M3 · Pi 式运行时自我修改
-
-**目标**：借鉴 [Pi](https://github.com/earendil-works/pi) 的 `reload` 机制，让 agent **改自己后不重启进程即生效**。
-
-**机制**
-
-- tools / prompts 改为从**可写目录**加载；
-- 新增 `runtime.reload()`：用磁盘上的新 config **重建图、保留 `state`**；
-- 给 agent 一个编辑该目录的工具 + 一个触发 `reload` 的入口。
-
-因状态↔图早已分离、`buildContext` 早已是缝，此步为**加法**，不推翻既有结构。
-
-**自我修改分级**（原则：尽量停在数据 / 配置层）
-
-- L0 改人格 / 记忆（md） · L1 改提示词 · L2 用现有原语组合新工具 · L3 不重编译改核心运行时代码。
-- **L3 最后做、默认收敛**；L0–L2 已覆盖绝大部分可观测收益。
-
-## M4 · 实时响应与外部渠道接入
+## M3 · 实时响应与外部渠道接入
 
 **目标**：以统一模式接入外部渠道，并支撑实时交互场景。
 
@@ -215,3 +198,20 @@ history://turn/<turnId>/tool/<toolCallId>
   - 高频输入流需可**丢弃 / 批量 / 摘要**积压，而非老实排队；
   - 语音 / 形象化场景由 **TTS 按句流水线**主导延迟。
 - 这条路在当前结构下**未被堵死**：到时是新增一条读同一 `state` 的车道，而非改造现有循环。
+
+## M4 · Pi 式运行时自我修改
+
+**目标**：借鉴 [Pi](https://github.com/earendil-works/pi) 的 `reload` 机制，让 agent **改自己后不重启进程即生效**。
+
+**机制**
+
+- tools / prompts 改为从**可写目录**加载；
+- 新增 `runtime.reload()`：用磁盘上的新 config **重建图、保留 `state`**；
+- 给 agent 一个编辑该目录的工具 + 一个触发 `reload` 的入口。
+
+因状态↔图早已分离、`buildContext` 早已是缝，此步为**加法**，不推翻既有结构。
+
+**自我修改分级**（原则：尽量停在数据 / 配置层）
+
+- L0 改人格 / 记忆（md） · L1 改提示词 · L2 用现有原语组合新工具 · L3 不重编译改核心运行时代码。
+- **L3 最后做、默认收敛**；L0–L2 已覆盖绝大部分可观测收益。
