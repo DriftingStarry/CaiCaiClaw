@@ -14,9 +14,11 @@ import {
     AgentRuntimeOptions,
     CompactOptions,
     ExecutionState,
+    Lane,
     RuntimeInput,
     RuntimeOutputEmitter,
     RuntimeOutputEvent,
+    TurnContext,
 } from "./types";
 import { DEFAULT_MEMORY_BUDGETS, readMemorySnapshot, MemorySnapshot } from "./memory";
 import { createHistoryReadTool } from "./historyTool";
@@ -49,7 +51,8 @@ export class AgentRuntime {
     private readonly heartbeatMs: number;
     private readonly onOutput?: RuntimeOutputEmitter;
     private readonly history: RawHistoryStore;
-    private activeTurnId?: string;
+    // Runtime lane state is distinct from history.projection.activeTurns, which maps turn IDs to input IDs.
+    private readonly activeTurns = new Map<Lane, TurnContext>();
     private readonly systemPromptPath: string;
     private readonly memoryDir: string;
     private readonly allowMissingMemoryFiles: boolean;
@@ -211,7 +214,16 @@ export class AgentRuntime {
         });
         const turnId = this.createId("turn");
         const turnCreatedAt = Date.now();
-        this.activeTurnId = turnId;
+        const firstEvent = events[0];
+        if (!firstEvent) throw new Error("cannot create a turn without input events");
+        // Until feat-011 buckets a drain by conversation, a mixed batch uses its first conversation explicitly.
+        // The current local server has one conversation, so this remains deterministic and explainable.
+        const turnContext: TurnContext = {
+            turnId,
+            lane: "deep",
+            conversationId: firstEvent.conversationId,
+        };
+        this.activeTurns.set(turnContext.lane, turnContext);
 
         await this.history.append({
             type: "turn.started",
@@ -243,7 +255,12 @@ export class AgentRuntime {
             const baselineMessageCount = executionInput.messages.length;
             this.executionState = executionInput;
 
-            const finalState = await runAgentStream(this.agent, turnId, executionInput, this.emitOutput.bind(this));
+            const finalState = await runAgentStream(
+                this.agent,
+                turnContext,
+                executionInput,
+                this.emitOutput.bind(this),
+            );
             const completedState = finalState ?? executionInput;
             this.executionState = { messages: completedState.messages, llmCalls: completedState.llmCalls };
 
@@ -270,7 +287,9 @@ export class AgentRuntime {
 
             await this.emitOutput({ type: "error", turnId, error });
         } finally {
-            this.activeTurnId = undefined;
+            if (this.activeTurns.get(turnContext.lane)?.turnId === turnContext.turnId) {
+                this.activeTurns.delete(turnContext.lane);
+            }
         }
     }
 
@@ -280,7 +299,10 @@ export class AgentRuntime {
             throw new Error("compact trigger must be manual or scheduled");
         }
         getPreservedTurnCount(options.preservedTurns);
-        if (this.running || this.activeTurnId || this.queue.size > 0 || this.operationBusyCount > 0) {
+        // Deep lane activity is the maintenance boundary; running only defers to the loop so it
+        // can preserve one global history/queue ordering. With only deep execution, this matches
+        // the previous single-runtime behavior while leaving fast-lane activity independent later.
+        if (this.running || this.activeTurns.has("deep") || this.queue.size > 0 || this.operationBusyCount > 0) {
             return await this.enqueueMaintenance(() => this.startCompaction(options));
         }
         return await this.startCompaction(options);
@@ -288,7 +310,7 @@ export class AgentRuntime {
 
     public async daydreaming(): Promise<string> {
         this.assertAvailable();
-        if (this.running || this.activeTurnId || this.queue.size > 0 || this.operationBusyCount > 0) {
+        if (this.running || this.activeTurns.has("deep") || this.queue.size > 0 || this.operationBusyCount > 0) {
             return await this.enqueueMaintenance(() => this.startDaydreaming());
         }
         return await this.startDaydreaming();
@@ -307,7 +329,7 @@ export class AgentRuntime {
 
     private async flushMaintenanceQueue(): Promise<void> {
         if (
-            this.activeTurnId ||
+            this.activeTurns.has("deep") ||
             this.queue.size > 0 ||
             this.operationBusyCount > 0 ||
             this.maintenanceWaiters.length === 0
@@ -328,7 +350,7 @@ export class AgentRuntime {
     }
 
     private async performCompaction(options: CompactOptions): Promise<string> {
-        if (this.activeTurnId) throw new Error("cannot compact while a turn is active");
+        if (this.activeTurns.has("deep")) throw new Error("cannot compact while a deep lane turn is active");
         if (this.queue.size > 0) throw new Error("cannot compact while input is pending");
         const state = this.history.projection;
         if (state.contextCheckpoint && state.committedTurns.length === 0) {
@@ -389,7 +411,7 @@ export class AgentRuntime {
     }
 
     private async performDaydreaming(): Promise<string> {
-        if (this.activeTurnId) throw new Error("cannot daydream while a turn is active");
+        if (this.activeTurns.has("deep")) throw new Error("cannot daydream while a deep lane turn is active");
         if (this.queue.size > 0) throw new Error("cannot daydream while input is pending");
 
         const memory = this.readMemorySnapshot();
@@ -455,8 +477,7 @@ export class AgentRuntime {
     private projectToolResult(event: ToolResultEvent, message: ToolMessage): ToolMessage {
         const raw = stringifyToolResult(event.result);
         if (raw.length <= this.toolResultProjectionThreshold) return message;
-        if (!this.activeTurnId) throw new Error("cannot project a tool result without an active turn");
-        const reference = `history://turn/${this.activeTurnId}/tool/${event.toolCallId}`;
+        const reference = `history://turn/${event.turnId}/tool/${event.toolCallId}`;
         const previewLimit = 400;
         const head = raw.slice(0, previewLimit);
         const tail = raw.length > previewLimit ? raw.slice(-previewLimit) : "";
@@ -478,15 +499,13 @@ export class AgentRuntime {
     }
 
     private async emitToolStart(event: ToolStartEvent): Promise<void> {
-        const turnId = this.activeTurnId;
-        if (!turnId) return;
         // A rejected append is already on disk, and replay-on-boot rethrows: writing an event the
         // projection will refuse permanently bricks the runtime. Skip instead of poisoning history.
-        if (!this.history.projection.activeTurns.has(turnId)) return;
+        if (!this.history.projection.activeTurns.has(event.turnId)) return;
 
         await this.history.append({
             type: "tool.started",
-            turnId,
+            turnId: event.turnId,
             toolCallId: event.toolCallId,
             name: event.name,
             args: event.args,
@@ -494,7 +513,7 @@ export class AgentRuntime {
         });
         await this.emitOutput({
             type: "tool_call_start",
-            turnId,
+            turnId: event.turnId,
             toolCallId: event.toolCallId,
             name: event.name,
             args: event.args,
@@ -503,15 +522,13 @@ export class AgentRuntime {
     }
 
     private async emitToolResult(event: ToolResultEvent): Promise<void> {
-        const turnId = this.activeTurnId;
-        if (!turnId) return;
         // Same reason as emitToolStart, plus the projection rejects a completion whose start it
         // never saw -- which is reachable whenever emitToolStart skipped this same tool call.
-        if (!this.history.projection.activeToolCalls.get(turnId)?.has(event.toolCallId)) return;
+        if (!this.history.projection.activeToolCalls.get(event.turnId)?.has(event.toolCallId)) return;
 
         await this.history.append({
             type: "tool.completed",
-            turnId,
+            turnId: event.turnId,
             toolCallId: event.toolCallId,
             name: event.name,
             status: event.status,
@@ -520,7 +537,7 @@ export class AgentRuntime {
         });
         await this.emitOutput({
             type: "tool_call_result",
-            turnId,
+            turnId: event.turnId,
             toolCallId: event.toolCallId,
             name: event.name,
             status: event.status,

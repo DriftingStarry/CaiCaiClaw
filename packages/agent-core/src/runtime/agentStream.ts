@@ -1,18 +1,19 @@
 import { AIMessage, AIMessageChunk } from "@langchain/core/messages";
 import { toJsonObject } from "@caicaiclaw/utils";
 import { extractReasoningContent, extractTextContent } from "./messageContent";
-import { ExecutionState, MessageStreamChunk, RuntimeOutputEmitter } from "./types";
+import { ExecutionState, MessageStreamChunk, RuntimeOutputEmitter, TurnContext } from "./types";
 import { getAgent } from "../agent";
 
 type LangGraphMultiStreamChunk = readonly ["messages", MessageStreamChunk] | readonly ["values", ExecutionState];
 
 export async function runAgentStream(
     agent: ReturnType<typeof getAgent>,
-    turnId: string,
+    turnContext: TurnContext,
     inputState: ExecutionState,
     emitOutput: RuntimeOutputEmitter,
 ): Promise<ExecutionState | undefined> {
     const stream = await agent.stream(inputState, {
+        configurable: { turnContext },
         streamMode: ["messages", "values"],
     });
     let finalState: ExecutionState | undefined;
@@ -21,7 +22,7 @@ export async function runAgentStream(
         const [mode, payload] = chunk;
 
         if (mode === "messages") {
-            await emitMessageDelta(turnId, payload, emitOutput);
+            await emitMessageDelta(turnContext.turnId, payload, emitOutput);
             continue;
         }
 
