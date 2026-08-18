@@ -3,7 +3,7 @@
 ## Current State
 
 **Last Updated:** 2026-08-18
-**Active Feature:** 无。feat-001 ~ feat-006 全部 `done` —— feat-006 的人工验收已由用户于 2026-08-17 执行并通过。下一步由用户选定新 feature。
+**Active Feature:** feat-008（M3-0 共享事件契约与日志 v2）。feat-001 ~ feat-007 全部 `done`；M3 设计已定稿写入 `README.md`，切片为 feat-008 ~ feat-015，见下方「M3 提交计划」。
 
 2026-08-18 用户决定调整路线图顺序：M3 为「实时响应与外部渠道接入」，M4 为「Pi 式运行时自我修改（reload）」；README 内部交叉引用已同步。
 
@@ -55,10 +55,49 @@ codex 曾额外加上 `experimental.esmExternals: false`（理由是让产物呈
 
 ### What's Next
 
-1. 由用户选定下一个 feature。`feature_list.json` 现无未完成条目。
+1. 按依赖顺序实现 M3：feat-008 → 009 → 010 → 011 → 012 → 013 →（014 / 015 可并行，均依赖 013）。一次只推进一个。
 2. 用户换到支持 kitty 协议的终端后，顺手确认一次 Shift+Enter 真能插入换行 —— 这是 feat-005 唯一未经真实按键确认的行为，代码路径已由探针验证但未在真机按过。若那时发现不工作，先读 Blockers / Risks 里的实测结论，特别是「不要打开 tmux `extended-keys`」这条反向警告。
 3. 改鼠标相关代码前先读 Blockers / Risks 里消费器的现有行为约定。
 4. 若要让 admin 面板可被同网段访问，先解决 Blockers / Risks 里「agent WS 无认证」那条 —— 当前安全边界只有「仅监听 127.0.0.1」。
+
+## M3 提交计划（2026-08-18 立，实施中若调整须在此记录原因）
+
+设计已写入 `README.md` 的 M3 章节，切片写入 `feature_list.json` 的 feat-008 ~ feat-015。实现交由 codex（model `gpt-5.6-luna`）执行，Claude 负责设计、审查、验收与提交。
+
+**docs 提交（本次先落）**
+
+| 提交 | 意图 | 影响文件 | 验证 |
+| --- | --- | --- | --- |
+| `docs: 确定 M3 实时响应与外部渠道接入设计` | 只写产品方向与切片，不含实现 | `README.md`、`AGENTS.md`、`feature_list.json`、`progress.md` | `./init.sh`（不涉及 TS 改动，仅确认基线未破）、`git diff --check` |
+
+`AGENTS.md` 的依赖表改动是设计的一部分：`packages/utils` 从「零依赖」变为「无工作区依赖 + 仅 zod」，因为 history event schema 要下沉到 `./history` subpath 供 `apps/admin` 共用（admin 依赖方向不含 agent-core）。用户已授权此依赖边。
+
+**feat-008（M3-0）提交单元**
+
+| 序 | 意图 | 预期影响 | 验证 |
+| --- | --- | --- | --- |
+| 1 | `packages/utils` 新增 `./history` subpath 与事件契约（`HISTORY_VERSION=2`、`channelEventSchema`、`rawHistoryEventSchema`、`parseHistoryLine`） | `packages/utils/{package.json,src/history/*}`、根 `tsconfig.json` | typecheck + 一次性 probe 确认 subpath 在 tsc / eslint / Next 三处均可解析 |
+| 2 | `RawHistoryStore` 改用共享 schema 并硬切 v2 校验 | `packages/agent-core/src/runtime/{historyEvents,rawHistoryStore,history}.ts` | 非 v2 非空行报行号并阻止启动；空文件正常初始化 |
+| 3 | per-conversation 常驻投影（有界环形缓冲） | `packages/agent-core/src/runtime/{history,rawHistoryStore}.ts` | 回放构建投影；内存有界 |
+| 4 | `apps/admin` 日志校验改调共享 `parseHistoryLine` | `apps/admin/src/lib/logs.ts` | `/logs` 渲染 v2；admin build |
+| 5 | runtime / server 接入 `ChannelEvent`（紧耦合类型契约，**必须整体一个提交**） | `agent-core/runtime/{types,agentRuntime,context}.ts`、`apps/server/*`、`packages/protocol`、`packages/client-core`、`apps/tui`、`apps/admin` | local WS 单渠道端到端；`./init.sh` |
+
+单元 1~4 各自可独立 `git revert`；单元 5 拆开会让 typecheck 断在中间，故不再切分。
+
+**已在设计阶段固定的决策（实施时不要再改）**
+
+- adapter 与 MCP server 同进程两张脸；MCP 不作为渠道抽象边界。
+- 回复来源渠道走输出路由，不走 tool call。
+- 快车道零 tool call（仅 `defer_to_deep`），近期消息读常驻投影而非查工具。
+- 快车道复用 `Role.md`，不新增人格文件。
+- 有损 intake 为门口裁决：accepted 即必定进上下文，丢弃只发生在门口。
+- L3 审批为提交即返回的状态机，JSONL 是真相源，approve 后由 runtime 执行。
+- 事件日志硬切 v2，不做 v1 upcast（旧日志已由用户手动归档）。
+
+**落地前必须先实测、不得凭假设的两点**
+
+1. LangGraph JS 的 `GraphNode` 第二参数是否确实透传 `RunnableConfig`（feat-009 全靠它）。
+2. `packages/utils` 的 subpath export 在 tsc references、eslint 与 Next webpack 三处的解析（feat-008 单元 1 就要验掉）。
 
 ## 真实终端验收结果（2026-08-17，用户执行）
 

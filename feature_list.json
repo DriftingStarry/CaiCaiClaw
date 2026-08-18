@@ -133,6 +133,143 @@
                 "./init.sh 通过，并记录针对授权/拒绝路径的行为验收"
             ],
             "evidence": "2026-08-17 完成。apps/server 从 CAICAI_WS_TOKEN 读取可选密钥，在 ws 的 verifyClient（HTTP Upgrade）中以 timingSafeEqual 校验 URL token，缺失或错误时返回 401 且不会进入 connection/runtime；空配置保持原有本地无鉴权行为。client-core 的 buildWsUrl 安全编码 token；TUI Tab 设置页新增 ws_token 字段，保存后重连。admin 新增 /settings、受 admin cookie 保护的密钥写入接口与单独 no-store 连接 token 接口；设置读取不回显密钥，持久化覆盖文件默认位于 history.jsonl 同目录、写入为原子 rename 且 mode 0600，supervisor 启动子进程及 control WebSocket 均读取当前密钥。实际 server 入口探针输出 {\"missing\":\"error\",\"wrong\":\"error\",\"valid\":\"open\"}；admin token 存储探针验证 environment fallback、persisted override、mode 600 与 clear fallback 均 passed。实际 pnpm --filter @caicaiclaw/admin build 通过，新增 routes /settings、/api/agent-auth、/api/agent-auth/connection；串行 ./init.sh 通过 typecheck、lint、format check；git diff --check 通过。"
+        },
+        {
+            "id": "feat-008",
+            "name": "M3-0 共享事件契约与日志 v2",
+            "description": "把 history event schema 下沉到 packages/utils 的 ./history subpath export，定义 ChannelEvent，事件日志硬切 version 2（不做 v1 upcast），扩展 per-conversation 常驻投影，并让 apps/admin 的日志校验改调共享 schema。",
+            "dependencies": [
+                "feat-003",
+                "feat-006"
+            ],
+            "status": "not-started",
+            "doneCriteria": [
+                "packages/utils 通过 ./history subpath 导出 HISTORY_VERSION=2、channelEventSchema、rawHistoryEventSchema 与纯函数 parseHistoryLine；utils 不 import langchain/ws/react，subpath 在 tsc references、eslint 与 Next 构建下均可解析",
+                "input.accepted 事件以嵌套 event: ChannelEvent 形式持久化，ChannelEvent 的 schema 只有一份定义，入站校验与日志校验共用",
+                "RawHistoryStore 只接受 version 2；遇到非 v2 的非空行报告行号并阻止启动，空文件仍可在指定路径正常初始化",
+                "projection 增加 per-conversation 常驻投影（有界 recent 环形缓冲、lastActivityAt、droppedCount），且由回放构建",
+                "apps/admin/src/lib/logs.ts 不再自带 version 判断与 KNOWN_EVENT_TYPES，改调共享 parseHistoryLine，/logs 能正常渲染 v2 事件",
+                "local WS 单渠道端到端可用（输入、turn、工具审计、重启回放），./init.sh 通过"
+            ]
+        },
+        {
+            "id": "feat-009",
+            "name": "M3-1 turn 上下文参数透传",
+            "description": "把 runtime 的单字段 activeTurnId 重构为 TurnContext（turnId/lane/conversationId）参数透传，经 LangGraph RunnableConfig.configurable 下发到 toolNode，activeTurns 改为按 lane 的 Map，为双车道并发消除 tool 事件归属串台。",
+            "dependencies": [
+                "feat-008"
+            ],
+            "status": "not-started",
+            "doneCriteria": [
+                "TurnContext 沿 handleEvents → runAgentStream → toolNode 参数透传；toolNode 从 RunnableConfig.configurable 读取，不再读实例字段",
+                "onToolStart / onToolResult / toolResultMessage 的事件都携带其所属 turnId 与 lane；projectToolResult 不再依赖 this.activeTurnId",
+                "runtime 以 activeTurns: Map<lane, TurnContext> 记录在跑的 turn，单车道行为与既有实现一致（tool 审计、长结果投影、失败与 interrupted 语义均不回归）",
+                "已用最小 probe 实测确认 LangGraph 的 GraphNode 第二参数确实透传 RunnableConfig，而非依赖假设",
+                "./init.sh 通过并记录单车道回归验收"
+            ]
+        },
+        {
+            "id": "feat-010",
+            "name": "M3-2 出站路由与 adapter 定向投递",
+            "description": "RuntimeOutputEvent 增加 lane 与 target，server 的广播拆分为 observer 收全量、adapter 只收 target 匹配自己的两条路径，回复来源渠道通过输出路由实现而非 tool call。",
+            "dependencies": [
+                "feat-009"
+            ],
+            "status": "not-started",
+            "doneCriteria": [
+                "RuntimeOutputEvent 带 lane 与可选 target { channel, conversationId, replyTo }",
+                "server 区分 observer 连接与 adapter 连接：observer 收到全部输出，adapter 只收到 target 匹配自身 channel 的输出",
+                "来源渠道的回复不经过任何 tool call，由输出路由投递且支持流式增量",
+                "假 adapter 与 observer 双连接实测定向投递与全量观察，协议版本与 schema 同步更新",
+                "./init.sh 通过"
+            ]
+        },
+        {
+            "id": "feat-011",
+            "name": "M3-3 门口裁决 intake 与双车道",
+            "description": "实现可加载的分流策略、门口裁决式有损 intake（accepted/merged/dropped 三种回执与分区缓冲）、fast/deep 双车道与各自的上下文装配、defer_to_deep 升级工具，并把 compact/daydreaming 的空闲边界收窄到深度车道。",
+            "dependencies": [
+                "feat-010"
+            ],
+            "status": "not-started",
+            "doneCriteria": [
+                "分流策略来自可加载配置，由 runtime 执行；优先级为显式策略 > laneHint > defaults，ws server 不做分流决策",
+                "回执区分 accepted / merged / dropped；一旦回执 accepted 该事件必定进入模型上下文，丢弃只发生在门口，不淘汰已受理事件",
+                "缓冲按通用槽与保留槽分区，alwaysKeep 的 kind 在通用槽耗尽时仍能被受理；每次 dropped 都落 input.dropped 且 reason 取值来自既定枚举",
+                "fast lane 使用独立快模型、单次调用 + 流式、零 tool call（仅 defer_to_deep），上下文为硬编码安全前言 + Role.md + 一行态势 + 该 conversation 常驻投影 + 当前合并批次，不注入 SYSTEM.md/Memory.md/tasks 全文",
+                "两条车道彼此独立串行：深度车道跑长任务期间灌入约 200 条假弹幕，快车道仍能及时响应，实测无队头阻塞",
+                "compact 与 daydreaming 只要求深度车道空闲即可执行；history append 仍全局串行",
+                "CAICAI_FAST_MODEL 与 CAICAI_BACKGROUND_MODEL 已接入并同步 .env.example，未配置时回落到主模型且启动日志明确告知",
+                "./init.sh 通过并记录上述行为验收"
+            ]
+        },
+        {
+            "id": "feat-012",
+            "name": "M3-4 历史查询工具与社交近况",
+            "description": "新增结构化 history_query 只读工具，并通过 heartbeat 由 background model 生成 conversation.digested，向深度车道注入跨渠道社交近况块。",
+            "dependencies": [
+                "feat-011"
+            ],
+            "status": "not-started",
+            "doneCriteria": [
+                "history_query 支持按 conversationId / channel / kind / 时间区间 / authorId 过滤与 offset+limit 分页，缺失与越界返回明确错误，且不能退化为任意文件读取",
+                "heartbeat 为有新活动的 conversation 生成极短 digest 并落 conversation.digested，使用 background model",
+                "深度车道上下文注入的是跨渠道社交近况汇总而非原始弹幕；digest 不自动回写 Memory.md，长期事实仍只能由 daydreaming 写入",
+                "context.compacted 只服务深度车道，快车道 conversation 不进 checkpoint",
+                "./init.sh 通过并记录深度车道能复述近期跨渠道社交活动的验收"
+            ]
+        },
+        {
+            "id": "feat-013",
+            "name": "M3-5 MCP host、动态工具与 L3 审批",
+            "description": "在 apps/server 实现 MCP client host，把 adapter 暴露的工具动态包成 DynamicStructuredTool 并在连接变化时重建图保留 state；实现 L0-L3 权限闸门与提交即返回的 L3 审批状态机。",
+            "dependencies": [
+                "feat-012"
+            ],
+            "status": "not-started",
+            "doneCriteria": [
+                "MCP host 位于 apps/server，agent-core 不 import MCP SDK 或任何渠道 SDK",
+                "adapter 连接/断开时重建图并保留 state；断开后其工具解绑或调用明确失败，不会让模型调用不存在的工具",
+                "常驻只绑 meta 工具与渠道注册表摘要，具体渠道工具集在该渠道 active 时才绑",
+                "权限分级 L0-L3 由 runtime 强制，未分级工具默认按 L3 处理",
+                "L3 工具调用落 approval.requested 后立即返回 pending 且 turn 正常结束，agent 不阻塞等待；approve 后由 runtime 依日志记录的 args 执行，approvalId 一次性消费，重复 decision 被拒绝",
+                "approval_decision 只接受 admin 鉴权路径的消息，adapter 连接提交决策被拒绝",
+                "重启回放后未决审批恢复为 pending；超过 CAICAI_APPROVAL_TTL_MS 落 approval.expired 且语义等同 deny 并通知 agent",
+                "./init.sh 通过，并以假 MCP adapter 记录连接、断开、未分级默认拒绝、审批闭环与越权提交被拒的验收"
+            ]
+        },
+        {
+            "id": "feat-014",
+            "name": "M3-6 首个真实外部渠道",
+            "description": "按 adapter 形态接入第一个真实外部渠道（个人博客或 bilibili 开放平台），验证入站 WS 面与出站 MCP 面在真实平台约束下成立。",
+            "dependencies": [
+                "feat-013"
+            ],
+            "status": "not-started",
+            "doneCriteria": [
+                "adapter 作为独立进程持有平台凭据与连接，同时提供出站 MCP 面与入站 WS 面；核心与 adapter 之间只有 ChannelEvent 与 MCP 工具两个契约",
+                "真实入站事件能进入正确车道并得到回复；出站动作按权限分级执行，公开发布走 L3 审批",
+                "凭据不进入日志、错误信息或事件负载",
+                "./init.sh 通过并记录真实渠道的手动验收"
+            ]
+        },
+        {
+            "id": "feat-015",
+            "name": "M3-7 后台队列、adapter 视图与调试入口",
+            "description": "apps/admin 增加车道与 intake 队列视图、adapter 视图、L3 审批视图，以及注入入站事件与直调出站工具（默认 dry-run）的通用调试入口。",
+            "dependencies": [
+                "feat-013"
+            ],
+            "status": "not-started",
+            "doneCriteria": [
+                "队列视图呈现每车道状态与排队数，以及每 conversation 的槽位占用、按 reason 分类的 droppedCount 与生效策略；事件推送为主、低频轮询兜底，断连后能恢复",
+                "adapter 视图呈现连接状态、已注册工具及权限级别、入站速率、outbound 成败计数与最近错误",
+                "审批视图可查看 pending 与已决历史并执行 approve / deny，显示完整 tool name 与 args",
+                "调试入口可注入 ChannelEvent（含 isSelf 用于验回声抑制），强制标记 debugOrigin=admin 并显示回执 disposition",
+                "调试入口直调出站工具默认 dry-run 不产生真实投递，显式确认后才真实执行，且仍受权限分级与 L3 审批约束",
+                "admin 对 history.jsonl 保持严格只读，调试与审批均走 runtime 公开入口",
+                "./init.sh 通过、admin production build 通过，并记录上述行为验收"
+            ]
         }
     ]
 }
