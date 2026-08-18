@@ -2,6 +2,8 @@ import { AIMessage, BaseMessage, HumanMessage, ToolMessage } from "@langchain/co
 import { RawHistoryEvent, RawHistoryInput } from "./historyEvents";
 import { restoreStoredMessages, serializeHistoryMessages } from "./historyMessages";
 
+const MAX_CONVERSATION_RECENT_MESSAGES = 30;
+
 export type RawHistoryTurn = {
     turnId: string;
     inputIds: string[];
@@ -29,6 +31,13 @@ export type RawHistoryToolEvent = {
     createdAt: number;
 };
 
+export type RawHistoryConversationProjection = {
+    recent: BaseMessage[];
+    lastActivityAt: number;
+    // Admission-time intake will populate this in feat-011; replay keeps it at zero for now.
+    droppedCount: number;
+};
+
 export type RawHistoryState = {
     committedTurns: RawHistoryTurn[];
     pendingInputs: Map<string, RawHistoryInput>;
@@ -44,6 +53,7 @@ export type RawHistoryState = {
     toolEvents: RawHistoryToolEvent[];
     contextCheckpoint?: RawHistoryCheckpoint;
     knownCompactionIds: Set<string>;
+    conversations: Map<string, RawHistoryConversationProjection>;
     lastSequence: number;
 };
 
@@ -62,6 +72,7 @@ export function createEmptyRawHistoryState(): RawHistoryState {
         interruptedTurnIds: new Set(),
         toolEvents: [],
         knownCompactionIds: new Set(),
+        conversations: new Map(),
         lastSequence: 0,
     };
 }
@@ -95,6 +106,7 @@ export function applyRawHistoryEvent(state: RawHistoryState, event: RawHistoryEv
                 createdAt: event.createdAt,
                 message,
             });
+            appendConversationMessages(state, event.event.conversationId, event.event.receivedAt, [message]);
             break;
         }
         case "turn.started": {
@@ -135,6 +147,7 @@ export function applyRawHistoryEvent(state: RawHistoryState, event: RawHistoryEv
                 args: event.args,
                 createdAt: event.createdAt,
             });
+            touchTurnConversations(state, event.turnId, event.createdAt);
             break;
         case "tool.completed":
             assertActiveTurn(state, event.turnId);
@@ -151,6 +164,7 @@ export function applyRawHistoryEvent(state: RawHistoryState, event: RawHistoryEv
                 result: event.result,
                 createdAt: event.createdAt,
             });
+            touchTurnConversations(state, event.turnId, event.createdAt);
             break;
         case "turn.output_committed": {
             const inputIds = state.activeTurns.get(event.turnId);
@@ -175,6 +189,13 @@ export function applyRawHistoryEvent(state: RawHistoryState, event: RawHistoryEv
                 messages: [...inputMessages, ...outputMessages],
             });
 
+            const conversationIds = new Set(
+                inputIds.map((inputId) => state.pendingInputs.get(inputId)?.event.conversationId),
+            );
+            for (const conversationId of conversationIds) {
+                if (conversationId) appendConversationMessages(state, conversationId, event.createdAt, outputMessages);
+            }
+
             for (const inputId of inputIds) {
                 state.pendingInputs.delete(inputId);
             }
@@ -187,6 +208,7 @@ export function applyRawHistoryEvent(state: RawHistoryState, event: RawHistoryEv
             if (!inputIds) throw new Error(`turn ${event.turnId} is not active`);
 
             state.failedTurns.set(event.turnId, event.message);
+            touchTurnConversations(state, event.turnId, event.createdAt);
             for (const inputId of inputIds) {
                 state.pendingInputs.delete(inputId);
             }
@@ -308,4 +330,31 @@ function assertActiveTurn(state: RawHistoryState, turnId: string): void {
     if (!state.activeTurns.has(turnId)) {
         throw new Error(`turn ${turnId} is not active`);
     }
+}
+
+function touchTurnConversations(state: RawHistoryState, turnId: string, activityAt: number): void {
+    const inputIds = state.activeTurns.get(turnId) ?? [];
+    const conversationIds = new Set(inputIds.map((inputId) => state.pendingInputs.get(inputId)?.event.conversationId));
+    for (const conversationId of conversationIds) {
+        if (!conversationId) continue;
+        const projection = state.conversations.get(conversationId);
+        if (projection) projection.lastActivityAt = activityAt;
+    }
+}
+
+function appendConversationMessages(
+    state: RawHistoryState,
+    conversationId: string,
+    activityAt: number,
+    messages: BaseMessage[],
+): void {
+    const projection =
+        state.conversations.get(conversationId) ??
+        ({ recent: [], lastActivityAt: activityAt, droppedCount: 0 } satisfies RawHistoryConversationProjection);
+    projection.recent.push(...messages);
+    if (projection.recent.length > MAX_CONVERSATION_RECENT_MESSAGES) {
+        projection.recent.splice(0, projection.recent.length - MAX_CONVERSATION_RECENT_MESSAGES);
+    }
+    projection.lastActivityAt = activityAt;
+    state.conversations.set(conversationId, projection);
 }
