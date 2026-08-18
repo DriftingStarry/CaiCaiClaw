@@ -7,6 +7,8 @@
 
 2026-08-18 用户决定调整路线图顺序：M3 为「实时响应与外部渠道接入」，M4 为「Pi 式运行时自我修改（reload）」；README 内部交叉引用已同步。
 
+2026-08-18 更新 harness 的 Git 提交纪律：feature 不再等同一个 commit；中大型工作须先在本文件写提交计划，再按可独立 revert 的完整意图逐个暂存、审查、验证和提交。协议/类型与其紧耦合实现可以同提交以维持构建完整性；禁止按会话收尾或用 `git add .` 汇总提交。每个提交的 hash、意图和验证结果须进入 evidence。基线 `./init.sh` 已通过；本次仅修改 harness，不创建 feature 记录。
+
 feat-006 的完整需求与验收标准保存在 `feature_list.json` 的 doneCriteria 中。实现交由 codex（model `gpt-5.6-luna`）执行。
 
 **关键拓扑决策**：用户原计划「在 `apps/server` 基础上做管理端」与「完全控制 agent 进程启停」不能同时成立 —— `apps/server` 本身就是 agent 进程（进程内 `new AgentRuntime()` 并持有 WS server），同进程的管理端在停掉 agent 后自己也不复存在，就没有后台可以点「启动」。故定为 **新增 `apps/admin`（Next.js SSR + supervisor，常驻）+ `apps/server` 作为被 spawn 的子进程**，`apps/server` 职责与代码不变。这同时避免了新增 `apps/server <- client-core` 破坏 Architecture Invariants 的依赖表。
