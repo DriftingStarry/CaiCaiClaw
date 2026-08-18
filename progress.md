@@ -2,8 +2,29 @@
 
 ## Current State
 
-**Last Updated:** 2026-08-18
-**Active Feature:** feat-008（M3-0 共享事件契约与日志 v2）已 `done`，含真实 local WS 端到端验收。feat-001 ~ feat-008 为 `done`；下一步是 feat-009（TurnContext 参数透传）。M3 设计已定稿写入 `README.md`，切片为 feat-008 ~ feat-015，见下方「M3 提交计划」。
+**Last Updated:** 2026-08-19
+**Active Feature:** feat-009（M3-1 turn 上下文参数透传）已 `done`，落为 `2818ed5`（类型层）与 `ae1a2e6`（行为层）两个可独立回滚的提交。feat-001 ~ feat-009 为 `done`；本次只实现单 deep lane 下的 TurnContext 透传与 active lane 状态改造，不实现双车道调度、intake 裁决、fast model、MCP 或审批。下一步是 feat-010（出站路由：`RuntimeOutputEvent` 携带 lane 与 target，区分 observer 与 adapter）。
+
+### feat-009 提交计划
+
+1. **类型层**：新增 `TurnContext` / `Lane`，扩展 `ToolStartEvent` / `ToolResultEvent`，让 `toolNode` 从 `RunnableConfig.configurable` 读取并向工具回调传递 context。预期文件：`packages/agent-core/src/runtime/types.ts`、`packages/agent-core/src/agent.ts`、必要的导出入口。标题：`feat(agent-core): 透传 turn context 到工具节点`。验证：`./init.sh`。
+2. **行为层**：将 runtime 的 `activeTurnId` 改为按 lane 保存的 active turn context，接通 `handleEvents` → `runAgentStream` → LangGraph，并调整工具审计、长结果引用及 deep lane 维护空闲边界。预期文件：`packages/agent-core/src/runtime/agentStream.ts`、`packages/agent-core/src/runtime/agentRuntime.ts`。标题：`feat(agent-core): 按车道维护活动 turn 上下文`。验证：`./init.sh` 与单车道运行时回归验收。
+
+两单元存在类型耦合，但先按计划拆分；若类型层提交无法独立通过 `./init.sh`，将在此处记录原因并合并为一个可独立回滚提交。
+
+两单元最终按计划分别提交，未合并。类型耦合确实存在（行为层引用类型层新增的 `Lane` / `TurnContext`），但方向是单向的：类型层自身可独立通过 `./init.sh`，因此仍满足可独立回滚。
+
+codex 运行沙箱（`--sandbox workspace-write`）无法创建 `.git/index.lock`（`Read-only file system`），故它无法自行划定提交边界；**这是该沙箱模式的限制，不是仓库或本机 `.git` 的属性**。提交拆分、暂存区审查与回归验收均由 Claude 在本机补齐。
+
+### feat-009 实现与验收证据
+
+- 类型层：新增 `Lane` / `TurnContext`，`ToolStartEvent` / `ToolResultEvent` 增加 `turnId` / `lane`，`toolNode` 从 `RunnableConfig.configurable.turnContext` 结构化读取，缺失或非法时抛错。`./init.sh` 实跑通过：`pnpm typecheck`、`pnpm lint`、`pnpm format:check` 均通过。
+- 行为层：`handleEvents` → `runAgentStream` → `toolNode` 透传 context；runtime 使用 `Map<Lane, TurnContext>`，工具护栏和长结果引用改用事件自身 turnId，维护边界按 deep lane 判断。最终 `./init.sh` 实跑通过，输出 `=== Verification complete ===`。
+- 提交单元 1 `2818ed5` feat(agent-core)：透传 turn context 到工具节点。提交前以 `git stash push --keep-index --include-untracked` 隔离出仅含该单元的工作树，单独跑通 `./init.sh`，确认其不依赖行为层。
+- 提交单元 2 `ae1a2e6` feat(agent-core)：按车道维护活动 turn 上下文。`./init.sh` 通过，并在此提交后跑完整回归验收。
+- 独立回归验收（Claude 本机实跑，真实 `SimpleChatModel` 子类 + 真实 LangGraph 图 + 真实 tool，非 mock 运行时，脚本已删除）。实际输出：事件序列为 `input.accepted` / `turn.started` / `tool.started` / `tool.completed` / `turn.output_committed`；`turnIdAttributionCorrect: true`；`toolResultFullyStored: true`（9000 字完整落在 `tool.completed`）；`projectionUsesReference: true` 且 `projectionIsBounded: true`（模型可见消息替换为 `history://turn/<turnId>/tool/call-1`）；`historyReadTotalLength: 9000` 且分页读出内容正确；缺 context 时报 `toolNode requires a valid turn context in RunnableConfig.configurable`；deep lane 活跃期间 compact 报 `cannot compact while a deep lane turn is active`；中断后 `interruptedTurnIds: ["t1"]` 且 `interruptedNotCommitted: true`；重启回放与 checkpoint 语义未回归。
+- LangGraph 是否真的把 `RunnableConfig` 透传给 `GraphNode` 第二参数，由前置最小 probe 实测确认（`invoke` 与 `stream` 两条路径均读到 `configurable.turnContext`），不依赖文档假设。
+- 设计判断：混合 `conversationId` 批次明确取首个输入的 conversation；当前 local server 只有 `local:default`，feat-011 按 conversation 分桶后不再出现混合批次。工具节点读不到 context 直接抛 `toolNode requires a valid turn context in RunnableConfig.configurable`，不回退实例字段。维护操作的业务空闲边界只看 deep lane；`running` 仅用于把操作交给主循环协调全局 history/queue 顺序，当前单车道行为与原实现一致。
 
 2026-08-18 用户决定调整路线图顺序：M3 为「实时响应与外部渠道接入」，M4 为「Pi 式运行时自我修改（reload）」；README 内部交叉引用已同步。
 

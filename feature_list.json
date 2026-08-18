@@ -160,14 +160,15 @@
             "dependencies": [
                 "feat-008"
             ],
-            "status": "not-started",
+            "status": "done",
             "doneCriteria": [
                 "TurnContext 沿 handleEvents → runAgentStream → toolNode 参数透传；toolNode 从 RunnableConfig.configurable 读取，不再读实例字段",
                 "onToolStart / onToolResult / toolResultMessage 的事件都携带其所属 turnId 与 lane；projectToolResult 不再依赖 this.activeTurnId",
                 "runtime 以 activeTurns: Map<lane, TurnContext> 记录在跑的 turn，单车道行为与既有实现一致（tool 审计、长结果投影、失败与 interrupted 语义均不回归）",
                 "已用最小 probe 实测确认 LangGraph 的 GraphNode 第二参数确实透传 RunnableConfig，而非依赖假设",
                 "./init.sh 通过并记录单车道回归验收"
-            ]
+            ],
+            "evidence": "2026-08-19 完成。提交：2818ed5 feat(agent-core) 透传 turn context 到工具节点（新增 Lane/TurnContext，toolNode 改 async (state, config) 并从 RunnableConfig.configurable.turnContext 读取，ToolStartEvent/ToolResultEvent 携带 turnId/lane，requireTurnContext 缺 context 直接抛错不回落实例字段）；ae1a2e6 feat(agent-core) 按车道维护活动 turn 上下文（activeTurnId → activeTurns: Map<Lane, TurnContext>，工具审计与长结果引用改用事件自身 turnId，历史污染护栏保留，维护空闲边界降为 deep lane）。两个提交各自通过 ./init.sh，类型层以 git stash --keep-index 隔离后单独验证可独立 revert。独立回归验收（真实 SimpleChatModel 子类 + 真实 LangGraph 图 + 真实 tool）实际输出：toolEventTypes 为 input.accepted/turn.started/tool.started/tool.completed/turn.output_committed，turnIdAttributionCorrect: true，toolResultFullyStored: true（9000 字完整存于 tool.completed），projectionUsesReference: true 且 projectionIsBounded: true（模型可见消息用 history://turn/<turnId>/tool/call-1），historyReadTotalLength: 9000 且分页读出正确内容，missingContextRejected 报 'toolNode requires a valid turn context in RunnableConfig.configurable'，compactRefusedWhileActive 报 'cannot compact while a deep lane turn is active'，interruptedTurnIds: ['t1'] 且 interruptedNotCommitted: true。LangGraph 透传 RunnableConfig 一项由前置探针实测确认（invoke 与 stream 均读到 configurable.turnContext），未依赖假设。"
         },
         {
             "id": "feat-010",
