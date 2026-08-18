@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { errorMessage } from "@caicaiclaw/utils";
+import type { ChannelEvent } from "@caicaiclaw/utils/history";
 import { AgentConfig, getAgent, ToolResultEvent, ToolStartEvent } from "../agent";
 import { runAgentStream } from "./agentStream";
 import { buildContextWithMemory, flattenTurns, getPreservedTurnCount, selectRecentTurns } from "./context";
@@ -13,7 +14,7 @@ import {
     AgentRuntimeOptions,
     CompactOptions,
     ExecutionState,
-    InboundEvent,
+    RuntimeInput,
     RuntimeOutputEmitter,
     RuntimeOutputEvent,
 } from "./types";
@@ -123,20 +124,20 @@ export class AgentRuntime {
         });
     }
 
-    public async enqueue(event: InboundEvent): Promise<void> {
+    public async enqueue(event: RuntimeInput): Promise<void> {
         this.assertAvailable();
         await this.runExclusive(async () => {
             const inputId = event.inputId ?? this.createId("input");
-            const createdAt = event.createdAt ?? Date.now();
-            const normalizedEvent: InboundEvent = { ...event, inputId, createdAt };
+            const createdAt = event.receivedAt;
+            const normalizedEvent: RuntimeInput = { ...event, inputId };
+            const channelEvent = toChannelEvent(normalizedEvent);
             const message = this.createHumanMessage(normalizedEvent);
 
             await this.history.append({
                 type: "input.accepted",
                 createdAt,
                 inputId,
-                text: normalizedEvent.text,
-                source: normalizedEvent.source,
+                event: channelEvent,
                 requestId: normalizedEvent.requestId,
                 message: serializeHistoryMessage(message),
             });
@@ -203,7 +204,7 @@ export class AgentRuntime {
         });
     }
 
-    private async handleEvents(events: InboundEvent[]) {
+    private async handleEvents(events: RuntimeInput[]) {
         const inputIds = events.map((event) => {
             if (!event.inputId) throw new Error("queued input is missing inputId");
             return event.inputId;
@@ -225,10 +226,9 @@ export class AgentRuntime {
                 await this.emitOutput({
                     type: "input_accepted",
                     turnId,
-                    text: event.text,
-                    source: event.source,
+                    event: toChannelEvent(event),
                     requestId: event.requestId,
-                    createdAt: event.createdAt ?? turnCreatedAt,
+                    createdAt: event.receivedAt,
                 });
             }
 
@@ -544,9 +544,10 @@ export class AgentRuntime {
         });
     }
 
-    private createHumanMessage(event: InboundEvent): HumanMessage {
-        const prefix = event.source ? `[${event.source}] ` : "";
-        return new HumanMessage(`${prefix}${event.text}`);
+    private createHumanMessage(event: RuntimeInput): HumanMessage {
+        const author = event.author.displayName ?? event.author.id;
+        const prefix = `[${event.channel}/${event.conversationId} ${event.kind} ${author}]`;
+        return new HumanMessage(`${prefix} ${event.text}`);
     }
 
     private assertAvailable(): void {
@@ -560,6 +561,13 @@ export class AgentRuntime {
     private toError(error: unknown, fallback: string): Error {
         return new Error(`${fallback}: ${errorMessage(error)}`);
     }
+}
+
+function toChannelEvent(event: RuntimeInput): ChannelEvent {
+    const channelEvent = { ...event };
+    delete channelEvent.inputId;
+    delete channelEvent.requestId;
+    return channelEvent;
 }
 
 function isMissingFile(error: unknown): boolean {

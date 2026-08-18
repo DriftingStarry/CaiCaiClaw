@@ -90,8 +90,8 @@ export function applyRawHistoryEvent(state: RawHistoryState, event: RawHistoryEv
             state.knownInputIds.add(event.inputId);
             state.pendingInputs.set(event.inputId, {
                 inputId: event.inputId,
-                text: event.text,
-                source: event.source,
+                event: event.event,
+                requestId: event.requestId,
                 createdAt: event.createdAt,
                 message,
             });

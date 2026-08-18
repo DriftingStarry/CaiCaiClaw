@@ -158,10 +158,13 @@ export function createServer(serverConfig: ServerConfig, model?: AgentConfig["mo
                     return;
                 }
 
+                const receivedAt = Date.now();
                 await runtime.enqueue({
-                    text: message.text,
-                    source: makeSource(clientId, message.source),
-                    createdAt: Date.now(),
+                    ...message.event,
+                    channel: "local",
+                    conversationId: "local:default",
+                    author: { ...message.event.author, isSelf: false },
+                    receivedAt,
                     requestId: message.requestId,
                 });
                 send(socket, { type: "ack", requestId: message.requestId });
@@ -314,10 +317,6 @@ function getRequestedClientId(rawUrl?: string): string | undefined {
 
     const clientId = url.searchParams.get("clientId")?.trim();
     return clientId ? clientId : undefined;
-}
-
-function makeSource(clientId: string, source?: string): string {
-    return source ? `ws:${clientId}/${source}` : `ws:${clientId}`;
 }
 
 function send(socket: WebSocket, message: ServerMessage): void {

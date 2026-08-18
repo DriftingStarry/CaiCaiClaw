@@ -1,13 +1,11 @@
 import { BaseMessage } from "@langchain/core/messages";
 import { JsonObject, JsonValue } from "@caicaiclaw/utils";
+import type { ChannelEvent } from "@caicaiclaw/utils/history";
 import type { MaybePromise } from "@caicaiclaw/utils";
 
 export type { MaybePromise } from "@caicaiclaw/utils";
 
-export type InboundEvent = {
-    text: string;
-    source?: string;
-    createdAt?: number;
+export type RuntimeInput = ChannelEvent & {
     inputId?: string;
     requestId?: string;
 };
@@ -20,8 +18,7 @@ export type RuntimeOutputEvent =
     | {
           readonly type: "input_accepted";
           readonly turnId: string;
-          readonly text: string;
-          readonly source?: string;
+          readonly event: ChannelEvent;
           readonly requestId?: string;
           readonly createdAt: number;
       }

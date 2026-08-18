@@ -1,5 +1,9 @@
 import { promises as fs } from "node:fs";
+import { HISTORY_EVENT_TYPES, parseHistoryLine, type RawHistoryEvent } from "@caicaiclaw/utils/history";
 import { getAdminConfig } from "./adminConfig";
+
+type HistoryEventType = (typeof HISTORY_EVENT_TYPES)[number];
+type LogEventRecord = Record<string, unknown> & { type: HistoryEventType };
 
 export type LogPage = {
     exists: boolean;
@@ -14,7 +18,7 @@ export type LogGroup = {
     key: string;
     turnId?: string;
     kind: "turn" | "compaction" | "event";
-    events: Array<{ lineNumber: number; event: Record<string, unknown> }>;
+    events: Array<{ lineNumber: number; event: LogEventRecord }>;
 };
 
 export type ToolResultPage = {
@@ -45,12 +49,11 @@ export async function readLogPage(offset: number, limit: number): Promise<LogPag
     let current: LogGroup | undefined;
     for await (const line of reverseLines(path)) {
         if (!line.text.trim()) continue;
-        const parsed = parseLine(line);
-        if (parsed.error) {
-            errors.push(parsed.error);
+        const parsed = parseHistoryLine(line.text);
+        if (!parsed.success) {
+            errors.push(formatLineError(line.lineNumber, parsed.error));
             continue;
         }
-        if (!parsed.event) continue;
         const event = parsed.event;
         if (event.type === "turn.started") {
             const turnId = stringValue(event.turnId);
@@ -101,8 +104,8 @@ export async function readToolResult(
     }
     for await (const line of forwardLines(path)) {
         if (!line.text.trim()) continue;
-        const parsed = parseLine(line);
-        if (!parsed.event || parsed.event.type !== "tool.completed") continue;
+        const parsed = parseHistoryLine(line.text);
+        if (!parsed.success || parsed.event.type !== "tool.completed") continue;
         if (parsed.event.turnId !== turnId || parsed.event.toolCallId !== toolCallId) continue;
         const content = stringifyValue(parsed.event.result);
         if (offset > content.length)
@@ -209,49 +212,15 @@ async function countPhysicalLines(path: string): Promise<number> {
     }
 }
 
-function parseLine(line: LogLine): { event?: Record<string, unknown>; error?: string } {
-    let value: unknown;
-    try {
-        value = JSON.parse(line.text);
-    } catch {
-        return { error: `history.jsonl line ${line.lineNumber} is not valid JSON` };
-    }
-    if (
-        !isRecord(value) ||
-        value.version !== 1 ||
-        typeof value.type !== "string" ||
-        !KNOWN_EVENT_TYPES.has(value.type) ||
-        typeof value.sequence !== "number" ||
-        !Number.isInteger(value.sequence) ||
-        value.sequence < 1 ||
-        typeof value.eventId !== "string" ||
-        !value.eventId ||
-        typeof value.createdAt !== "number"
-    ) {
-        return { error: `history.jsonl line ${line.lineNumber} has an invalid event schema` };
-    }
-    return { event: value };
-}
-
-const KNOWN_EVENT_TYPES = new Set([
-    "input.accepted",
-    "turn.started",
-    "tool.started",
-    "tool.completed",
-    "turn.output_committed",
-    "turn.failed",
-    "context.compacted",
-]);
-
 function groupIdentity(
-    event: Record<string, unknown>,
+    event: RawHistoryEvent,
     inputToTurn: Map<string, string>,
 ): { key: string; kind: LogGroup["kind"]; turnId?: string } {
     if (event.type === "context.compacted")
         return { key: `compaction:${String(event.compactionId)}`, kind: "compaction" };
     const turnId =
-        stringValue(event.turnId) ??
-        (event.type === "input.accepted" ? inputToTurn.get(String(event.inputId)) : undefined);
+        ("turnId" in event ? stringValue(event.turnId) : undefined) ??
+        (event.type === "input.accepted" ? inputToTurn.get(event.inputId) : undefined);
     if (turnId) return { key: `turn:${turnId}`, kind: "turn", turnId };
     return { key: `event:${String(event.sequence)}`, kind: "event" };
 }
@@ -260,7 +229,7 @@ function finalizeGroup(group: LogGroup): LogGroup {
     return { ...group, events: [...group.events].reverse() };
 }
 
-function projectEvent(event: Record<string, unknown>): Record<string, unknown> {
+function projectEvent(event: RawHistoryEvent): LogEventRecord {
     if (event.type !== "tool.completed") return event;
     const result = stringifyValue(event.result);
     const previewLength = 500;
@@ -286,8 +255,8 @@ function arrayOfStrings(value: unknown): string[] {
     return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-    return typeof value === "object" && value !== null && !Array.isArray(value);
+function formatLineError(lineNumber: number, error: string): string {
+    return `history.jsonl line ${lineNumber} ${error.replace(/^history line /, "")}`;
 }
 
 function validatePage(offset: number, limit: number): void {

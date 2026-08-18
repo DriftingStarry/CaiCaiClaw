@@ -92,7 +92,20 @@ export function useAgentClient(url: string, token = ""): AgentClient {
             dispatch({ type: "local_input", requestId, text, createdAt: Date.now() });
             try {
                 if (!clientRef.current) throw new Error("WebSocket client is not available");
-                clientRef.current.send({ type: "input", text, source: "tui", requestId });
+                const timestamp = Date.now();
+                clientRef.current.send({
+                    type: "input",
+                    event: {
+                        channel: "local",
+                        conversationId: "local:default",
+                        kind: "chat",
+                        text,
+                        author: { id: "tui", isSelf: false },
+                        occurredAt: timestamp,
+                        receivedAt: timestamp,
+                    },
+                    requestId,
+                });
             } catch (error) {
                 dispatch({
                     type: "server_message",

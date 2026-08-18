@@ -9,8 +9,7 @@ export function runtimeOutputToServerMessages(event: RuntimeOutputEvent): Server
                 {
                     type: "input_accepted",
                     turnId: event.turnId,
-                    text: event.text,
-                    source: event.source,
+                    event: event.event,
                     requestId: event.requestId,
                     createdAt: event.createdAt,
                 },

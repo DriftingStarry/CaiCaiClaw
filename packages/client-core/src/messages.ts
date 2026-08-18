@@ -9,7 +9,7 @@ export function applyInputAccepted(
         if (item.role !== "user" || item.status !== "pending") return false;
         if (message.requestId) return item.id === message.requestId;
         // Keep text matching as a fallback for inputs from CLI and other sources without requestId.
-        return item.text === message.text;
+        return item.text === message.event.text;
     });
     if (existing) {
         return {
@@ -30,7 +30,7 @@ export function applyInputAccepted(
                 id: `${message.turnId}:user`,
                 role: "user",
                 turnId: message.turnId,
-                text: message.text,
+                text: message.event.text,
                 status: "done",
                 createdAt: message.createdAt,
             },

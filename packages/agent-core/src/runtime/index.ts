@@ -5,7 +5,7 @@ export { createHistoryReadTool } from "./historyTool";
 export type {
     AgentRuntimeOptions,
     ExecutionState,
-    InboundEvent,
+    RuntimeInput,
     MaybePromise,
     MessageStreamChunk,
     RuntimeOutputEvent,

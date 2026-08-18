@@ -97,7 +97,20 @@ export const useAgentClientStore = create<AgentClientStore>((set) => ({
         const requestId = crypto.randomUUID();
         set((state) => reduceClientState(state, { type: "local_input", requestId, text, createdAt: Date.now() }));
         try {
-            wsClient?.send({ type: "input", text, source: "admin", requestId });
+            const timestamp = Date.now();
+            wsClient?.send({
+                type: "input",
+                event: {
+                    channel: "local",
+                    conversationId: "local:default",
+                    kind: "chat",
+                    text,
+                    author: { id: "admin", isSelf: false },
+                    occurredAt: timestamp,
+                    receivedAt: timestamp,
+                },
+                requestId,
+            });
         } catch (error) {
             set((state) => ({ ...state, errors: [...state.errors, errorMessage(error)] }));
         }

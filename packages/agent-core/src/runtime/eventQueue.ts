@@ -1,12 +1,12 @@
-import { InboundEvent } from "./types";
+import { RuntimeInput } from "./types";
 
-type QueueWaiter = (events: InboundEvent[]) => void;
+type QueueWaiter = (events: RuntimeInput[]) => void;
 
 export class EventQueue {
-    private queue: InboundEvent[] = [];
+    private queue: RuntimeInput[] = [];
     private waiters: QueueWaiter[] = [];
 
-    public enqueue(event: InboundEvent): void {
+    public enqueue(event: RuntimeInput): void {
         this.queue.push(event);
 
         const waiter = this.waiters.shift();
@@ -15,7 +15,7 @@ export class EventQueue {
         }
     }
 
-    public drain(): InboundEvent[] {
+    public drain(): RuntimeInput[] {
         const events = this.queue;
         this.queue = [];
         return events;
@@ -25,7 +25,7 @@ export class EventQueue {
         return this.queue.length;
     }
 
-    public async drainWithin(timeoutMs: number): Promise<InboundEvent[]> {
+    public async drainWithin(timeoutMs: number): Promise<RuntimeInput[]> {
         const existing = this.drain();
         if (existing.length > 0) return existing;
 
@@ -38,7 +38,7 @@ export class EventQueue {
                 resolve([]);
             }, timeoutMs);
 
-            const wake = (events: InboundEvent[]) => {
+            const wake = (events: RuntimeInput[]) => {
                 if (settled) return;
                 settled = true;
                 clearTimeout(timer);

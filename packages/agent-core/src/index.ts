@@ -5,7 +5,7 @@ export {
     AgentRuntime,
     type AgentRuntimeOptions,
     type ExecutionState,
-    type InboundEvent,
+    type RuntimeInput,
     type MessageStreamChunk,
     type RuntimeOutputEvent,
     type CompactOptions,

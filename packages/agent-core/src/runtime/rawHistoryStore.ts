@@ -2,8 +2,14 @@ import { appendFile } from "node:fs/promises";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { errorMessage } from "@caicaiclaw/utils";
+import {
+    HISTORY_VERSION,
+    parseHistoryLine,
+    rawHistoryEventSchema,
+    type RawHistoryEvent,
+    type RawHistoryEventDraft,
+} from "@caicaiclaw/utils/history";
 import { applyRawHistoryEvent, createEmptyRawHistoryState, markInterruptedHistory, RawHistoryState } from "./history";
-import { HISTORY_VERSION, rawHistoryEventSchema, RawHistoryEvent, RawHistoryEventDraft } from "./historyEvents";
 import { ToolResultPage } from "./types";
 
 export type RawHistoryStoreOptions = {
@@ -53,18 +59,14 @@ export class RawHistoryStore {
         for (let index = 0; index < lines.length; index += 1) {
             const line = lines[index];
             if (!line.trim()) continue;
-            let value: unknown;
-            try {
-                value = JSON.parse(line);
-            } catch {
-                throw new Error(`raw history line ${index + 1} is not valid JSON`);
+            const parsed = parseHistoryLine(line);
+            if (!parsed.success) {
+                throw new Error(`raw history line ${index + 1} ${parsed.error.replace(/^history line /, "")}`);
             }
-            const parsed = rawHistoryEventSchema.safeParse(value);
-            if (!parsed.success) throw new Error(`raw history line ${index + 1} has an invalid event schema`);
-            if (parsed.data.type !== "tool.completed") continue;
-            if (parsed.data.turnId !== turnId || parsed.data.toolCallId !== toolCallId) continue;
+            if (parsed.event.type !== "tool.completed") continue;
+            if (parsed.event.turnId !== turnId || parsed.event.toolCallId !== toolCallId) continue;
 
-            const result = stringifyToolResult(parsed.data.result);
+            const result = stringifyToolResult(parsed.event.result);
             if (offset > result.length) {
                 throw new Error(
                     `tool result offset ${offset} is out of bounds for ${turnId}/${toolCallId} with length ${result.length}`,
@@ -74,7 +76,7 @@ export class RawHistoryStore {
             return {
                 turnId,
                 toolCallId,
-                status: parsed.data.status,
+                status: parsed.event.status,
                 totalLength: result.length,
                 offset,
                 limit,
@@ -103,20 +105,13 @@ export class RawHistoryStore {
             const line = lines[index];
             if (!line.trim()) continue;
 
-            let value: unknown;
-            try {
-                value = JSON.parse(line);
-            } catch {
-                throw new Error(`raw history line ${index + 1} is not valid JSON`);
-            }
-
-            const parsed = rawHistoryEventSchema.safeParse(value);
+            const parsed = parseHistoryLine(line);
             if (!parsed.success) {
-                throw new Error(`raw history line ${index + 1} has an invalid event schema`);
+                throw new Error(`raw history line ${index + 1} ${parsed.error.replace(/^history line /, "")}`);
             }
 
             try {
-                this.apply(parsed.data);
+                this.apply(parsed.event);
             } catch (error) {
                 throw new Error(`raw history line ${index + 1} cannot be replayed: ${errorMessage(error)}`, {
                     cause: error,

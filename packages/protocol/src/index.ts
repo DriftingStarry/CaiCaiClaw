@@ -1,6 +1,8 @@
 import { z } from "zod";
+import { channelEventSchema } from "@caicaiclaw/utils/history";
+import type { ChannelEvent } from "@caicaiclaw/utils/history";
 
-export const WS_PROTOCOL_VERSION = 3;
+export const WS_PROTOCOL_VERSION = 4;
 export const MAX_CLIENT_ID_LENGTH = 64;
 export const CLIENT_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
@@ -9,8 +11,7 @@ export const clientIdSchema = z.string().min(1).max(MAX_CLIENT_ID_LENGTH).regex(
 
 export const clientInputMessageSchema = z.object({
     type: z.literal("input"),
-    text: z.string().trim().min(1),
-    source: z.string().trim().min(1).optional(),
+    event: channelEventSchema,
     requestId: requestIdSchema,
 });
 
@@ -58,8 +59,7 @@ export const serverAckMessageSchema = z.object({
 export const serverInputAcceptedMessageSchema = z.object({
     type: z.literal("input_accepted"),
     turnId: z.string(),
-    text: z.string(),
-    source: z.string().optional(),
+    event: channelEventSchema,
     requestId: requestIdSchema,
     createdAt: z.number(),
 });
@@ -155,6 +155,7 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
 ]);
 
 export type ServerMessage = z.infer<typeof serverMessageSchema>;
+export type { ChannelEvent };
 
 export function parseClientMessage(raw: string): ClientMessage {
     let data: unknown;
