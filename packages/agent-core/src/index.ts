@@ -5,10 +5,12 @@ export {
     AgentRuntime,
     type AgentRuntimeOptions,
     type ExecutionState,
+    type Lane,
     type RuntimeInput,
     type MessageStreamChunk,
     type RuntimeOutputEvent,
     type CompactOptions,
     type ToolResultPage,
+    type TurnContext,
 } from "./runtime/index";
 export { execTool, fileEditTool, fileReadTool, fileWriteTool, toolsByName } from "./tools/index";

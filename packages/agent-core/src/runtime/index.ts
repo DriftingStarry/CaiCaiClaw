@@ -5,11 +5,13 @@ export { createHistoryReadTool } from "./historyTool";
 export type {
     AgentRuntimeOptions,
     ExecutionState,
+    Lane,
     RuntimeInput,
     MaybePromise,
     MessageStreamChunk,
     RuntimeOutputEvent,
     CompactOptions,
     ToolResultPage,
+    TurnContext,
 } from "./types";
 export type { MemorySnapshot, MemorySnapshotOptions } from "./memory";

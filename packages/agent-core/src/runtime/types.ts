@@ -5,6 +5,14 @@ import type { MaybePromise } from "@caicaiclaw/utils";
 
 export type { MaybePromise } from "@caicaiclaw/utils";
 
+export type Lane = "fast" | "deep";
+
+export type TurnContext = {
+    turnId: string;
+    lane: Lane;
+    conversationId: string;
+};
+
 export type RuntimeInput = ChannelEvent & {
     inputId?: string;
     requestId?: string;

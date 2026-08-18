@@ -14,6 +14,7 @@ import {
     StateSchema,
 } from "@langchain/langgraph";
 import { z } from "zod";
+import type { TurnContext } from "./runtime/types";
 
 type ToolBindingChatModel = BaseChatModel & {
     bindTools: NonNullable<BaseChatModel["bindTools"]>;
@@ -30,6 +31,8 @@ export interface AgentConfig {
 }
 
 export type ToolStartEvent = {
+    turnId: string;
+    lane: TurnContext["lane"];
     toolCallId: string;
     name: string;
     args: JsonObject;
@@ -37,6 +40,8 @@ export type ToolStartEvent = {
 };
 
 export type ToolResultEvent = {
+    turnId: string;
+    lane: TurnContext["lane"];
     toolCallId: string;
     name: string;
     status: "success" | "error";
@@ -79,19 +84,26 @@ export const getAgent = (config: AgentConfig) => {
         };
     };
 
-    const toolNode: GraphNode<typeof MessageState> = async (state) => {
+    const toolNode: GraphNode<typeof MessageState> = async (state, config) => {
+        const turnContext = requireTurnContext(config.configurable?.turnContext);
+
         const lastMessage = state.messages.at(-1);
         if (!lastMessage || !AIMessage.isInstance(lastMessage)) {
             // last message do not from llm, do nothing
             return {};
         }
 
+        const toolEventContext = {
+            turnId: turnContext.turnId,
+            lane: turnContext.lane,
+        };
         const res = [];
         for (const call of lastMessage.tool_calls || []) {
             const tool = toolsByName[call.name];
             const toolCallId = call.id ?? `${call.name}:${Date.now()}`;
 
             await onToolStart?.({
+                ...toolEventContext,
                 toolCallId,
                 name: call.name,
                 args: toJsonObject(call.args),
@@ -101,6 +113,7 @@ export const getAgent = (config: AgentConfig) => {
             if (!tool) {
                 const error = `未知工具: ${call.name}`;
                 await onToolResult?.({
+                    ...toolEventContext,
                     toolCallId,
                     name: call.name,
                     status: "error",
@@ -110,6 +123,7 @@ export const getAgent = (config: AgentConfig) => {
                 res.push(
                     toolResultMessage?.(
                         {
+                            ...toolEventContext,
                             toolCallId,
                             name: call.name,
                             status: "error",
@@ -137,6 +151,7 @@ export const getAgent = (config: AgentConfig) => {
                 const rawToolResult = await tool.invoke(call.args);
                 const serializedToolResult = toJsonValue(rawToolResult);
                 await onToolResult?.({
+                    ...toolEventContext,
                     toolCallId,
                     name: call.name,
                     status: "success",
@@ -151,6 +166,7 @@ export const getAgent = (config: AgentConfig) => {
                 res.push(
                     toolResultMessage?.(
                         {
+                            ...toolEventContext,
                             toolCallId,
                             name: call.name,
                             status: "success",
@@ -163,6 +179,7 @@ export const getAgent = (config: AgentConfig) => {
             } catch (error) {
                 const message = errorMessage(error);
                 await onToolResult?.({
+                    ...toolEventContext,
                     toolCallId,
                     name: call.name,
                     status: "error",
@@ -172,6 +189,7 @@ export const getAgent = (config: AgentConfig) => {
                 res.push(
                     toolResultMessage?.(
                         {
+                            ...toolEventContext,
                             toolCallId,
                             name: call.name,
                             status: "error",
@@ -222,3 +240,16 @@ export const getAgent = (config: AgentConfig) => {
         .compile();
     return agent;
 };
+
+function requireTurnContext(value: unknown): TurnContext {
+    if (
+        !value ||
+        typeof value !== "object" ||
+        typeof (value as { turnId?: unknown }).turnId !== "string" ||
+        typeof (value as { conversationId?: unknown }).conversationId !== "string" ||
+        ((value as { lane?: unknown }).lane !== "fast" && (value as { lane?: unknown }).lane !== "deep")
+    ) {
+        throw new Error("toolNode requires a valid turn context in RunnableConfig.configurable");
+    }
+    return value as TurnContext;
+}
