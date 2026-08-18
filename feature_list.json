@@ -142,7 +142,7 @@
                 "feat-003",
                 "feat-006"
             ],
-            "status": "not-started",
+            "status": "done",
             "doneCriteria": [
                 "packages/utils 通过 ./history subpath 导出 HISTORY_VERSION=2、channelEventSchema、rawHistoryEventSchema 与纯函数 parseHistoryLine；utils 不 import langchain/ws/react，subpath 在 tsc references、eslint 与 Next 构建下均可解析",
                 "input.accepted 事件以嵌套 event: ChannelEvent 形式持久化，ChannelEvent 的 schema 只有一份定义，入站校验与日志校验共用",
@@ -150,7 +150,8 @@
                 "projection 增加 per-conversation 常驻投影（有界 recent 环形缓冲、lastActivityAt、droppedCount），且由回放构建",
                 "apps/admin/src/lib/logs.ts 不再自带 version 判断与 KNOWN_EVENT_TYPES，改调共享 parseHistoryLine，/logs 能正常渲染 v2 事件",
                 "local WS 单渠道端到端可用（输入、turn、工具审计、重启回放），./init.sh 通过"
-            ]
+            ],
+            "evidence": "2026-08-18 完成。提交：071311d feat(utils) 下沉契约到 ./history subpath（HISTORY_VERSION=2、channelEventSchema、storedMessageSchema、rawHistoryEventSchema、parseHistoryLine，仅依赖 zod）；b981145 feat 入站结构化为 ChannelEvent 并硬切 v2（agent-core 改用共享契约、InboundEvent 更名 RuntimeInput、protocol v3→v4、server/tui/admin 输入同步、admin logs.ts 删除自带 version 判断与 KNOWN_EVENT_TYPES——写入切 v2 而读取锁 v1 会让面板整片报错，故必须同提交）；78fcbac feat(agent-core) 增加按 conversation 的有界常驻投影（上限 30，droppedCount 待 feat-011 填充）。每个提交均单独通过 ./init.sh。手动验收（真实 SimpleChatModel 子类 + 临时目录）：落盘只有 version 2、input.accepted 无平铺 text/source、重启回放得 2 个 committed turn、payload 进日志不进 prompt、损坏行报 raw history line 7、v1 行被拒；两个 conversation 各自成桶互不影响，单桶灌入 80 条后稳定 30 条并保留最新 danmaku 79。admin：v2 事件按 turn 正确分组、行号保留、长 tool result 截断、readToolResult totalLength=1200，损坏行与 v1 行各自报出行号且不影响其余渲染，pnpm --filter @caicaiclaw/admin build 通过。真实 local WS 端到端（注入 FakeModel 起真实 WebSocketServer）：hello 与客户端 protocolVersion 均为 4，收到 ack/input_accepted/agent_turn_start/assistant_message_delta/agent_turn_done，input_accepted 携带嵌套 event，违反 ChannelEvent schema 的输入被拒，落盘 input.accepted/turn.started/turn.output_committed 且 version 全为 2。"
         },
         {
             "id": "feat-009",

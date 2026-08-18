@@ -292,11 +292,11 @@ export type ChannelEvent = {
 
 ### 三个模型
 
-| 角色       | 用途                                | 环境变量                     |
-| ---------- | ----------------------------------- | ---------------------------- |
-| main       | 深度车道 ReAct                      | `CAICAI_OPENROUTER_MODEL`    |
-| fast       | 快车道单次调用 + 流式               | `CAICAI_FAST_MODEL`          |
-| background | compaction、digest、daydreaming     | `CAICAI_BACKGROUND_MODEL`    |
+| 角色       | 用途                            | 环境变量                  |
+| ---------- | ------------------------------- | ------------------------- |
+| main       | 深度车道 ReAct                  | `OPENROUTER_MODEL`（现有）|
+| fast       | 快车道单次调用 + 流式           | `CAICAI_FAST_MODEL`       |
+| background | compaction、digest、daydreaming | `CAICAI_BACKGROUND_MODEL` |
 
 未配置时 fast / background 回落到 main，并在启动日志明确告知 —— 回落能跑，但快车道就没有延迟优势。
 

@@ -3,9 +3,23 @@
 ## Current State
 
 **Last Updated:** 2026-08-18
-**Active Feature:** feat-008（M3-0 共享事件契约与日志 v2）。feat-001 ~ feat-007 全部 `done`；M3 设计已定稿写入 `README.md`，切片为 feat-008 ~ feat-015，见下方「M3 提交计划」。
+**Active Feature:** feat-008（M3-0 共享事件契约与日志 v2）已 `done`，含真实 local WS 端到端验收。feat-001 ~ feat-008 为 `done`；下一步是 feat-009（TurnContext 参数透传）。M3 设计已定稿写入 `README.md`，切片为 feat-008 ~ feat-015，见下方「M3 提交计划」。
 
 2026-08-18 用户决定调整路线图顺序：M3 为「实时响应与外部渠道接入」，M4 为「Pi 式运行时自我修改（reload）」；README 内部交叉引用已同步。
+
+2026-08-18 实现 feat-008 代码范围。共享 history subpath 只依赖 zod，硬切 HISTORY_VERSION=2；agent-core 的 input.accepted 改为嵌套 ChannelEvent，回放构建有界 per-conversation projection；protocol v4、server local 输入归一化、TUI/admin 输入和 admin 日志读取均已同步。HumanMessage 注入 channel/conversation/kind/author/正文，不注入 payload；requestId 保留在 input.accepted 顶层作为传输关联元数据，不放进 ChannelEvent。projection 上限取 30 条消息，与既有深度上下文窗口一致并保持快车道未来读取有界，droppedCount 暂由 feat-011 门口裁决填充。
+
+feat-008 实际落为三个提交，而非计划中的五个。计划里的单元 2（agent-core 切共享契约并硬切 v2）、单元 4（admin logs.ts 改用共享解析）、单元 5（ChannelEvent 接入）经核对属于同一紧耦合意图，无法按文件切分：v2 的嵌套形状决定 `RuntimeInput`，`RuntimeInput` 决定 protocol 的 client input，而写入侧切 v2 却让 admin 继续锁 `version !== 1` 会让面板整片报「invalid event schema」——这正是 README 里「面板全红但 agent 正常」的误诊场景。按「会导致类型检查、构建或运行契约失效的紧耦合改动必须留在同一提交」合并为 b981145。单元 1 与单元 3 确认可独立 revert，分别落为 071311d 与 78fcbac；单元 3 的可分离性经实测确认（移除投影后 `./init.sh` 仍通过，且全仓无消费方）。
+
+- `071311d` feat(utils)：下沉事件日志契约到 `./history` subpath。提交前以 `git stash --keep-index` 隔离出仅含该单元的工作树，单独跑通 `./init.sh`，确认它不依赖后续单元。
+- `b981145` feat：入站事件结构化为 `ChannelEvent` 并硬切日志 v2（15 文件，含 protocol v3→v4）。`./init.sh` 与 admin build 均通过。
+- `78fcbac` feat(agent-core)：按 conversation 的有界常驻投影（+49 行，纯加法）。
+
+feat-008 验证证据（均为本机实跑，非沙箱推断）：三个提交各自通过 `./init.sh`；`pnpm --filter @caicaiclaw/admin build` 通过。runtime 隔离验收输出 `A_emptyInit: true`、`B_versions: [2]`、`B_noFlatTextOrSource: true`、`B_humanText: "[local/local:default chat tester] hello one"`、`C_committedTurns: 2`、`D_boundedRecent: 30`、`E_corrupt: "raw history line 7 is not valid JSON"`、`F_v1Rejected` 报 `expected 2 → at version`、`G_payloadInPrompt: false` 且 `G_payloadInLog: true`。投影验收：两 conversation 各自成桶（各 2 条，含输入与回复），单桶灌 80 条后稳定 30 条并保留最新 `danmaku 79`，另一桶不受影响。admin 验收：v2 事件按 turn 分组、行号 1..5 保留、长 tool result 截断且 `readToolResult` 报 `totalLength: 1200`，损坏行报 `line 6`、v1 行报 `line 1` 且都不影响其余渲染。真实 local WS 端到端（注入 FakeModel 起真实 `WebSocketServer` 于 127.0.0.1:8899）：`hello` 与客户端 `WS_PROTOCOL_VERSION` 均为 4，依次收到 `hello/ack/input_accepted/agent_turn_start/assistant_message_delta/agent_turn_done`，`input_accepted` 携带嵌套 `event`，缺字段的非法 `ChannelEvent` 被拒，落盘 `input.accepted/turn.started/turn.output_committed` 且 `version` 全为 2。所有临时脚本已删除。
+
+codex（`gpt-5.6-luna`）完成了 feat-008 的代码实现，但其沙箱拒绝创建 `.git/index.lock`（`Read-only file system`），因此五个单元全部堆在同一个工作树、无提交边界；它如实标注了未伪造 hash，也如实标注真实 WS 闭环受 `listen EPERM` 阻断未执行。**这两条都是该沙箱的限制，不是仓库或本机的属性**——提交边界与真实 WS 验收均由 Claude 在本机补齐，WS 结论以实跑输出为准，不以 protocol probe 代替。
+
+收尾同时补齐 `.env.example` 的五个 M3 变量（`CAICAI_FAST_MODEL`、`CAICAI_BACKGROUND_MODEL`、`CAICAI_APPROVAL_TTL_MS`、`CAICAI_CHANNEL_POLICY_PATH`、`CAICAI_DIGEST_EVERY_HEARTBEATS`）并加注约束；这些变量的读取逻辑由后续 feature 落地，本次只登记契约。README 的三模型表原先误写 `CAICAI_OPENROUTER_MODEL`，已改回实际存在的 `OPENROUTER_MODEL`（见 `apps/server/src/config.ts`）。
 
 2026-08-18 更新 harness 的 Git 提交纪律：feature 不再等同一个 commit；中大型工作须先在本文件写提交计划，再按可独立 revert 的完整意图逐个暂存、审查、验证和提交。协议/类型与其紧耦合实现可以同提交以维持构建完整性；禁止按会话收尾或用 `git add .` 汇总提交。每个提交的 hash、意图和验证结果须进入 evidence。基线 `./init.sh` 已通过；本次仅修改 harness，不创建 feature 记录。
 
@@ -55,7 +69,7 @@ codex 曾额外加上 `experimental.esmExternals: false`（理由是让产物呈
 
 ### What's Next
 
-1. 按依赖顺序实现 M3：feat-008 → 009 → 010 → 011 → 012 → 013 →（014 / 015 可并行，均依赖 013）。一次只推进一个。
+1. 按依赖顺序实现 M3：feat-008 ✅ → **009（下一个）** → 010 → 011 → 012 → 013 →（014 / 015 可并行，均依赖 013）。一次只推进一个。feat-009 已有前置实测结论可直接采信，不必重跑：LangGraph 的 `GraphNode` 第二参数确实透传 `RunnableConfig`，`configurable` 在 `invoke` 与 `stream`（`streamMode: "messages"`）下都读得到——探针输出 `{"probe":"invoke","seen":{"turnId":"turn-1","lane":"fast","conversationId":"local:default"}}` 及同形状的 `stream` 结果。因此 `activeTurnId` → `activeTurns: Map<lane, TurnContext>` 的改造路径成立。
 2. 用户换到支持 kitty 协议的终端后，顺手确认一次 Shift+Enter 真能插入换行 —— 这是 feat-005 唯一未经真实按键确认的行为，代码路径已由探针验证但未在真机按过。若那时发现不工作，先读 Blockers / Risks 里的实测结论，特别是「不要打开 tmux `extended-keys`」这条反向警告。
 3. 改鼠标相关代码前先读 Blockers / Risks 里消费器的现有行为约定。
 4. 若要让 admin 面板可被同网段访问，先解决 Blockers / Risks 里「agent WS 无认证」那条 —— 当前安全边界只有「仅监听 127.0.0.1」。
