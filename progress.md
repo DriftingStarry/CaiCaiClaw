@@ -2,10 +2,12 @@
 
 ## Current State
 
-**Last Updated:** 2026-08-17
+**Last Updated:** 2026-08-18
 **Active Feature:** 无。feat-001 ~ feat-006 全部 `done` —— feat-006 的人工验收已由用户于 2026-08-17 执行并通过。下一步由用户选定新 feature。
 
-feat-006 的完整需求已固化在 `docs/web-admin-prd.md`（PRD，quality score 92/100），`feature_list.json` 的 15 条 doneCriteria 与该文档一一对应。实现交由 codex（model `gpt-5.6-luna`）执行。
+2026-08-18 用户决定调整路线图顺序：M3 为「实时响应与外部渠道接入」，M4 为「Pi 式运行时自我修改（reload）」；README 内部交叉引用已同步。
+
+feat-006 的完整需求与验收标准保存在 `feature_list.json` 的 doneCriteria 中。实现交由 codex（model `gpt-5.6-luna`）执行。
 
 **关键拓扑决策**：用户原计划「在 `apps/server` 基础上做管理端」与「完全控制 agent 进程启停」不能同时成立 —— `apps/server` 本身就是 agent 进程（进程内 `new AgentRuntime()` 并持有 WS server），同进程的管理端在停掉 agent 后自己也不复存在，就没有后台可以点「启动」。故定为 **新增 `apps/admin`（Next.js SSR + supervisor，常驻）+ `apps/server` 作为被 spawn 的子进程**，`apps/server` 职责与代码不变。这同时避免了新增 `apps/server <- client-core` 破坏 Architecture Invariants 的依赖表。
 
@@ -22,7 +24,7 @@ feat-006 的 apps/admin 已实现并于 2026-08-17 **完成人工验收、置为
 2. **restart 误报修复**。根因是两条互相竞争的重启路径：`restart()` 置 `restartAfterExit = true` → `await requestStop()` → 自己再 `start()`，而 `handleExit()` 先 resolve stopWaiters、紧接着**同步**判断 `restartAfterExit` 也调了一次 `start()`。`resolvePromise()` 只把 await 续体排进微任务队列，`handleExit` 的同步尾部先跑完 → 状态变 `starting` → 续体那次 `start()` 撞上守卫抛 `cannot start agent while status is starting`。进程实际是被 `handleExit` 那次启起来的，所以「报错但重启成功」。修法：删除 `restartAfterExit` 字段与 `handleExit` 的自动重启分支，只留 `restart()` 一条路径。守卫能过是因为 `handleExit` 在 resolve waiters **之前**已 `this.child = undefined` 并把 status 置为 `stopped`；「等旧进程真正退出再 spawn」仍由 `stopWaiters` 保证，未被简化。
 3. **前端 agent 状态跨路由共享**。新增 `src/stores/useAgentSupervisorStore.ts`（zustand，无新增依赖）持有 snapshot、`activeAction`、`lastOperation`，action 的 promise 由 store 持有故不随组件卸载丢失；轮询由 `useAgentSupervisorPolling()` 以 `useEffect` 引用计数驱动，两页共用单一循环、全部卸载即停。`agent/page.tsx` 与 `chat/page.tsx` 改为消费该 store，Alert 类型改用结构化 `outcome`（原先靠 `message.includes("失败")` 猜）。**未引入 localStorage** —— 快照真相源是服务端 supervisor，客户端缓存旧快照只会造成显示与实际不一致。
 
-PRD 已检查，本次无产品、信息架构或协议语义变化，故不改 `docs/web-admin-prd.md`。
+本次无产品、信息架构或协议语义变化。
 
 2026-08-17 修复 feat-006 compact 缺陷：Next 16.2.10 webpack 曾将 `ws` 的 `Sender` / `buffer-util` 打进 server bundle，破坏 `buffer-util` 的延迟导出改写，最终在 compact 发送时抛出 `b.mask is not a function` 并被错误映射为 400。`serverExternalPackages: ["ws"]` 已生效；action API 现在只把明确的 supervisor 状态冲突映射为 409，其余内部异常为 500，输入校验仍为 400。
 
@@ -158,7 +160,7 @@ pnpm tui
 
 ## Notes for Next Session
 
-- **feat-007 已完成（2026-08-17）**：agent WS 在 HTTP Upgrade 阶段以 `verifyClient` + `timingSafeEqual` 校验 `?token=`，错误与缺失 token 均返回 401，未进入 `connection` 或 runtime；空 `CAICAI_WS_TOKEN` 仍保持仅限 127.0.0.1 的兼容行为。TUI Tab 设置页增加 `ws_token`，`client-core` 统一编码 query 参数。admin 新增 `/settings`，其读取接口仅返回是否已配置；浏览器直连需要的 token 仅从独立 cookie 鉴权 + `no-store` 连接接口即时取得，未编入 `NEXT_PUBLIC_*`、未落 Zustand/localStorage。admin 保存密钥使用默认位于 history 同目录的 `agent-ws-token` 原子替换（0600）；supervisor spawn 与 control WS 都动态读取该值，因此更新后在 `/agent` 重启即可生效。验收：真实 server 入口输出 `{\"missing\":\"error\",\"wrong\":\"error\",\"valid\":\"open\"}`；admin 覆盖文件的环境回退、保存覆盖、0600 权限、清空回退均 passed；admin production build 通过。首次并行执行 build 与 `./init.sh` 曾发生 Next 清理 `.next/types` 的既有竞态，随后串行 `./init.sh` 已通过 typecheck/lint/format，`git diff --check` 通过。运行配置已同步 `.env.example`。后续如同步 `docs/web-admin-prd.md`，建议补充 WS token 握手、`/settings` 的持久化/重启生效语义以及浏览器直连 token 的受限传递边界。
+- **feat-007 已完成（2026-08-17）**：agent WS 在 HTTP Upgrade 阶段以 `verifyClient` + `timingSafeEqual` 校验 `?token=`，错误与缺失 token 均返回 401，未进入 `connection` 或 runtime；空 `CAICAI_WS_TOKEN` 仍保持仅限 127.0.0.1 的兼容行为。TUI Tab 设置页增加 `ws_token`，`client-core` 统一编码 query 参数。admin 新增 `/settings`，其读取接口仅返回是否已配置；浏览器直连需要的 token 仅从独立 cookie 鉴权 + `no-store` 连接接口即时取得，未编入 `NEXT_PUBLIC_*`、未落 Zustand/localStorage。admin 保存密钥使用默认位于 history 同目录的 `agent-ws-token` 原子替换（0600）；supervisor spawn 与 control WS 都动态读取该值，因此更新后在 `/agent` 重启即可生效。验收：真实 server 入口输出 `{\"missing\":\"error\",\"wrong\":\"error\",\"valid\":\"open\"}`；admin 覆盖文件的环境回退、保存覆盖、0600 权限、清空回退均 passed；admin production build 通过。首次并行执行 build 与 `./init.sh` 曾发生 Next 清理 `.next/types` 的既有竞态，随后串行 `./init.sh` 已通过 typecheck/lint/format，`git diff --check` 通过。运行配置已同步 `.env.example`。
 
 - feat-001 的 runtime harness 是一次性脚本、跑完即删，**证据不可重跑**。若要回归验证滚动与输入行为需重新搭建，要点：ink 7 的 stdin 走 `readable` 事件 + `stdin.read()`，用 `data` 事件会导致按键完全不送达而产生假阴性。
 - feat-001 经两轮独立 review，14 条发现中 13 条已修且经真实 Ink 渲染复核可复现；鼠标序列消费一条只修了单 chunk 完整 SGR 的部分。用户已在此状态上验收，残留项转为 feat-005。

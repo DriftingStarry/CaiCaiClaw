@@ -91,7 +91,7 @@
         {
             "id": "feat-006",
             "name": "M2 Web 后台管理（apps/admin）",
-            "description": "新建 apps/admin：Next.js SSR 管理端兼进程 supervisor，常驻运行并以子进程方式完全掌管 apps/server（agent 进程）的生命周期。提供 chat / memory / logs / agent 四个路由：chat 迁自 apps/web 的会话界面，memory 读写 .caicaiclaw 下 Markdown（乐观锁 + 原子替换），logs 只读分页浏览 history.jsonl，agent 展示进程状态并提供启/停/重启与 compact/daydreaming 入口。apps/web 内容迁入后删除。完整需求见 docs/web-admin-prd.md。",
+            "description": "新建 apps/admin：Next.js SSR 管理端兼进程 supervisor，常驻运行并以子进程方式完全掌管 apps/server（agent 进程）的生命周期。提供 chat / memory / logs / agent 四个路由：chat 迁自 apps/web 的会话界面，memory 读写 .caicaiclaw 下 Markdown（乐观锁 + 原子替换），logs 只读分页浏览 history.jsonl，agent 展示进程状态并提供启/停/重启与 compact/daydreaming 入口。apps/web 内容迁入后删除。",
             "dependencies": [
                 "feat-003",
                 "feat-004"
