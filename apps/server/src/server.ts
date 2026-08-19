@@ -308,8 +308,15 @@ export function createServer(
                 }
 
                 const receivedAt = Date.now();
+                const event = { ...message.event };
+                if (connection.role.role === "admin") {
+                    // debugOrigin 由服务端按连接角色判定，不信任客户端自述。
+                    event.debugOrigin = "admin";
+                } else {
+                    delete event.debugOrigin;
+                }
                 const admission = await runtime.enqueue({
-                    ...message.event,
+                    ...event,
                     receivedAt,
                     requestId: message.requestId,
                 });
