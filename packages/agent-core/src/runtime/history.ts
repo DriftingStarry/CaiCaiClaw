@@ -34,6 +34,7 @@ export type RawHistoryToolEvent = {
 export type RawHistoryConversationProjection = {
     recent: BaseMessage[];
     lastActivityAt: number;
+    lastActivitySequence: number;
     // Admission-time intake will populate this in feat-011; replay keeps it at zero for now.
     droppedCount: number;
     digest?: string;
@@ -108,7 +109,9 @@ export function applyRawHistoryEvent(state: RawHistoryState, event: RawHistoryEv
                 createdAt: event.createdAt,
                 message,
             });
-            appendConversationMessages(state, event.event.conversationId, event.event.receivedAt, [message]);
+            appendConversationMessages(state, event.event.conversationId, event.event.receivedAt, event.sequence, [
+                message,
+            ]);
             break;
         }
         case "input.dropped": {
@@ -119,10 +122,12 @@ export function applyRawHistoryEvent(state: RawHistoryState, event: RawHistoryEv
                 ({
                     recent: [],
                     lastActivityAt: event.createdAt,
+                    lastActivitySequence: event.sequence,
                     droppedCount: 0,
                 } satisfies RawHistoryConversationProjection);
             projection.droppedCount += 1;
             projection.lastActivityAt = event.createdAt;
+            projection.lastActivitySequence = event.sequence;
             state.conversations.set(event.event.conversationId, projection);
             break;
         }
@@ -132,8 +137,21 @@ export function applyRawHistoryEvent(state: RawHistoryState, event: RawHistoryEv
                 ({
                     recent: [],
                     lastActivityAt: event.createdAt,
+                    lastActivitySequence: 0,
                     droppedCount: 0,
                 } satisfies RawHistoryConversationProjection);
+            if (event.coveredSequence >= event.sequence) {
+                throw new Error(`digest ${event.digestId} cannot cover its own event or a future sequence`);
+            }
+            if (event.coveredSequence < projection.lastActivitySequence) {
+                throw new Error(`digest ${event.digestId} does not cover the conversation's latest activity`);
+            }
+            if (
+                projection.digestCoveredSequence !== undefined &&
+                event.coveredSequence <= projection.digestCoveredSequence
+            ) {
+                throw new Error(`digest ${event.digestId} does not advance the conversation checkpoint`);
+            }
             projection.digest = event.digest;
             projection.digestCoveredSequence = event.coveredSequence;
             projection.lastActivityAt = event.createdAt;
@@ -178,7 +196,7 @@ export function applyRawHistoryEvent(state: RawHistoryState, event: RawHistoryEv
                 args: event.args,
                 createdAt: event.createdAt,
             });
-            touchTurnConversations(state, event.turnId, event.createdAt);
+            touchTurnConversations(state, event.turnId, event.createdAt, event.sequence);
             break;
         case "tool.completed":
             assertActiveTurn(state, event.turnId);
@@ -195,7 +213,7 @@ export function applyRawHistoryEvent(state: RawHistoryState, event: RawHistoryEv
                 result: event.result,
                 createdAt: event.createdAt,
             });
-            touchTurnConversations(state, event.turnId, event.createdAt);
+            touchTurnConversations(state, event.turnId, event.createdAt, event.sequence);
             break;
         case "turn.output_committed": {
             const inputIds = state.activeTurns.get(event.turnId);
@@ -224,7 +242,8 @@ export function applyRawHistoryEvent(state: RawHistoryState, event: RawHistoryEv
                 inputIds.map((inputId) => state.pendingInputs.get(inputId)?.event.conversationId),
             );
             for (const conversationId of conversationIds) {
-                if (conversationId) appendConversationMessages(state, conversationId, event.createdAt, outputMessages);
+                if (conversationId)
+                    appendConversationMessages(state, conversationId, event.createdAt, event.sequence, outputMessages);
             }
 
             for (const inputId of inputIds) {
@@ -239,7 +258,7 @@ export function applyRawHistoryEvent(state: RawHistoryState, event: RawHistoryEv
             if (!inputIds) throw new Error(`turn ${event.turnId} is not active`);
 
             state.failedTurns.set(event.turnId, event.message);
-            touchTurnConversations(state, event.turnId, event.createdAt);
+            touchTurnConversations(state, event.turnId, event.createdAt, event.sequence);
             for (const inputId of inputIds) {
                 state.pendingInputs.delete(inputId);
             }
@@ -361,13 +380,21 @@ function assertActiveTurn(state: RawHistoryState, turnId: string): void {
     }
 }
 
-function touchTurnConversations(state: RawHistoryState, turnId: string, activityAt: number): void {
+function touchTurnConversations(
+    state: RawHistoryState,
+    turnId: string,
+    activityAt: number,
+    activitySequence: number,
+): void {
     const inputIds = state.activeTurns.get(turnId) ?? [];
     const conversationIds = new Set(inputIds.map((inputId) => state.pendingInputs.get(inputId)?.event.conversationId));
     for (const conversationId of conversationIds) {
         if (!conversationId) continue;
         const projection = state.conversations.get(conversationId);
-        if (projection) projection.lastActivityAt = activityAt;
+        if (projection) {
+            projection.lastActivityAt = activityAt;
+            projection.lastActivitySequence = activitySequence;
+        }
     }
 }
 
@@ -375,15 +402,22 @@ function appendConversationMessages(
     state: RawHistoryState,
     conversationId: string,
     activityAt: number,
+    activitySequence: number,
     messages: BaseMessage[],
 ): void {
     const projection =
         state.conversations.get(conversationId) ??
-        ({ recent: [], lastActivityAt: activityAt, droppedCount: 0 } satisfies RawHistoryConversationProjection);
+        ({
+            recent: [],
+            lastActivityAt: activityAt,
+            lastActivitySequence: activitySequence,
+            droppedCount: 0,
+        } satisfies RawHistoryConversationProjection);
     projection.recent.push(...messages);
     if (projection.recent.length > MAX_CONVERSATION_RECENT_MESSAGES) {
         projection.recent.splice(0, projection.recent.length - MAX_CONVERSATION_RECENT_MESSAGES);
     }
     projection.lastActivityAt = activityAt;
+    projection.lastActivitySequence = activitySequence;
     state.conversations.set(conversationId, projection);
 }

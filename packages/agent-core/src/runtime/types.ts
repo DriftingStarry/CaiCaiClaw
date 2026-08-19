@@ -108,6 +108,7 @@ export type AgentRuntimeOptions = {
     compactionPrompt?: string;
     compactionPromptVersion?: string;
     compactionSummaryBudget?: number;
+    digestSummaryBudget?: number;
     toolResultProjectionThreshold?: number;
     memoryBudgets?: {
         system?: number;
