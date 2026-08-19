@@ -3,7 +3,14 @@
 ## Current State
 
 **Last Updated:** 2026-08-19
-**Active Feature:** feat-011（M3-3 门口裁决 intake 与双车道）进行中。feat-010 已完成并落为 `33c4fe5`（agent-core 出站 lane/target）、`c57fa3d`（protocol v5/role）和 `70f6101`（server 定向路由）三个可独立回滚提交；下一步把分流、门口裁决和双车道收敛在 runtime，server 仍只负责鉴权、校验、归一化和路由。
+**Active Feature:** feat-011（M3-3 门口裁决 intake 与双车道）进行中。已完成三个可独立回滚代码单元：`dc079f7` intake 策略/门口裁决、`0c93b91` per-conversation 双 lane 与 fast 限制、`36ea1b2` server 模型/策略配置接入。feat-010 已完成并落为 `33c4fe5`、`c57fa3d`、`70f6101`；下一步做真实 WS 回执、深 lane 长任务期间 fast 响应、维护边界与完整 doneCriteria 验收。
+
+### feat-011 当前实现证据
+
+- `dc079f7`：runtime 执行可加载 intake policy；按 channel/conversation 分区通用槽与保留槽，self echo/容量拒绝落 `input.dropped`，accepted/merged 使用稳定 batchId；协议 ack 与 output mapper 暴露 disposition/reason/batchId。
+- `0c93b91`：fast/deep 使用独立队列和 agent，按 conversation 分桶串行；fast 只绑定 `defer_to_deep`，快上下文仅安全前言、Role.md、态势、conversation projection 与当前批次。fake-model probe 通过（两 lane 各调用一次，fast 未注入完整系统记忆，target 正确）。
+- `36ea1b2`：server 只透传 `CAICAI_CHANNEL_POLICY_PATH`、`CAICAI_FAST_MODEL`、`CAICAI_BACKGROUND_MODEL`；配置 fallback probe 通过。三个提交均经 `./init.sh`、暂存区 diff check。
+- 未完成：真实 WS intake disposition/streaming 验收；约 200 条弹幕期间无队头阻塞实测；compact/daydreaming 仅需 deep 空闲的并发验收；fast/background 启动日志回落提示；dropCount projection 及 `defer_to_deep` 实际升级行为仍需补齐或验证。
 
 ### feat-011 提交计划
 

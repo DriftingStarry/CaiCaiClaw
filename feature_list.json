@@ -204,7 +204,8 @@
                 "compact 与 daydreaming 只要求深度车道空闲即可执行；history append 仍全局串行",
                 "CAICAI_FAST_MODEL 与 CAICAI_BACKGROUND_MODEL 已接入并同步 .env.example，未配置时回落到主模型且启动日志明确告知",
                 "./init.sh 通过并记录上述行为验收"
-            ]
+            ],
+            "evidence": "已完成代码单元：dc079f7 intake policy/门口裁决与 input.dropped；0c93b91 per-conversation 独立 fast/deep 队列、fast 仅 defer_to_deep 与 fast 上下文；36ea1b2 server 接入 channel policy、fast/background model 配置。三个提交均通过 ./init.sh；fake-model runtime probe 验证两 lane 各调用一次、fast 上下文不含完整系统记忆、target 正确；配置 fallback probe 通过。剩余真实 WS disposition、约 200 条弹幕无队头阻塞、维护 deep-idle 边界、dropCount projection、defer_to_deep 升级和 fallback 启动日志验收。"
         },
         {
             "id": "feat-012",
