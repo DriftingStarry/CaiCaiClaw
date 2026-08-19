@@ -8,7 +8,7 @@
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
-import { QqApiClient } from "./api-client";
+import { QqApiClient, type QqSendOutcome, type QqSendScope } from "./api-client";
 import { QqGateway } from "./gateway";
 import { QqInboundClient } from "./inbound-client";
 import { normalizeQqEvent } from "./normalize";
@@ -41,6 +41,87 @@ function errorText(error: unknown): string {
             /(access[_ -]?token|client[_ -]?secret|authorization|bearer|password|secret|token)\s*[:=]\s*["']?[^\s,"'}]+["']?/gi,
             "$1=[REDACTED]",
         );
+}
+
+type QqOutboundReply = {
+    turnId: string;
+    lane: string;
+    target: { channel: string; conversationId: string; replyTo?: string };
+    text: string;
+    truncatedFrom?: number;
+};
+
+function parseQqConversationId(conversationId: string): { scope: QqSendScope; openid: string } | null {
+    const match = /^qq:(group|c2c)\/([^/]+)$/.exec(conversationId);
+    if (!match) return null;
+
+    const scopeValue = match[1];
+    const openid = match[2];
+    if ((scopeValue !== "group" && scopeValue !== "c2c") || !openid) return null;
+    const scope: QqSendScope = scopeValue;
+    return { scope, openid };
+}
+
+async function handleOutboundReply(
+    reply: QqOutboundReply,
+    apiClient: QqApiClient,
+    replyWindow: ReplyWindowTracker,
+): Promise<void> {
+    const parsedConversation = parseQqConversationId(reply.target.conversationId);
+    if (!parsedConversation) {
+        console.error(
+            `[adapter-qq] Outbound passive reply failed scope=unknown kind=invalid_target reason=invalid conversationId`,
+        );
+        return;
+    }
+
+    const { scope, openid } = parsedConversation;
+    const replyTo = reply.target.replyTo;
+    if (!replyTo) {
+        console.error(
+            `[adapter-qq] Outbound passive reply failed scope=${scope} kind=missing_reply_to reason=missing replyTo; active fallback disabled`,
+        );
+        return;
+    }
+
+    const claim = replyWindow.claim(replyTo);
+    if (!claim.ok) {
+        console.error(
+            `[adapter-qq] Outbound passive reply failed scope=${scope} kind=${claim.reason} reason=${errorText(claim.detail)}; active fallback disabled`,
+        );
+        return;
+    }
+
+    if (claim.scope !== scope) {
+        console.error(
+            `[adapter-qq] Passive reply scope mismatch target=${scope} registered=${claim.scope}; using registered scope=${claim.scope}`,
+        );
+    }
+
+    let outcome: QqSendOutcome;
+    try {
+        outcome = await apiClient.sendPassiveReply({
+            scope: claim.scope,
+            openid,
+            msgId: replyTo,
+            msgSeq: claim.msgSeq,
+            content: reply.text,
+        });
+    } catch (error) {
+        replyWindow.release(replyTo, claim.msgSeq);
+        console.error(
+            `[adapter-qq] Outbound passive reply failed scope=${claim.scope} kind=transport reason=${errorText(error)}; active fallback disabled`,
+        );
+        return;
+    }
+
+    if (outcome.ok) return;
+    if (outcome.kind === "rate_limited" || outcome.kind === "transport") {
+        replyWindow.release(replyTo, claim.msgSeq);
+    }
+    console.error(
+        `[adapter-qq] Outbound passive reply failed scope=${claim.scope} kind=${outcome.kind} reason=${errorText(outcome.message)}; active fallback disabled`,
+    );
 }
 
 let selfId: string | null = null;
@@ -89,6 +170,11 @@ async function startAdapter(): Promise<void> {
         onDisposition: (info) => {
             const reason = info.reason === undefined ? "" : ` reason=${errorText(info.reason)}`;
             console.error(`[adapter-qq] Inbound disposition ${info.disposition}${reason}`);
+        },
+        onOutboundReply: (reply) => {
+            void handleOutboundReply(reply, apiClient, replyWindow).catch((error: unknown) => {
+                console.error(`[adapter-qq] Outbound passive reply handler failed: ${errorText(error)}`);
+            });
         },
     });
     inbound = inboundClient;

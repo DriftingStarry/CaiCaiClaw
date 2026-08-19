@@ -18,11 +18,20 @@ export type QqInboundDispositionInfo = {
     batchId?: string;
 };
 
+type QqOutboundReply = {
+    turnId: string;
+    lane: string;
+    target: { channel: string; conversationId: string; replyTo?: string };
+    text: string;
+    truncatedFrom?: number;
+};
+
 export type QqInboundClientOptions = {
     serverUrl: string;
     channel: string;
     token?: string;
     onDisposition?: (info: QqInboundDispositionInfo) => void;
+    onOutboundReply?: (reply: QqOutboundReply) => void;
 };
 
 type PendingInput = {
@@ -36,6 +45,7 @@ export class QqInboundClient {
     private readonly serverUrl: string;
     private readonly channel: string;
     private readonly onDisposition?: (info: QqInboundDispositionInfo) => void;
+    private readonly onOutboundReply?: (reply: QqOutboundReply) => void;
     private readonly pending = new Map<string, PendingInput>();
     private readonly queuedRequestIds: string[] = [];
 
@@ -53,6 +63,7 @@ export class QqInboundClient {
         this.serverUrl = serverUrl.toString();
         this.channel = options.channel;
         this.onDisposition = options.onDisposition;
+        this.onOutboundReply = options.onOutboundReply;
     }
 
     public start(): void {
@@ -151,8 +162,18 @@ export class QqInboundClient {
             return;
         }
 
-        if (!message || message.type !== "ack") return;
-        this.handleAck(message);
+        if (!message) return;
+        if (message.type === "ack") {
+            this.handleAck(message);
+            return;
+        }
+        if (message.type !== "outbound_reply") return;
+
+        try {
+            this.onOutboundReply?.(message);
+        } catch (error) {
+            console.error("[QqInboundClient] onOutboundReply callback failed:", errorName(error));
+        }
     }
 
     private handleAck(message: Extract<ReturnType<typeof parseServerMessage>, { type: "ack" }>): void {
