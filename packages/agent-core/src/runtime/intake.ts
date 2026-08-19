@@ -60,6 +60,37 @@ export type AdmissionResult =
     | { disposition: "merged"; lane: Lane; batchId: string }
     | { disposition: "dropped"; lane: Lane; reason: DropReason };
 
+export type IntakeConversationSnapshot = {
+    channel: string;
+    conversationId: string;
+    generalPending: number;
+    generalSlots: number;
+    priorityPending: number;
+    reservedSlots: number;
+    lane: Lane;
+    oldestReceivedAt: number;
+    batchIds: string[];
+};
+
+/**
+ * reply 中 maxChars / rateLimitPerMin 为 0 时分别表示不限长 / 不限频，而不是上限为 0。
+ *
+ * isDefaults 标记这一条是 defaults 兜底策略而非某个具体渠道：channel 字段用 "(defaults)"
+ * 只为展示，真实渠道理论上可以叫同名，视图必须按 isDefaults 判断而不是比较字符串。
+ * defaults 只有单一 lane（没有 per-kind 映射），故 lane 用 "*" 作为键表示「所有 kind」。
+ */
+export type IntakeEffectivePolicy = {
+    channel: string;
+    isDefaults: boolean;
+    mode: string;
+    generalSlots: number;
+    reservedSlots: number;
+    mergeWindowMs: number;
+    alwaysKeep: string[];
+    lane: Record<string, Lane>;
+    reply: { maxChars: number; rateLimitPerMin: number };
+};
+
 /**
  * 去重键为 (channel, platformMessageId)。没有 platformMessageId 的事件（本地输入、
  * admin 调试注入）无法去重，返回 undefined 表示跳过该判定而不是当作同一个键。
@@ -89,6 +120,75 @@ export class IntakeController {
      */
     public seedSeenPlatformMessages(keys: Iterable<string>): void {
         for (const key of keys) this.remember(key);
+    }
+
+    public conversationSnapshots(): IntakeConversationSnapshot[] {
+        const grouped = new Map<string, Map<string, Pending[]>>();
+        for (const item of this.pending) {
+            const conversations = grouped.get(item.event.channel) ?? new Map<string, Pending[]>();
+            const pending = conversations.get(item.event.conversationId) ?? [];
+            pending.push(item);
+            conversations.set(item.event.conversationId, pending);
+            grouped.set(item.event.channel, conversations);
+        }
+
+        const snapshots: IntakeConversationSnapshot[] = [];
+        for (const [channel, conversations] of grouped) {
+            const intake = this.policy.channels[channel]?.intake ?? this.policy.defaults.intake;
+            for (const [conversationId, pending] of conversations) {
+                const first = pending[0];
+                if (!first) continue;
+                const generalPending = pending.filter((item) => !this.isPriority(item.event, channel)).length;
+                const priorityPending = pending.length - generalPending;
+                const batchIds = [
+                    ...new Set(
+                        pending
+                            .map((item) => item.batchId)
+                            .filter((batchId): batchId is string => batchId !== undefined),
+                    ),
+                ];
+                snapshots.push({
+                    channel,
+                    conversationId,
+                    generalPending,
+                    generalSlots: intake.generalSlots,
+                    priorityPending,
+                    reservedSlots: intake.reservedSlots,
+                    lane: first.lane,
+                    oldestReceivedAt: Math.min(...pending.map((item) => item.event.receivedAt)),
+                    batchIds,
+                });
+            }
+        }
+        return snapshots;
+    }
+
+    public effectivePolicies(): IntakeEffectivePolicy[] {
+        const channelPolicies = Object.entries(this.policy.channels).map(([channel, policy]) => ({
+            channel,
+            isDefaults: false,
+            mode: policy.intake.mode,
+            generalSlots: policy.intake.generalSlots,
+            reservedSlots: policy.intake.reservedSlots,
+            mergeWindowMs: policy.intake.mergeWindowMs,
+            alwaysKeep: [...policy.intake.alwaysKeep],
+            lane: { ...policy.lane },
+            reply: { ...policy.reply },
+        }));
+        return [
+            ...channelPolicies,
+            {
+                channel: "(defaults)",
+                isDefaults: true,
+                mode: this.policy.defaults.intake.mode,
+                generalSlots: this.policy.defaults.intake.generalSlots,
+                reservedSlots: this.policy.defaults.intake.reservedSlots,
+                mergeWindowMs: this.policy.defaults.intake.mergeWindowMs,
+                alwaysKeep: [...this.policy.defaults.intake.alwaysKeep],
+                lane: { "*": this.policy.defaults.lane },
+                reply: { ...this.policy.defaults.reply },
+            },
+        ];
     }
 
     public admit(event: RuntimeInput): AdmissionResult {

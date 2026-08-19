@@ -24,7 +24,14 @@ import {
 import { DEFAULT_MEMORY_BUDGETS, readMemorySnapshot, MemorySnapshot } from "./memory";
 import { createHistoryQueryTool, createHistoryReadTool } from "./historyTool";
 import { extractTextContent } from "./messageContent";
-import { AdmissionResult, IntakeController, loadIntakePolicy, type IntakePolicy } from "./intake";
+import {
+    AdmissionResult,
+    IntakeController,
+    loadIntakePolicy,
+    type IntakeConversationSnapshot,
+    type IntakeEffectivePolicy,
+    type IntakePolicy,
+} from "./intake";
 import { ReplyGate } from "./replyGate";
 import { DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
@@ -55,6 +62,29 @@ type MaintenanceRequest = {
     operation: () => Promise<string>;
     resolve: (result: string) => void;
     reject: (error: unknown) => void;
+};
+
+// TurnContext 当前没有起始时间字段，因此车道快照不提供 startedAt。
+export type LaneSnapshot = {
+    lane: Lane;
+    busy: boolean;
+    turnId?: string;
+    conversationId?: string;
+    queueDepth: number;
+};
+
+export type IntakeSnapshot = IntakeConversationSnapshot & {
+    droppedCount: number;
+    droppedByReason: Record<string, number>;
+};
+
+export type ChannelSnapshot = {
+    channel: string;
+    connected: boolean;
+    selfId?: string;
+    lastReason?: string;
+    lastResumable?: boolean;
+    lastChangedAt: number;
 };
 
 export class AgentRuntime {
@@ -319,6 +349,56 @@ export class AgentRuntime {
 
     public get channelStates() {
         return this.history.projection.channels;
+    }
+
+    public get laneSnapshots(): LaneSnapshot[] {
+        return (["fast", "deep"] as const).map((lane) => {
+            const turn = this.activeTurns.get(lane);
+            return {
+                lane,
+                busy: turn !== undefined,
+                ...(turn === undefined
+                    ? {}
+                    : {
+                          turnId: turn.turnId,
+                          // TurnContext.conversationId 是这一轮的归属会话，必填；target 是输出去向，二者语义不同。
+                          conversationId: turn.conversationId,
+                      }),
+                queueDepth: lane === "fast" ? this.fastQueue.size : this.queue.size,
+            };
+        });
+    }
+
+    public get intakeSnapshots(): IntakeSnapshot[] {
+        return this.intake.conversationSnapshots().map((snapshot) => {
+            const projection = this.history.projection.conversations.get(snapshot.conversationId);
+            const droppedByReason: Record<string, number> = {};
+            if (projection) {
+                for (const [reason, count] of Object.entries(projection.droppedByReason)) {
+                    if (count !== undefined) droppedByReason[reason] = count;
+                }
+            }
+            return {
+                ...snapshot,
+                droppedCount: projection?.droppedCount ?? 0,
+                droppedByReason,
+            };
+        });
+    }
+
+    public get effectivePolicies(): IntakeEffectivePolicy[] {
+        return this.intake.effectivePolicies();
+    }
+
+    public get channelSnapshots(): ChannelSnapshot[] {
+        return [...this.channelStates].map(([channel, state]) => ({
+            channel,
+            connected: state.connected,
+            ...(state.selfId === undefined ? {} : { selfId: state.selfId }),
+            ...(state.lastReason === undefined ? {} : { lastReason: state.lastReason }),
+            ...(state.lastResumable === undefined ? {} : { lastResumable: state.lastResumable }),
+            lastChangedAt: state.lastChangedAt,
+        }));
     }
 
     public async enqueue(event: RuntimeInput): Promise<AdmissionResult> {
