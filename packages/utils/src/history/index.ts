@@ -56,6 +56,7 @@ const compactedTurnSchema = z.object({
 
 export const HISTORY_EVENT_TYPES = [
     "input.accepted",
+    "input.dropped",
     "turn.started",
     "tool.started",
     "tool.completed",
@@ -77,6 +78,16 @@ export const rawHistoryEventSchema = z.discriminatedUnion("type", [
         event: channelEventSchema,
         requestId: z.string().min(1).optional(),
         message: storedMessageSchema,
+    }),
+    z.object({
+        version: z.literal(HISTORY_VERSION),
+        sequence: z.number().int().positive(),
+        eventId: z.string().min(1),
+        type: z.literal("input.dropped"),
+        createdAt: z.number().int().nonnegative(),
+        inputId: z.string().min(1),
+        event: channelEventSchema,
+        reason: z.enum(["buffer_full", "priority_buffer_full", "lane_drop", "self_echo", "duplicate"]),
     }),
     z.object({
         version: z.literal(HISTORY_VERSION),

@@ -197,13 +197,23 @@ export function createServer(serverConfig: ServerConfig, model?: AgentConfig["mo
                 }
 
                 const receivedAt = Date.now();
-                await runtime.enqueue({
+                const admission = await runtime.enqueue({
                     ...message.event,
                     author: { ...message.event.author, isSelf: false },
                     receivedAt,
                     requestId: message.requestId,
                 });
-                send(socket, { type: "ack", requestId: message.requestId });
+                send(socket, {
+                    type: "ack",
+                    requestId: message.requestId,
+                    disposition: admission.disposition,
+                    ...(admission.disposition === "dropped" ? { reason: admission.reason } : {}),
+                    ...(admission.disposition === "merged" || admission.disposition === "accepted"
+                        ? admission.batchId
+                            ? { batchId: admission.batchId }
+                            : {}
+                        : {}),
+                });
             } catch (error) {
                 send(socket, {
                     type: "error",

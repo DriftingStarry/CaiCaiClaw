@@ -15,4 +15,6 @@ export type {
     ToolResultPage,
     TurnContext,
 } from "./types";
+export { IntakeController, dropReasonSchema, intakePolicySchema, loadIntakePolicy } from "./intake";
+export type { AdmissionResult, DropReason, IntakePolicy } from "./intake";
 export type { MemorySnapshot, MemorySnapshotOptions } from "./memory";

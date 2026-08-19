@@ -14,4 +14,6 @@ export {
     type ToolResultPage,
     type TurnContext,
 } from "./runtime/index";
+export { IntakeController, dropReasonSchema, intakePolicySchema, loadIntakePolicy } from "./runtime/index";
+export type { AdmissionResult, DropReason, IntakePolicy } from "./runtime/index";
 export { execTool, fileEditTool, fileReadTool, fileWriteTool, toolsByName } from "./tools/index";

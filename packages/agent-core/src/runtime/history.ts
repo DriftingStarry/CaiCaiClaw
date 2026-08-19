@@ -109,6 +109,11 @@ export function applyRawHistoryEvent(state: RawHistoryState, event: RawHistoryEv
             appendConversationMessages(state, event.event.conversationId, event.event.receivedAt, [message]);
             break;
         }
+        case "input.dropped": {
+            if (state.knownInputIds.has(event.inputId)) throw new Error(`duplicate input ${event.inputId}`);
+            state.knownInputIds.add(event.inputId);
+            break;
+        }
         case "turn.started": {
             if (state.knownTurnIds.has(event.turnId)) {
                 throw new Error(`duplicate turn ${event.turnId}`);

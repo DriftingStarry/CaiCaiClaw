@@ -3,6 +3,17 @@ import { type RuntimeOutputEvent } from "@caicaiclaw/agent-core";
 
 export function runtimeOutputToServerMessages(event: RuntimeOutputEvent): ServerMessage[] {
     switch (event.type) {
+        case "input_dropped":
+            return [
+                {
+                    type: "input_dropped",
+                    inputId: event.inputId,
+                    event: event.event,
+                    reason: event.reason,
+                    requestId: event.requestId,
+                    createdAt: event.createdAt,
+                },
+            ];
         case "input_accepted":
             return [
                 {

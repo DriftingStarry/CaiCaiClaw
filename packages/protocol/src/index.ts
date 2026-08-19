@@ -87,6 +87,18 @@ export const serverHelloMessageSchema = z.object({
 export const serverAckMessageSchema = z.object({
     type: z.literal("ack"),
     requestId: requestIdSchema,
+    disposition: z.enum(["accepted", "merged", "dropped"]).optional(),
+    reason: z.string().min(1).optional(),
+    batchId: z.string().min(1).optional(),
+});
+
+export const serverInputDroppedMessageSchema = z.object({
+    type: z.literal("input_dropped"),
+    inputId: z.string().min(1),
+    event: channelEventSchema,
+    reason: z.enum(["buffer_full", "priority_buffer_full", "lane_drop", "self_echo", "duplicate"]),
+    requestId: requestIdSchema,
+    createdAt: z.number(),
 });
 
 export const serverInputAcceptedMessageSchema = z.object({
@@ -183,6 +195,7 @@ export const serverDaydreamingResultMessageSchema = z
 export const serverMessageSchema = z.discriminatedUnion("type", [
     serverHelloMessageSchema,
     serverAckMessageSchema,
+    serverInputDroppedMessageSchema,
     serverInputAcceptedMessageSchema,
     serverAgentTurnStartMessageSchema,
     serverAssistantMessageDeltaSchema,

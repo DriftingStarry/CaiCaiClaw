@@ -2,6 +2,7 @@ import { BaseMessage } from "@langchain/core/messages";
 import { JsonObject, JsonValue } from "@caicaiclaw/utils";
 import type { ChannelEvent } from "@caicaiclaw/utils/history";
 import type { MaybePromise } from "@caicaiclaw/utils";
+import type { DropReason } from "./intake";
 
 export type { MaybePromise } from "@caicaiclaw/utils";
 
@@ -30,6 +31,14 @@ export type ExecutionState = { messages: BaseMessage[]; llmCalls: number };
 export type MessageStreamChunk = readonly [message: BaseMessage, metadata: Record<string, unknown>];
 
 export type RuntimeOutputEvent =
+    | {
+          readonly type: "input_dropped";
+          readonly inputId: string;
+          readonly event: ChannelEvent;
+          readonly reason: DropReason;
+          readonly requestId?: string;
+          readonly createdAt: number;
+      }
     | {
           readonly type: "input_accepted";
           readonly turnId: string;
@@ -107,6 +116,8 @@ export type AgentRuntimeOptions = {
         tasksIndex?: number;
     };
     heartbeatMs?: number;
+    intakePolicyPath?: string;
+    intakePolicy?: import("./intake").IntakePolicy;
     onOutput?: (event: RuntimeOutputEvent) => MaybePromise<void>;
 };
 

@@ -22,6 +22,7 @@ import {
 } from "./types";
 import { DEFAULT_MEMORY_BUDGETS, readMemorySnapshot, MemorySnapshot } from "./memory";
 import { createHistoryReadTool } from "./historyTool";
+import { AdmissionResult, IntakeController, loadIntakePolicy } from "./intake";
 
 const DEFAULT_COMPACTION_PROMPT = [
     "Summarize the following historical context for a later agent turn.",
@@ -64,6 +65,7 @@ export class AgentRuntime {
     private readonly toolResultProjectionThreshold: number;
     private readonly compactionModelName: string;
     private readonly maintenanceWaiters: MaintenanceRequest[] = [];
+    private readonly intake: IntakeController;
     private operationTail: Promise<void> = Promise.resolve();
     private operationBusyCount = 0;
     private fatalError?: Error;
@@ -90,6 +92,7 @@ export class AgentRuntime {
         if (!this.compactionPromptVersion.trim()) throw new Error("compactionPromptVersion must not be empty");
         if (!this.compactionModelName.trim()) throw new Error("compactionModelName must not be empty");
         this.heartbeatMs = options.heartbeatMs ?? 30_000;
+        this.intake = new IntakeController(options.intakePolicy ?? loadIntakePolicy(options.intakePolicyPath));
         this.onOutput = options.onOutput;
         this.history = new RawHistoryStore({
             path: options.rawHistoryPath,
@@ -127,12 +130,31 @@ export class AgentRuntime {
         });
     }
 
-    public async enqueue(event: RuntimeInput): Promise<void> {
+    public async enqueue(event: RuntimeInput): Promise<AdmissionResult> {
         this.assertAvailable();
-        await this.runExclusive(async () => {
+        return await this.runExclusive(async () => {
             const inputId = event.inputId ?? this.createId("input");
             const createdAt = event.receivedAt;
             const normalizedEvent: RuntimeInput = { ...event, inputId };
+            const admission = this.intake.admit(normalizedEvent);
+            if (admission.disposition === "dropped") {
+                await this.history.append({
+                    type: "input.dropped",
+                    createdAt,
+                    inputId,
+                    event: toChannelEvent(normalizedEvent),
+                    reason: admission.reason,
+                });
+                await this.emitOutput({
+                    type: "input_dropped",
+                    inputId,
+                    event: toChannelEvent(normalizedEvent),
+                    reason: admission.reason,
+                    requestId: normalizedEvent.requestId,
+                    createdAt,
+                });
+                return admission;
+            }
             const channelEvent = toChannelEvent(normalizedEvent);
             const message = this.createHumanMessage(normalizedEvent);
 
@@ -146,6 +168,7 @@ export class AgentRuntime {
             });
 
             this.queue.enqueue(normalizedEvent);
+            return admission;
         });
     }
 
@@ -164,6 +187,7 @@ export class AgentRuntime {
                 }
 
                 await this.handleEvents(events);
+                this.intake.release(events);
                 await this.flushMaintenanceQueue();
             }
         } catch (error) {
@@ -188,6 +212,7 @@ export class AgentRuntime {
 
         try {
             await this.handleEvents(events);
+            this.intake.release(events);
             await this.flushMaintenanceQueue();
         } catch (error) {
             this.fatalError = this.toError(error, "runtime step failed");
