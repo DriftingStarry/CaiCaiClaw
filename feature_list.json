@@ -251,7 +251,7 @@
             "dependencies": [
                 "feat-013"
             ],
-            "status": "in-progress",
+            "status": "blocked",
             "doneCriteria": [
                 "新增 apps/adapter-qq 独立进程，持有 AppID/AppSecret 并在 access_token（7200s，不随请求刷新）过期前主动续期；核心与 adapter 之间只有 ChannelEvent 与 MCP 工具两个契约，依赖方向为 apps/adapter-qq <- protocol, utils 且不依赖 agent-core，AGENTS.md 依赖表、根 tsconfig.json references、pnpm-workspace.yaml 与根 package.json 脚本同步",
                 "adapter 经官方 WebSocket 网关按 intents 位订阅 GROUP_AT_MESSAGE_CREATE 与 C2C_MESSAGE_CREATE，实现鉴权、心跳、resume 与断线重连，并落 channel.connected / channel.disconnected",
@@ -272,7 +272,7 @@
             "dependencies": [
                 "feat-013"
             ],
-            "status": "not-started",
+            "status": "in-progress",
             "doneCriteria": [
                 "队列视图呈现每车道状态与排队数，以及每 conversation 的槽位占用、按 reason 分类的 droppedCount 与生效策略；事件推送为主、低频轮询兜底，断连后能恢复",
                 "adapter 视图呈现连接状态、已注册工具及权限级别、入站速率、outbound 成败计数与最近错误",

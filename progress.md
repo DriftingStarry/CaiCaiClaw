@@ -3,7 +3,27 @@
 ## Current State
 
 **Last Updated:** 2026-08-19
-**Active Feature:** feat-014（M3-6 首个真实外部渠道：QQ 开放平台）代码单元已全部完成并提交，**整体仍为 in-progress**：最后一条 doneCriteria 要求 QQ 沙箱真实往返验收，需要用户提供 AppID / AppSecret，在此之前只做到了假网关 / 假平台级别的验证（见下节「feat-014 实施进度」的残留阻塞）。feat-013（M3-5 MCP host、动态工具与 L3 审批）已完成并提交。feat-014 平台已于 2026-08-19 由用户选定为 **QQ 开放平台（api-v2）**，定义与 doneCriteria 已改写（见下节「feat-014 平台选型」）。用户已授权将 `@modelcontextprotocol/sdk` 仅加入 apps/server，agent-core 保持不 import MCP 或渠道 SDK。
+**Active Feature:** feat-015（M3-7 后台队列、adapter 视图与调试入口）开工中。feat-014（M3-6 QQ 开放平台渠道）代码单元全部完成并提交，状态已置为 **blocked**：唯一未满足的 doneCriteria 是 QQ 沙箱真实往返验收，需要用户提供 AppID / AppSecret 并在开放平台配置群聊 @ 与单聊权限，这是外部依赖而非未完成的实现工作（详见「feat-014 实施进度」的残留阻塞）。feat-015 依赖 feat-013 而不依赖 feat-014，故可在 feat-014 解除阻塞前推进，仍满足「一次只推进一个未阻塞 feature」。用户已授权将 `@modelcontextprotocol/sdk` 仅加入 apps/server，agent-core 保持不 import MCP 或渠道 SDK。
+
+### feat-015 提交计划（2026-08-19 立）
+
+现状核查（实施前已确认，避免把「已有」当「缺失」）：`apps/server` 目前**完全没有 HTTP 路由**，是纯 WS；admin 的 REST 路由都在 Next 侧。README 指定的 `lane_snapshot` / `intake_snapshot` / `channel_snapshot` 三种消息在全仓 grep 无命中，属全新协议面，protocol 版本需 6 → 7。`sendToObservers` 已同时覆盖 observer 与 admin 角色，新快照消息可直接复用。`approval_decision` 是 admin 唯一已存在的写入路径（server.ts 已按 admin 角色 gate），可作为调试入口的范式；但 admin 前端尚无任何 admin 角色连接，`buildWsUrl` 也缺 `adminToken` 参数。队列深度、槽位占用、入站速率均未被任何公开 API 暴露；`droppedCount` 目前只有总数、没有按 reason 分类。
+
+拆分为以下提交单元，每个都是可独立 `git revert` 的原子单元：
+
+1. **按 reason 分类的 droppedCount**：`RawHistoryConversationProjection.droppedCount` 现在只是总数，doneCriteria 要求按 reason 分类。改为同时保留总数与分 reason 计数，回放 `input.dropped` 时按 `event.reason` 累加。标题：`feat(agent-core): 按 reason 分类 conversation droppedCount`。验证：`./init.sh` + probe 回放多种 reason 后校验分类计数。
+2. **runtime 快照读取 API**：在 `IntakeController` 增加按 conversation 汇总 pending 槽位（区分通用槽与保留槽，复用已有的私有 `isPriority` 判定）与生效策略的公开访问器；在 `AgentRuntime` 增加 lane 状态 / 队列深度 / intake 快照 / channel 快照的公开 getter。只读，不改任何裁决行为。标题：`feat(agent-core): 暴露车道与 intake 快照读取 API`。验证：`./init.sh` + probe 校验快照与实际排队一致。
+3. **入站速率与 outbound 计数**：入站速率目前无任何计数器。新增滑动窗口入站速率统计，并从 `outboundEvents` 投影汇总每渠道成败计数与最近错误。标题：`feat(agent-core): 统计入站速率与 outbound 成败`。验证：`./init.sh` + probe 校验窗口滚动与计数。
+4. **三种快照协议消息**：protocol 新增 `lane_snapshot` / `intake_snapshot` / `channel_snapshot`，版本 6 → 7；server 在运行时状态迁移时经 `sendToObservers` 推送，并加低频轮询兜底以免断连后面板僵死。标题：`feat(protocol): 新增队列与 adapter 快照消息`。验证：`./init.sh` + probe 校验状态迁移推送与重连后恢复。
+5. **admin 角色连接**：`buildWsUrl` 增加 `adminToken` 参数，admin 前端以 admin 角色连接并消费快照与审批消息。标题：`feat(client-core): 支持 admin 角色连接`。验证：`./init.sh` + probe 校验带 adminToken 的握手。
+6. **队列视图**：admin 新增车道与 intake 队列视图，呈现每车道状态、排队数、每 conversation 槽位占用、按 reason 分类的 droppedCount 与生效策略。标题：`feat(admin): 增加车道与队列视图`。验证：`./init.sh` + admin production build。
+7. **adapter 视图**：呈现连接状态、已注册工具及权限级别、入站速率、outbound 成败计数与最近错误。标题：`feat(admin): 增加 adapter 视图`。验证：同上。
+8. **审批视图**：pending 与已决历史，可 approve / deny，显示完整 tool name 与 args。复用已有的 `approval_decision` 写入路径。标题：`feat(admin): 增加 L3 审批视图`。验证：同上。
+9. **调试入口：注入入站**：admin 可构造 `ChannelEvent` 投进 intake（可勾 `isSelf` 验回声抑制），server 侧对 admin 角色强制打 `debugOrigin: "admin"`（当前 server 对 admin 角色的 input 既不 stamp origin 也不校验 channel），回执显示 disposition。标题：`feat(server): 增加 admin 入站注入调试入口`。验证：`./init.sh` + probe 校验强制 stamping 与 self_echo 抑制。
+10. **调试入口：直调出站 tool（默认 dry-run）**：默认只校验 schema 与路由解析、不真实投递，显式确认才真发，且仍受权限分级与 L3 审批约束。标题：`feat(server): 增加出站工具 dry-run 调试入口`。验证：`./init.sh` + probe 校验 dry-run 不产生平台调用、真实执行仍走 L3 审批。
+11. **状态与证据登记**：`feature_list.json` 的 status / evidence 与本文件同步。标题：`chore: 登记 feat-015 状态与证据`。
+
+拆分依据：先补数据（1-3 只读/统计，不改裁决行为），再开协议面（4-5），再落三个视图（6-8 纯前端消费），最后加两个带写入语义因而风险最高的调试入口（9-10）。JSONL 对后台严格只读不变：调试注入与审批决策都走 runtime 公开入口。
 
 ### feat-014 平台选型（2026-08-19，仅文档，未开工）
 
