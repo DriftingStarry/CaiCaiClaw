@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { AdapterPanel } from "../../src/components/AdapterPanel";
 import { ApprovalPanel } from "../../src/components/ApprovalPanel";
 import { ConnectionBadge } from "../../src/components/ConnectionBadge";
+import { InjectEventPanel } from "../../src/components/InjectEventPanel";
 import { LaneQueuePanel } from "../../src/components/LaneQueuePanel";
 import { useAgentClientStore } from "../../src/stores/useAgentClientStore";
 import { useAgentSupervisorPolling, useAgentSupervisorStore } from "../../src/stores/useAgentSupervisorStore";
@@ -17,8 +18,10 @@ export default function RuntimePage() {
     const channelSnapshot = useAgentClientStore((state) => state.channelSnapshot);
     const connectionStatus = useAgentClientStore((state) => state.connectionStatus);
     const connect = useAgentClientStore((state) => state.connect);
+    const debugReceipts = useAgentClientStore((state) => state.debugReceipts);
     const disconnect = useAgentClientStore((state) => state.disconnect);
     const errors = useAgentClientStore((state) => state.errors);
+    const injectEvent = useAgentClientStore((state) => state.injectEvent);
     const intakeSnapshot = useAgentClientStore((state) => state.intakeSnapshot);
     const laneSnapshot = useAgentClientStore((state) => state.laneSnapshot);
     const agentStatus = useAgentSupervisorStore((state) => state.snapshot.status);
@@ -56,6 +59,7 @@ export default function RuntimePage() {
                     <LaneQueuePanel intakeSnapshot={intakeSnapshot} laneSnapshot={laneSnapshot} />
                     <AdapterPanel channelSnapshot={channelSnapshot} />
                     <ApprovalPanel approvalSnapshot={approvalSnapshot} onDecide={decideApproval} />
+                    <InjectEventPanel receipts={debugReceipts} onInject={injectEvent} />
                 </section>
             </div>
         </main>

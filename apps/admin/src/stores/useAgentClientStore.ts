@@ -13,11 +13,35 @@ import { errorMessage } from "@caicaiclaw/utils";
 import { create } from "zustand";
 import { getOrCreateClientId, setStoredClientId } from "../adapters/ws/clientIdentity";
 
+export type DebugReceipt = {
+    requestId: string;
+    kind: "input";
+    label: string;
+    disposition?: "accepted" | "merged" | "dropped";
+    reason?: string;
+    batchId?: string;
+    error?: string;
+    createdAt: number;
+};
+
+export type InjectEventDraft = {
+    channel: string;
+    conversationId: string;
+    kind: string;
+    text: string;
+    authorId: string;
+    isSelf: boolean;
+    platformMessageId?: string;
+    laneHint?: "fast" | "deep";
+};
+
 export type AgentClientStore = ClientState & {
     connect: () => Promise<void>;
     disconnect: () => void;
     sendInput: (text: string) => void;
     decideApproval: (approvalId: string, decision: "approve" | "deny") => void;
+    debugReceipts: DebugReceipt[];
+    injectEvent: (draft: InjectEventDraft) => void;
 };
 
 let wsClient: CaiCaiWsClient | undefined;
@@ -29,6 +53,7 @@ const browserSocketFactory: WebSocketFactory = (url) => new WebSocket(url);
 
 export const useAgentClientStore = create<AgentClientStore>((set) => ({
     ...initialClientState,
+    debugReceipts: [],
     connect: () => {
         shouldConnect = true;
         if (wsClient || connectionRequest) return connectionRequest ?? Promise.resolve();
@@ -66,6 +91,21 @@ export const useAgentClientStore = create<AgentClientStore>((set) => ({
                             set((state) =>
                                 reduceClientState(state, { type: "server_message", message, receivedAt: Date.now() }),
                             );
+                            // 回执按 requestId 回填；未命中调试回执的 ack/error 不动状态（例如 chat 输入的 ack）。
+                            if (message.type === "ack" && message.requestId) {
+                                const requestId = message.requestId;
+                                set((state) =>
+                                    patchDebugReceipt(state, requestId, {
+                                        ...(message.disposition ? { disposition: message.disposition } : {}),
+                                        ...(message.reason ? { reason: message.reason } : {}),
+                                        ...(message.batchId ? { batchId: message.batchId } : {}),
+                                    }),
+                                );
+                            }
+                            if (message.type === "error" && message.requestId) {
+                                const requestId = message.requestId;
+                                set((state) => patchDebugReceipt(state, requestId, { error: message.message }));
+                            }
                             if (message.type === "hello" && message.protocolVersion !== WS_PROTOCOL_VERSION) {
                                 wsClient?.disconnect();
                                 wsClient = undefined;
@@ -128,7 +168,61 @@ export const useAgentClientStore = create<AgentClientStore>((set) => ({
             set((state) => ({ ...state, errors: [...state.errors, errorMessage(error)] }));
         }
     },
+    injectEvent: (draft: InjectEventDraft) => {
+        const requestId = crypto.randomUUID();
+        const timestamp = Date.now();
+        const receipt: DebugReceipt = {
+            requestId,
+            kind: "input",
+            label: `${draft.channel}/${draft.conversationId}`,
+            createdAt: timestamp,
+        };
+        set((state) => ({
+            ...state,
+            debugReceipts: [...state.debugReceipts, receipt].slice(-MAX_DEBUG_RECEIPTS),
+        }));
+
+        // 未连接时 send 是静默 no-op，回执会永远停在「等待回执」，因此这里显式回填错误。
+        if (!wsClient) {
+            set((state) => patchDebugReceipt(state, requestId, { error: "WebSocket 未连接，事件未发送" }));
+            return;
+        }
+
+        try {
+            wsClient.send({
+                type: "input",
+                event: {
+                    channel: draft.channel,
+                    conversationId: draft.conversationId,
+                    kind: draft.kind,
+                    text: draft.text,
+                    // debugOrigin 不由客户端设置：服务端按连接角色强制标记。
+                    author: { id: draft.authorId, isSelf: draft.isSelf },
+                    occurredAt: timestamp,
+                    receivedAt: timestamp,
+                    ...(draft.platformMessageId ? { platformMessageId: draft.platformMessageId } : {}),
+                    ...(draft.laneHint ? { laneHint: draft.laneHint } : {}),
+                },
+                requestId,
+            });
+        } catch (error) {
+            set((state) => patchDebugReceipt(state, requestId, { error: errorMessage(error) }));
+        }
+    },
 }));
+
+const MAX_DEBUG_RECEIPTS = 20;
+
+/** 按 requestId 回填调试回执；未命中时原样返回，避免无关 ack/error 触发重渲染。 */
+function patchDebugReceipt(state: AgentClientStore, requestId: string, patch: Partial<DebugReceipt>): AgentClientStore {
+    if (!state.debugReceipts.some((receipt) => receipt.requestId === requestId)) return state;
+    return {
+        ...state,
+        debugReceipts: state.debugReceipts.map((receipt) =>
+            receipt.requestId === requestId ? { ...receipt, ...patch } : receipt,
+        ),
+    };
+}
 
 async function readAgentConnectionTokens(): Promise<{ token: string; adminToken: string }> {
     const response = await fetch("/api/agent-auth/connection", { cache: "no-store" });
