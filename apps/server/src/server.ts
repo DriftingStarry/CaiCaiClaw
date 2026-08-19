@@ -307,6 +307,56 @@ export function createServer(
                     return;
                 }
 
+                if (message.type === "debug_tool_call") {
+                    if (connection.role.role !== "admin") {
+                        throw new Error("debug tool calls require an admin connection");
+                    }
+                    // dryRun 是默认安全路径：只解析路由并校验 schema，不产生真实工具投递。
+                    const permission = mcpHost.snapshot().permissionsByName[message.toolName] ?? "L3";
+                    if (message.dryRun) {
+                        const route = mcpHost.dryRun(message.toolName);
+                        if (!route.ok) {
+                            send(socket, {
+                                type: "debug_tool_result",
+                                requestId: message.requestId,
+                                toolName: message.toolName,
+                                permission,
+                                outcome: "dry_run_invalid",
+                                detail: route.detail,
+                            });
+                            return;
+                        }
+                        const validationError = mcpHost.validateArgs(message.toolName, message.args);
+                        send(socket, {
+                            type: "debug_tool_result",
+                            requestId: message.requestId,
+                            toolName: message.toolName,
+                            permission,
+                            outcome: validationError ? "dry_run_invalid" : "dry_run_ok",
+                            detail: validationError
+                                ? `已解析 adapterId=${route.adapterId}、remoteName=${route.remoteName}；参数校验失败：${validationError}`
+                                : `已解析 adapterId=${route.adapterId}、remoteName=${route.remoteName}；参数 schema 校验通过`,
+                        });
+                        return;
+                    }
+
+                    const result = await runtime.debugInvokeTool(
+                        message.toolName,
+                        message.args,
+                        `admin:${connection.clientId}`,
+                    );
+                    send(socket, {
+                        type: "debug_tool_result",
+                        requestId: message.requestId,
+                        toolName: message.toolName,
+                        permission: result.permission,
+                        outcome: result.outcome,
+                        ...(result.detail ? { detail: result.detail } : {}),
+                        ...(result.approvalId ? { approvalId: result.approvalId } : {}),
+                    });
+                    return;
+                }
+
                 const receivedAt = Date.now();
                 const event = { ...message.event };
                 if (connection.role.role === "admin") {

@@ -94,9 +94,38 @@ export class McpToolHost {
         return { toolsByName, permissionsByName, connectedAdapters: [...this.adapters.keys()] };
     }
 
+    /** dry-run 只解析 MCP 路由与输入 schema，不调用 client.callTool，不产生真实投递。 */
+    public dryRun(
+        toolName: string,
+    ): { ok: false; detail: string } | { ok: true; adapterId: string; remoteName: string; inputSchema: JsonSchema } {
+        const resolved = this.findToolDefinition(toolName);
+        if (!resolved) return { ok: false, detail: `MCP 工具 ${toolName} 不可用` };
+        return {
+            ok: true,
+            adapterId: resolved.adapterId,
+            remoteName: resolved.definition.remoteName,
+            inputSchema: resolved.definition.inputSchema,
+        };
+    }
+
+    /** dry-run 参数校验只复用本地 schema 检查，不触发任何 adapter 调用。 */
+    public validateArgs(toolName: string, args: Record<string, unknown>): string | undefined {
+        const resolved = this.findToolDefinition(toolName);
+        if (!resolved) return `MCP 工具 ${toolName} 不可用`;
+        return validateJsonSchema(args, resolved.definition.inputSchema, "$args");
+    }
+
     public async close(): Promise<void> {
         const adapterIds = [...this.adapters.keys()];
         for (const adapterId of adapterIds) await this.disconnect(adapterId);
+    }
+
+    private findToolDefinition(toolName: string): { adapterId: string; definition: McpToolDefinition } | undefined {
+        for (const [adapterId, adapter] of this.adapters) {
+            const definition = adapter.tools.get(toolName);
+            if (definition) return { adapterId, definition };
+        }
+        return undefined;
     }
 }
 

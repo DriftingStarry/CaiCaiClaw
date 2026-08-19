@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { errorMessage, toJsonObject, toJsonValue } from "@caicaiclaw/utils";
+import type { JsonObject } from "@caicaiclaw/utils";
 import type { ChannelEvent } from "@caicaiclaw/utils/history";
 import { AgentConfig, getAgent, ToolResultEvent, ToolStartEvent } from "../agent";
 import { runAgentStream } from "./agentStream";
@@ -271,6 +272,59 @@ export class AgentRuntime {
                 const message = `approved tool ${approval.toolName} failed: ${errorMessage(error)}`;
                 await this.recordOutboundFailed(approval.toolName, approval.args, message, approvalId);
                 return { status: "failed", approvalId, message };
+            }
+        });
+    }
+
+    /**
+     * 调试直调仍受权限分级与 L3 审批约束；L3 只创建审批请求，不直接投递工具。
+     */
+    public async debugInvokeTool(
+        toolName: string,
+        args: JsonObject,
+        invokedBy: string,
+    ): Promise<{
+        permission: ToolPermissionLevel;
+        outcome: "executed" | "pending_approval" | "failed";
+        detail?: string;
+        approvalId?: string;
+    }> {
+        if (!invokedBy.trim()) throw new Error("invokedBy must not be empty");
+        this.assertAvailable();
+        return await this.runExclusive(async () => {
+            const permission = this.permissionForTool(toolName);
+            if (permission === "L3") {
+                const approvalId = this.createId("approval");
+                await this.history.append({
+                    type: "approval.requested",
+                    createdAt: Date.now(),
+                    approvalId,
+                    turnId: this.createId("debug-turn"),
+                    toolName,
+                    args: toJsonObject(args),
+                    expiresAt: Date.now() + this.approvalTtlMs,
+                });
+                return {
+                    permission,
+                    outcome: "pending_approval" as const,
+                    approvalId,
+                    detail: `工具 ${toolName} 已由 ${invokedBy} 创建 L3 审批请求`,
+                };
+            }
+
+            const tool = this.runtimeToolsByName[toolName];
+            if (!tool) {
+                return { permission, outcome: "failed" as const, detail: `工具 ${toolName} 不可用` };
+            }
+
+            try {
+                const result = toJsonValue(await tool.invoke(args));
+                await this.recordOutboundDelivered(toolName, args, result);
+                return { permission, outcome: "executed" as const };
+            } catch (error) {
+                const message = errorMessage(error);
+                await this.recordOutboundFailed(toolName, args, message);
+                return { permission, outcome: "failed" as const, detail: message };
             }
         });
     }
