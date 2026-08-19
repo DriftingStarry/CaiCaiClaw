@@ -42,20 +42,17 @@ export class RawHistoryStore {
         return this.state;
     }
 
-    public async waitForWrites(): Promise<void> {
-        await this.writeTail;
-    }
-
     public async withExclusive<T>(
         operation: (append: (event: RawHistoryEventDraft) => Promise<void>) => Promise<T>,
     ): Promise<T> {
-        await this.writeTail;
+        const pendingWrites = this.writeTail;
         let release!: () => void;
         const barrier = new Promise<void>((resolve) => {
             release = resolve;
         });
         this.exclusiveBarrier = barrier;
         try {
+            await pendingWrites;
             return await operation((event) => this.appendRecord(event));
         } finally {
             this.exclusiveBarrier = undefined;
