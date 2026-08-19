@@ -1,4 +1,10 @@
-import { ClientMessage, parseServerMessage, serializeClientMessage, ServerMessage } from "@caicaiclaw/protocol";
+import {
+    ClientMessage,
+    ClientRoleMessage,
+    parseServerMessage,
+    serializeClientMessage,
+    ServerMessage,
+} from "@caicaiclaw/protocol";
 
 export type WebSocketLike = {
     readyState: number;
@@ -35,6 +41,7 @@ export class CaiCaiWsClient {
         private readonly url: string,
         private readonly handlers: WsClientHandlers,
         private readonly createSocket: WebSocketFactory,
+        private readonly role: ClientRoleMessage = { type: "role", role: "observer" },
     ) {}
 
     public connect(): void {
@@ -52,6 +59,7 @@ export class CaiCaiWsClient {
             if (this.socket !== socket) return;
 
             this.reconnectAttempt = 0;
+            socket.send(serializeClientMessage(this.role));
             this.handlers.onOpen?.();
         });
         socket.addEventListener("close", () => {

@@ -272,6 +272,7 @@ class AgentSupervisor {
                 socket.close();
                 return;
             }
+            socket.send(serializeClientMessage({ type: "role", role: "observer" }));
             this.control = socket;
         });
         socket.on("error", () => {});
