@@ -243,10 +243,6 @@ export function applyRawHistoryEvent(state: RawHistoryState, event: RawHistoryEv
             if (state.contextCheckpoint && event.coveredSequence <= state.contextCheckpoint.coveredSequence) {
                 throw new Error(`compaction ${event.compactionId} does not advance the checkpoint`);
             }
-            if (state.activeTurns.size || state.pendingInputs.size || state.activeToolCalls.size) {
-                throw new Error(`compaction ${event.compactionId} was recorded while runtime was active`);
-            }
-
             const preservedTurns: RawHistoryTurn[] = event.preservedTurns.map((turn) => ({
                 turnId: turn.turnId,
                 inputIds: [...turn.inputIds],

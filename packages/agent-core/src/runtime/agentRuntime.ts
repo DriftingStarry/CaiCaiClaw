@@ -464,7 +464,6 @@ export class AgentRuntime {
         const preservedCount = getPreservedTurnCount(options.preservedTurns);
         const splitIndex = Math.max(0, turns.length - preservedCount);
         const toSummarize = turns.slice(0, splitIndex);
-        const preservedTurns = turns.slice(splitIndex);
         if (!toSummarize.length && !state.contextCheckpoint) {
             throw new Error("cannot compact when all committed turns are preserved");
         }
@@ -489,14 +488,19 @@ export class AgentRuntime {
                 `context compaction summary exceeds its budget of ${this.compactionSummaryBudget} characters`,
             );
 
+        await this.history.waitForWrites();
+        const latestState = this.history.projection;
+        const latestTurns = [...(latestState.contextCheckpoint?.preservedTurns ?? []), ...latestState.committedTurns];
+        const latestSplitIndex = Math.max(0, latestTurns.length - preservedCount);
+        const latestPreservedTurns = latestTurns.slice(latestSplitIndex);
         const compactionId = this.createId("compaction");
         await this.history.append({
             type: "context.compacted",
             createdAt: Date.now(),
             compactionId,
-            coveredSequence: state.lastSequence,
+            coveredSequence: latestState.lastSequence,
             summary,
-            preservedTurns: preservedTurns.map((turn) => ({
+            preservedTurns: latestPreservedTurns.map((turn) => ({
                 turnId: turn.turnId,
                 inputIds: [...turn.inputIds],
                 messages: serializeHistoryMessages(turn.messages),

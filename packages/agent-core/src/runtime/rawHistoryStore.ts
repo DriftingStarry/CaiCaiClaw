@@ -41,6 +41,10 @@ export class RawHistoryStore {
         return this.state;
     }
 
+    public async waitForWrites(): Promise<void> {
+        await this.writeTail;
+    }
+
     public readToolResult(turnId: string, toolCallId: string, offset = 0, limit = 4_000): ToolResultPage {
         if (!Number.isInteger(offset) || offset < 0)
             throw new Error("tool result offset must be a non-negative integer");
