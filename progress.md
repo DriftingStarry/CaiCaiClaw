@@ -3,15 +3,24 @@
 ## Current State
 
 **Last Updated:** 2026-08-19
-**Active Feature:** feat-013（M3-5 MCP host、动态工具与 L3 审批）进行中。feat-012 已完成：受限 history_query、conversation digest 契约和 background heartbeat 摘要均已验证并落为 `2659a78` / `cd1e094` / `21eee0f`；状态证据 `cb3b099`。用户已授权将 `@modelcontextprotocol/sdk` 仅加入 apps/server，agent-core 保持不 import MCP 或渠道 SDK。
+**Active Feature:** feat-013（M3-5 MCP host、动态工具与 L3 审批）已完成；下一项为 feat-014（真实外部渠道），需先由用户选择平台并提供相应的授权方式。feat-012 已完成：受限 history_query、conversation digest 契约和 background heartbeat 摘要均已验证并落为 `2659a78` / `cd1e094` / `21eee0f`；状态证据 `cb3b099`。用户已授权将 `@modelcontextprotocol/sdk` 仅加入 apps/server，agent-core 保持不 import MCP 或渠道 SDK。
 
 ### feat-013 提交计划
 
 1. **MCP SDK 依赖**：将 `@modelcontextprotocol/sdk` 仅加入 `apps/server`，更新 lockfile，不改 agent-core 依赖方向。标题：`chore(server): 添加 MCP client SDK`。验证：`./init.sh`。
 2. **MCP host 与动态工具注册**：server host 管理 adapter 的 MCP client、连接/断开、工具发现和将调用包装成 runtime 可加载工具；断开后明确解绑，图重建保留 runtime state。标题：`feat(server): 接入 MCP adapter 工具 host`。验证：`./init.sh` 与假 MCP adapter connect/disconnect probe。已完成提交 `0366a5f`、`8024e4d`：新增 `McpToolHost`、命名空间工具包装、server connect/disconnect API、runtime deep tool 图重建，并保留/校验 MCP `inputSchema`；`./init.sh` 通过。真实 SDK `Server` + 成对 Transport probe 输出 `{\"discovered\":true,\"validCall\":true,\"invalidRejected\":true,\"calls\":1,\"disconnected\":true}`，验证旧 tool 断开后失败且非法 args 未触发 adapter call；临时 probe 已删除。
-3. **权限与审批状态机**：共享 history 事件契约、runtime L0-L3 gate、pending approval 回放/TTL、受信 admin decision 与 server 路由。标题：`feat(agent-core): 实现 L3 审批状态机`。验证：`./init.sh` 与假 adapter 的权限/approve/replay/TTL probe。
+3. **审批事件回放契约**：在 utils history schema 与 agent-core projection 中追加 approval requested/decided/expired，确保重启后可重建 pending。标题：`feat(agent-core): 增加审批事件回放契约`。验证：`./init.sh`。已完成提交 `3f20e91`。
+4. **权限 gate 与审批执行**：在 deep agent 工具调用前接入默认 L3 gate；L3 立即写 pending，并由 runtime 用日志参数一次性执行 approve。标题：`feat(agent-core): 接入 L3 审批 gate 与执行`。验证：`./init.sh`。已完成提交 `50d4079`；`852d72d` 补齐 L0-L3 可配置 gate、heartbeat TTL 与 outbound result 事件，`e017e91` 将决定/到期注入后续 deep context。
+5. **出站审计与受信决策路由**：追加 outbound history 契约，补 runtime TTL/结果落盘，并扩展 protocol/server 的 admin-only approval_decision 路由。标题：`feat(agent-core): 审计审批出站结果`、`feat(protocol): 定义审批决策与出站审计契约`、`feat(server): 接入受信审批决策路由`。验证：`./init.sh` 与假 MCP adapter 的权限/approve/replay/TTL/越权 probe。已完成提交 `8809b6f`：协议升级到 v6，审批决定要求 WS token 与 CAICAI_ADMIN_TOKEN；adapter 和仅持 WS token 的观察者均被拒绝。
 
 SDK 影响说明：MCP client host 需要其 transport、capability negotiation 与 tools/list/call 协议实现；替代方案是自行维护 JSON-RPC/MCP 子集，开发成本高、兼容风险也更大，故采用官方 SDK。依赖只位于 server，不进入共享 runtime。
+
+### feat-013 完成证据
+
+- `649ba6e` / `0366a5f` / `8024e4d` / `28aeb5a`：MCP SDK 仅存在于 `apps/server`；真实 SDK 成对 transport probe 输出 `{"discovered":true,"validCall":true,"invalidRejected":true,"calls":1,"disconnected":true}`，覆盖发现、参数校验、调用与断开解绑。`rg` 确认 `packages/agent-core` 无 MCP SDK import。
+- `3f20e91` / `50d4079` / `852d72d` / `e017e91`：JSONL approval projection、默认 L3 gate、日志原参数的一次性 approve、outbound 成败审计、TTL 到期及后续 deep context 通知。临时 fake runtime probe 输出 approval executed / failed、`calls:2`、`duplicateRejected:true`、`expired:1`，并验证 replay pending；TTL context probe 输出 `{"expiredVisible":true,"pendingAfterExpiry":0}`。两份 probe 均已删除。
+- `8809b6f`：`approval_decision` 经协议 v6 的 admin 角色路由；真实短生命周期 WS probe 输出 `{"adapterRejected":true,"sharedTokenRejected":true,"adminReachedRuntime":true}`，验证 adapter 与仅持 WS token 的连接无法批准，双 token admin 才抵达 runtime；临时 probe 已删除。
+- `./init.sh` 通过（typecheck、lint、format）；worktree 仅留本次 feature 状态记录。
 
 ### feat-012 提交计划
 

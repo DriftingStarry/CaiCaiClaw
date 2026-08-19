@@ -231,7 +231,7 @@
             "dependencies": [
                 "feat-012"
             ],
-            "status": "in-progress",
+            "status": "done",
             "doneCriteria": [
                 "MCP host 位于 apps/server，agent-core 不 import MCP SDK 或任何渠道 SDK",
                 "adapter 连接/断开时重建图并保留 state；断开后其工具解绑或调用明确失败，不会让模型调用不存在的工具",
@@ -241,7 +241,8 @@
                 "approval_decision 只接受 admin 鉴权路径的消息，adapter 连接提交决策被拒绝",
                 "重启回放后未决审批恢复为 pending；超过 CAICAI_APPROVAL_TTL_MS 落 approval.expired 且语义等同 deny 并通知 agent",
                 "./init.sh 通过，并以假 MCP adapter 记录连接、断开、未分级默认拒绝、审批闭环与越权提交被拒的验收"
-            ]
+            ],
+            "evidence": "已完成。提交：649ba6e/0366a5f/8024e4d/28aeb5a 完成 server-only MCP host、inputSchema 校验和真实 SDK transport 生命周期 probe；3f20e91/50d4079/852d72d/e017e91 完成审批事件回放、默认 L3 gate、日志原参数的一次性 approve、outbound 结果审计、TTL 到期及后续 deep context 通知；8809b6f 完成 v6 admin-only approval_decision 路由。MCP probe 输出 {\"discovered\":true,\"validCall\":true,\"invalidRejected\":true,\"calls\":1,\"disconnected\":true}；审批 probe 验证 replay、duplicate reject、outbound 成败、TTL；WS probe 输出 {\"adapterRejected\":true,\"sharedTokenRejected\":true,\"adminReachedRuntime\":true}。./init.sh 通过，packages/agent-core 无 MCP SDK import。"
         },
         {
             "id": "feat-014",
