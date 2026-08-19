@@ -17,6 +17,7 @@
 - `70c50ae`：真实 WebSocketServer + fake model 验收通过 accepted/merged/dropped ack、`input_dropped`、fast 流式输出；同时修复 merge 优先级（窗口内可合并事件先合并，不因槽位已满误丢），并支持 createServer 注入 fast/background fake model，避免验收构造 OpenRouter API key。
 - `7064df0`：修复 fast 并发提交期间 compact 的 checkpoint cutoff：等待 history writes、刷新最新 projection/preserved suffix 后追加 checkpoint；允许 history 回放 fast active checkpoint，仍由 runtime deep-idle 边界保护。有效 checkpoint maintenance probe 通过：fast active 时 compact `2ms` 完成，deep active 时 daydreaming 等待 `306ms`，history sequence `1..23` 连续。
 - `6c49c64`：将上述 checkpoint 修复提升为 `RawHistoryStore.withExclusive()` 排它 append transaction；snapshot、background model await、checkpoint append 全部持有 barrier，fast append 在 barrier 后执行。强制 probe 输出 `elapsed:205ms,sequences:17,replaySequence:17,checkpoint:2`，确认 fast 在模型 await 期间被排队、序列连续且重启回放无 corruption。history 明确记录 M3 允许 fast active checkpoint，deep-idle 由 runtime 强制。
+- `c26e880`：修复 barrier 建立竞态：同步捕获旧 `writeTail` 后立即设置 exclusive barrier，再等待 captured tail；timing probe 在 exclusive await 期间并发 append，释放后两条记录均完成，重放 sequence=2。
 - feat-011 doneCriteria 已全部有证据：真实 WS intake/streaming、200 fast during slow deep、self_echo/dropCount、defer upgrade、fallback logs、maintenance deep-idle 均已验证。
 
 ### feat-011 提交计划
