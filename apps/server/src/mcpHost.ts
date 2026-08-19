@@ -9,7 +9,20 @@ export type McpToolHostSnapshot = {
 
 type ConnectedAdapter = {
     client: Client;
-    toolNames: string[];
+    tools: Map<string, McpToolDefinition>;
+};
+
+type McpToolDefinition = {
+    remoteName: string;
+    inputSchema: JsonSchema;
+};
+
+type JsonSchema = {
+    type?: string;
+    properties?: Record<string, JsonSchema>;
+    required?: string[];
+    additionalProperties?: boolean | JsonSchema;
+    items?: JsonSchema;
 };
 
 export class McpToolHost {
@@ -22,13 +35,13 @@ export class McpToolHost {
         const client = new Client({ name: "caicaiclaw-server", version: "0.0.0" });
         await client.connect(transport);
         const listed = await client.listTools();
-        const toolNames: string[] = [];
+        const tools = new Map<string, McpToolDefinition>();
         for (const tool of listed.tools) {
             const name = namespaceToolName(adapterId, tool.name);
-            if (toolNames.includes(name)) throw new Error(`MCP adapter returned duplicate tool ${tool.name}`);
-            toolNames.push(name);
+            if (tools.has(name)) throw new Error(`MCP adapter returned duplicate tool ${tool.name}`);
+            tools.set(name, { remoteName: tool.name, inputSchema: normalizeJsonSchema(tool.inputSchema) });
         }
-        this.adapters.set(adapterId, { client, toolNames });
+        this.adapters.set(adapterId, { client, tools });
         return this.snapshot();
     }
 
@@ -43,7 +56,7 @@ export class McpToolHost {
     public snapshot(): McpToolHostSnapshot {
         const toolsByName: Record<string, DynamicStructuredTool> = {};
         for (const [adapterId, adapter] of this.adapters) {
-            for (const name of adapter.toolNames) {
+            for (const [name] of adapter.tools) {
                 const toolName = name.slice(`mcp__${adapterId}__`.length);
                 toolsByName[name] = createDynamicTool(
                     name,
@@ -51,7 +64,15 @@ export class McpToolHost {
                     async (args) => {
                         const current = this.adapters.get(adapterId);
                         if (!current) throw new Error(`MCP adapter ${adapterId} is disconnected`);
-                        const result = await current.client.callTool({ name: toolName, arguments: args });
+                        const currentDefinition = current.tools.get(name);
+                        if (!currentDefinition) throw new Error(`MCP tool ${name} is no longer available`);
+                        const validationError = validateJsonSchema(args, currentDefinition.inputSchema, "$args");
+                        if (validationError)
+                            throw new Error(`invalid arguments for MCP tool ${name}: ${validationError}`);
+                        const result = await current.client.callTool({
+                            name: currentDefinition.remoteName,
+                            arguments: args,
+                        });
                         return normalizeToolResult(result);
                     },
                 );
@@ -64,6 +85,55 @@ export class McpToolHost {
         const adapterIds = [...this.adapters.keys()];
         for (const adapterId of adapterIds) await this.disconnect(adapterId);
     }
+}
+
+function normalizeJsonSchema(value: unknown): JsonSchema {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+        throw new Error("MCP tool inputSchema must be a JSON object");
+    }
+    return value as JsonSchema;
+}
+
+function validateJsonSchema(value: unknown, schema: JsonSchema, path: string): string | undefined {
+    if (schema.type === "object") {
+        if (!value || typeof value !== "object" || Array.isArray(value)) return `${path} must be an object`;
+        const objectValue = value as Record<string, unknown>;
+        for (const required of schema.required ?? []) {
+            if (!(required in objectValue)) return `${path}.${required} is required`;
+        }
+        for (const [key, child] of Object.entries(objectValue)) {
+            const childSchema = schema.properties?.[key];
+            if (!childSchema) {
+                if (schema.additionalProperties === false) return `${path}.${key} is not allowed`;
+                if (schema.additionalProperties && typeof schema.additionalProperties === "object") {
+                    const error = validateJsonSchema(child, schema.additionalProperties, `${path}.${key}`);
+                    if (error) return error;
+                }
+                continue;
+            }
+            const error = validateJsonSchema(child, childSchema, `${path}.${key}`);
+            if (error) return error;
+        }
+    } else if (schema.type === "array") {
+        if (!Array.isArray(value)) return `${path} must be an array`;
+        if (schema.items) {
+            for (let index = 0; index < value.length; index += 1) {
+                const error = validateJsonSchema(value[index], schema.items, `${path}[${index}]`);
+                if (error) return error;
+            }
+        }
+    } else if (schema.type && !matchesJsonType(value, schema.type)) {
+        return `${path} must be ${schema.type}`;
+    }
+    return undefined;
+}
+
+function matchesJsonType(value: unknown, type: string): boolean {
+    if (type === "null") return value === null;
+    if (type === "array") return Array.isArray(value);
+    if (type === "object") return Boolean(value && typeof value === "object" && !Array.isArray(value));
+    if (type === "integer") return typeof value === "number" && Number.isInteger(value);
+    return typeof value === type;
 }
 
 function namespaceToolName(adapterId: string, toolName: string): string {
