@@ -319,6 +319,34 @@ export const serverChannelSnapshotMessageSchema = z
     })
     .strict();
 
+export const serverApprovalSnapshotMessageSchema = z
+    .object({
+        type: z.literal("approval_snapshot"),
+        createdAt: z.number(),
+        pending: z.array(
+            z
+                .object({
+                    approvalId: z.string().min(1),
+                    turnId: z.string().min(1),
+                    toolName: z.string().min(1),
+                    args: jsonObjectSchema,
+                    expiresAt: z.number().int().positive(),
+                })
+                .strict(),
+        ),
+        decided: z.array(
+            z
+                .object({
+                    approvalId: z.string().min(1),
+                    toolName: z.string().min(1),
+                    status: z.enum(["approved", "denied", "expired"]),
+                    createdAt: z.number().int().nonnegative(),
+                })
+                .strict(),
+        ),
+    })
+    .strict();
+
 export const serverMessageSchema = z.discriminatedUnion("type", [
     serverHelloMessageSchema,
     serverAckMessageSchema,
@@ -338,6 +366,7 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
     serverLaneSnapshotMessageSchema,
     serverIntakeSnapshotMessageSchema,
     serverChannelSnapshotMessageSchema,
+    serverApprovalSnapshotMessageSchema,
 ]);
 
 export type ServerMessage = z.infer<typeof serverMessageSchema>;

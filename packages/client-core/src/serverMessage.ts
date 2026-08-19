@@ -63,6 +63,47 @@ export function applyServerMessage(state: ClientState, message: ServerMessage, r
             }));
         case "agent_turn_done":
             return markTurnDone(state, message.turnId, message.createdAt, receivedAt);
+        case "lane_snapshot":
+            // 快照是全量替换语义，不是增量合并。
+            return {
+                ...state,
+                laneSnapshot: {
+                    createdAt: message.createdAt,
+                    lanes: message.lanes,
+                },
+            };
+        case "intake_snapshot":
+            // 快照是全量替换语义，不是增量合并。
+            return {
+                ...state,
+                intakeSnapshot: {
+                    createdAt: message.createdAt,
+                    conversations: message.conversations,
+                    policies: message.policies,
+                },
+            };
+        case "channel_snapshot":
+            // 快照是全量替换语义，不是增量合并。
+            return {
+                ...state,
+                channelSnapshot: {
+                    createdAt: message.createdAt,
+                    channels: message.channels,
+                    tools: message.tools,
+                    inboundRates: message.inboundRates,
+                    outbound: message.outbound,
+                },
+            };
+        case "approval_snapshot":
+            // 快照是全量替换语义，不是增量合并。
+            return {
+                ...state,
+                approvalSnapshot: {
+                    createdAt: message.createdAt,
+                    pending: message.pending,
+                    decided: message.decided,
+                },
+            };
         case "error":
             return {
                 ...state,

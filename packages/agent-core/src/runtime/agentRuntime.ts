@@ -10,6 +10,7 @@ import { buildContextWithMemory, flattenTurns, getPreservedTurnCount, selectRece
 import { serializeHistoryMessage, serializeHistoryMessages } from "./historyMessages";
 import { EventQueue } from "./eventQueue";
 import { RawHistoryStore, stringifyToolResult } from "./rawHistoryStore";
+import type { ApprovalUpdate } from "./history";
 import {
     AgentRuntimeOptions,
     CompactOptions,
@@ -218,6 +219,14 @@ export class AgentRuntime {
             ...approval,
             args: { ...approval.args },
         }));
+    }
+
+    /**
+     * 已决审批历史（approved / denied / expired）。投影只保留最近若干条（见 history.ts 的
+     * MAX_APPROVAL_UPDATES），因此这是「近期已决」而非完整审计历史；完整历史在 history.jsonl 里。
+     */
+    public get approvalHistory(): ApprovalUpdate[] {
+        return this.history.projection.approvalUpdates.map((update) => ({ ...update }));
     }
 
     public async expireApprovals(now = Date.now()): Promise<string[]> {

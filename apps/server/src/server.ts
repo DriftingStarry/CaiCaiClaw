@@ -1,5 +1,5 @@
 import { WebSocket, WebSocketServer } from "ws";
-import { errorMessage } from "@caicaiclaw/utils";
+import { errorMessage, toJsonObject } from "@caicaiclaw/utils";
 import { AgentConfig, AgentRuntime, createOpenrouterModel, toolsByName } from "@caicaiclaw/agent-core";
 import {
     isValidClientId,
@@ -142,6 +142,16 @@ export function createServer(
                 })),
                 inboundRates: runtime.inboundRates,
                 outbound: runtime.outboundStats,
+            });
+            sendToObservers({
+                type: "approval_snapshot",
+                createdAt,
+                pending: runtime.pendingApprovals.map((approval) => ({
+                    ...approval,
+                    args: toJsonObject(approval.args),
+                })),
+                // 已决历史来自投影，只保留最近若干条；完整审计历史在 history.jsonl 里。
+                decided: runtime.approvalHistory,
             });
         } catch (error) {
             console.error(`[snapshot] push failed: ${safeErrorMessage(error)}`);

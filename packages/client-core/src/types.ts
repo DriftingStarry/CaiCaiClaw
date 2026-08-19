@@ -1,4 +1,4 @@
-import { ServerMessage } from "@caicaiclaw/protocol";
+import type { ServerMessage } from "@caicaiclaw/protocol";
 import { JsonObject, JsonValue } from "@caicaiclaw/utils";
 
 export type ConnectionStatus = "idle" | "connecting" | "connected" | "reconnecting" | "closed";
@@ -34,12 +34,21 @@ export type AgentTurnActivity = {
     completedAt?: number;
 };
 
+type LaneSnapshotMessage = Extract<ServerMessage, { type: "lane_snapshot" }>;
+type IntakeSnapshotMessage = Extract<ServerMessage, { type: "intake_snapshot" }>;
+type ChannelSnapshotMessage = Extract<ServerMessage, { type: "channel_snapshot" }>;
+type ApprovalSnapshotMessage = Extract<ServerMessage, { type: "approval_snapshot" }>;
+
 export type ClientState = {
     connectionStatus: ConnectionStatus;
     clientId?: string;
     messages: ChatMessage[];
     activities: AgentTurnActivity[];
     errors: string[];
+    laneSnapshot?: Omit<LaneSnapshotMessage, "type">;
+    intakeSnapshot?: Omit<IntakeSnapshotMessage, "type">;
+    channelSnapshot?: Omit<ChannelSnapshotMessage, "type">;
+    approvalSnapshot?: Omit<ApprovalSnapshotMessage, "type">;
 };
 
 export type ClientAction =
