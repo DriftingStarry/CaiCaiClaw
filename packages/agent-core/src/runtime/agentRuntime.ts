@@ -454,62 +454,55 @@ export class AgentRuntime {
     private async performCompaction(options: CompactOptions): Promise<string> {
         if (this.activeTurns.has("deep")) throw new Error("cannot compact while a deep lane turn is active");
         if (this.queue.size > 0) throw new Error("cannot compact while input is pending");
-        const state = this.history.projection;
-        if (state.contextCheckpoint && state.committedTurns.length === 0) {
-            throw new Error("cannot compact without committed turns after the current checkpoint");
-        }
-        const turns = [...(state.contextCheckpoint?.preservedTurns ?? []), ...state.committedTurns];
-        if (!turns.length) throw new Error("cannot compact without committed turns after the current checkpoint");
-
         const preservedCount = getPreservedTurnCount(options.preservedTurns);
-        const splitIndex = Math.max(0, turns.length - preservedCount);
-        const toSummarize = turns.slice(0, splitIndex);
-        if (!toSummarize.length && !state.contextCheckpoint) {
-            throw new Error("cannot compact when all committed turns are preserved");
-        }
+        return await this.history.withExclusive(async (append) => {
+            const state = this.history.projection;
+            const turns = [...(state.contextCheckpoint?.preservedTurns ?? []), ...state.committedTurns];
+            if (!turns.length) throw new Error("cannot compact without committed turns after the current checkpoint");
+            const splitIndex = Math.max(0, turns.length - preservedCount);
+            const toSummarize = turns.slice(0, splitIndex);
+            const preservedTurnsForCheckpoint = turns.slice(splitIndex);
+            if (!toSummarize.length && !state.contextCheckpoint) {
+                throw new Error("cannot compact when all committed turns are preserved");
+            }
+            const sourceMessages = [
+                ...(state.contextCheckpoint ? [state.contextCheckpoint.summary] : []),
+                ...flattenTurns(toSummarize),
+            ];
+            let summary: string;
+            try {
+                const response = await this.compactionModel.invoke([
+                    { role: "system", content: this.compactionPrompt },
+                    { role: "user", content: JSON.stringify(sourceMessages) },
+                ]);
+                summary = extractMessageText(response.content).trim();
+            } catch (error) {
+                throw new Error(`context compaction summary failed: ${errorMessage(error)}`, { cause: error });
+            }
+            if (!summary) throw new Error("context compaction summary is empty");
+            if (summary.length > this.compactionSummaryBudget)
+                throw new Error(
+                    `context compaction summary exceeds its budget of ${this.compactionSummaryBudget} characters`,
+                );
 
-        const sourceMessages = [
-            ...(state.contextCheckpoint ? [state.contextCheckpoint.summary] : []),
-            ...flattenTurns(toSummarize),
-        ];
-        let summary: string;
-        try {
-            const response = await this.compactionModel.invoke([
-                { role: "system", content: this.compactionPrompt },
-                { role: "user", content: JSON.stringify(sourceMessages) },
-            ]);
-            summary = extractMessageText(response.content).trim();
-        } catch (error) {
-            throw new Error(`context compaction summary failed: ${errorMessage(error)}`, { cause: error });
-        }
-        if (!summary) throw new Error("context compaction summary is empty");
-        if (summary.length > this.compactionSummaryBudget)
-            throw new Error(
-                `context compaction summary exceeds its budget of ${this.compactionSummaryBudget} characters`,
-            );
-
-        await this.history.waitForWrites();
-        const latestState = this.history.projection;
-        const latestTurns = [...(latestState.contextCheckpoint?.preservedTurns ?? []), ...latestState.committedTurns];
-        const latestSplitIndex = Math.max(0, latestTurns.length - preservedCount);
-        const latestPreservedTurns = latestTurns.slice(latestSplitIndex);
-        const compactionId = this.createId("compaction");
-        await this.history.append({
-            type: "context.compacted",
-            createdAt: Date.now(),
-            compactionId,
-            coveredSequence: latestState.lastSequence,
-            summary,
-            preservedTurns: latestPreservedTurns.map((turn) => ({
-                turnId: turn.turnId,
-                inputIds: [...turn.inputIds],
-                messages: serializeHistoryMessages(turn.messages),
-            })),
-            promptVersion: this.compactionPromptVersion,
-            model: this.compactionModelName,
-            trigger: options.trigger ?? "manual",
+            const compactionId = this.createId("compaction");
+            await append({
+                type: "context.compacted",
+                createdAt: Date.now(),
+                compactionId,
+                coveredSequence: state.lastSequence,
+                summary,
+                preservedTurns: preservedTurnsForCheckpoint.map((turn) => ({
+                    turnId: turn.turnId,
+                    inputIds: [...turn.inputIds],
+                    messages: serializeHistoryMessages(turn.messages),
+                })),
+                promptVersion: this.compactionPromptVersion,
+                model: this.compactionModelName,
+                trigger: options.trigger ?? "manual",
+            });
+            return summary;
         });
-        return summary;
     }
 
     private startDaydreaming(): Promise<string> {

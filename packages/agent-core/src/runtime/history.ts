@@ -232,6 +232,8 @@ export function applyRawHistoryEvent(state: RawHistoryState, event: RawHistoryEv
             break;
         }
         case "context.compacted": {
+            // M3 permits a fast-lane turn to remain active while deep maintenance checkpoints;
+            // AgentRuntime enforces that the deep lane itself is quiescent before appending here.
             if (state.knownCompactionIds.has(event.compactionId)) {
                 throw new Error(`duplicate compaction ${event.compactionId}`);
             }

@@ -29,6 +29,7 @@ export class RawHistoryStore {
     private readonly createIdFn: (prefix: string) => string;
     private readonly onFatalErrorFn: (error: Error) => void;
     private readonly assertAvailableFn: () => void;
+    private exclusiveBarrier: Promise<void> | undefined;
 
     constructor(options: RawHistoryStoreOptions) {
         this.path = options.path;
@@ -43,6 +44,23 @@ export class RawHistoryStore {
 
     public async waitForWrites(): Promise<void> {
         await this.writeTail;
+    }
+
+    public async withExclusive<T>(
+        operation: (append: (event: RawHistoryEventDraft) => Promise<void>) => Promise<T>,
+    ): Promise<T> {
+        await this.writeTail;
+        let release!: () => void;
+        const barrier = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        this.exclusiveBarrier = barrier;
+        try {
+            return await operation((event) => this.appendRecord(event));
+        } finally {
+            this.exclusiveBarrier = undefined;
+            release();
+        }
     }
 
     public readToolResult(turnId: string, toolCallId: string, offset = 0, limit = 4_000): ToolResultPage {
@@ -129,29 +147,30 @@ export class RawHistoryStore {
     public async append(event: RawHistoryEventDraft): Promise<void> {
         this.assertAvailableFn();
 
-        const operation = this.writeTail.then(async () => {
-            this.assertAvailableFn();
-            const record = rawHistoryEventSchema.parse({
-                version: HISTORY_VERSION,
-                sequence: this.state.lastSequence + 1,
-                eventId: this.createIdFn("event"),
-                ...event,
-            });
-
-            try {
-                await appendFile(this.path, `${JSON.stringify(record)}\n`, "utf-8");
-            } catch (error) {
-                throw toError(error, "raw history append failed");
-            }
-
-            this.apply(record);
-        });
+        const barrier = this.exclusiveBarrier;
+        const operation = this.writeTail.then(() => barrier).then(() => this.appendRecord(event));
 
         this.writeTail = operation.catch((error) => {
             this.onFatalErrorFn(toError(error, "runtime persistence failed"));
         });
 
         await operation;
+    }
+
+    private async appendRecord(event: RawHistoryEventDraft): Promise<void> {
+        this.assertAvailableFn();
+        const record = rawHistoryEventSchema.parse({
+            version: HISTORY_VERSION,
+            sequence: this.state.lastSequence + 1,
+            eventId: this.createIdFn("event"),
+            ...event,
+        });
+        try {
+            await appendFile(this.path, `${JSON.stringify(record)}\n`, "utf-8");
+        } catch (error) {
+            throw toError(error, "raw history append failed");
+        }
+        this.apply(record);
     }
 
     private apply(event: RawHistoryEvent): void {
