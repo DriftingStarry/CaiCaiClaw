@@ -5,6 +5,9 @@ export type ServerConfig = {
     host: string;
     port: number;
     openrouterModel: string;
+    fastModel: string;
+    backgroundModel: string;
+    channelPolicyPath?: string;
     systemPromptPath: string;
     rawHistoryPath: string;
     memoryDir: string;
@@ -27,6 +30,8 @@ export function loadServerConfig(env: NodeJS.ProcessEnv = process.env): ServerCo
     if (!openrouterModel) {
         throw new Error("OPENROUTER_MODEL must be set");
     }
+    const fastModel = env.CAICAI_FAST_MODEL || openrouterModel;
+    const backgroundModel = env.CAICAI_BACKGROUND_MODEL || openrouterModel;
 
     const systemPromptPath = env.CAICAI_SYSTEM_PROMPT_PATH ?? DEFAULT_SYSTEM_PROMPT_PATH;
     const rawHistoryPath = env.CAICAI_RAW_HISTORY_PATH ?? DEFAULT_RAW_HISTORY_PATH;
@@ -40,6 +45,9 @@ export function loadServerConfig(env: NodeJS.ProcessEnv = process.env): ServerCo
             "CAICAI_WS_PORT must be an integer between 1 and 65535",
         ),
         openrouterModel,
+        fastModel,
+        backgroundModel,
+        channelPolicyPath: env.CAICAI_CHANNEL_POLICY_PATH || undefined,
         // 必须用 ?? 而不是 ||：空串是有意义的取值，表示不加载 system prompt。
         systemPromptPath,
         rawHistoryPath,

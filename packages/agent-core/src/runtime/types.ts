@@ -117,6 +117,7 @@ export type AgentRuntimeOptions = {
     };
     heartbeatMs?: number;
     fastModel?: AgentConfigModel;
+    backgroundModel?: AgentConfigModel;
     intakePolicyPath?: string;
     intakePolicy?: import("./intake").IntakePolicy;
     onOutput?: (event: RuntimeOutputEvent) => MaybePromise<void>;

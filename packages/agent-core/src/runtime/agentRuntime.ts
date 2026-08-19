@@ -79,7 +79,7 @@ export class AgentRuntime {
         this.memoryDir = options.memoryDir ?? dirname(options.systemPromptPath || options.rawHistoryPath);
         this.allowMissingMemoryFiles = options.allowMissingMemoryFiles ?? options.memoryDir === undefined;
         this.memoryBudgets = options.memoryBudgets;
-        this.compactionModel = config.model;
+        this.compactionModel = options.backgroundModel ?? config.model;
         this.compactionModelName = options.compactionModelName ?? "configured-model";
         this.compactionPrompt = options.compactionPrompt ?? DEFAULT_COMPACTION_PROMPT;
         this.compactionPromptVersion = options.compactionPromptVersion ?? DEFAULT_COMPACTION_PROMPT_VERSION;
