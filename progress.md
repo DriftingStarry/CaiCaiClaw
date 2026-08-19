@@ -3,7 +3,7 @@
 ## Current State
 
 **Last Updated:** 2026-08-19
-**Active Feature:** feat-013（M3-5 MCP host、动态工具与 L3 审批）已完成；下一项 feat-014 的平台已于 2026-08-19 由用户选定为 **QQ 开放平台（api-v2）**，定义与 doneCriteria 已改写（见下节「feat-014 平台选型」），尚未开工，开工前需要用户提供 QQ 机器人 AppID / AppSecret 与沙箱环境。feat-012 已完成：受限 history_query、conversation digest 契约和 background heartbeat 摘要均已验证并落为 `2659a78` / `cd1e094` / `21eee0f`；状态证据 `cb3b099`。用户已授权将 `@modelcontextprotocol/sdk` 仅加入 apps/server，agent-core 保持不 import MCP 或渠道 SDK。
+**Active Feature:** feat-014（M3-6 首个真实外部渠道：QQ 开放平台）代码单元已全部完成并提交，**整体仍为 in-progress**：最后一条 doneCriteria 要求 QQ 沙箱真实往返验收，需要用户提供 AppID / AppSecret，在此之前只做到了假网关 / 假平台级别的验证（见下节「feat-014 实施进度」的残留阻塞）。feat-013（M3-5 MCP host、动态工具与 L3 审批）已完成并提交。feat-014 平台已于 2026-08-19 由用户选定为 **QQ 开放平台（api-v2）**，定义与 doneCriteria 已改写（见下节「feat-014 平台选型」）。用户已授权将 `@modelcontextprotocol/sdk` 仅加入 apps/server，agent-core 保持不 import MCP 或渠道 SDK。
 
 ### feat-014 平台选型（2026-08-19，仅文档，未开工）
 
@@ -23,6 +23,66 @@
 两条都已进入 feat-014 的 doneCriteria，不另立 feature。
 
 平台约束速查（供实现时对照官方文档核实，勿凭此处转述下结论）：`access_token` 有效期 7200s 且不随请求刷新，需过期前续期；被动回复须带 `msg_id`，群聊 5 分钟 / 单聊 60 分钟内有效，同一 `msg_id` 靠递增 `msg_seq` 多次回复；主动消息（不带 `msg_id`）是另一个权限级别且有平台额度。
+
+### feat-014 提交计划（2026-08-19 立）
+
+QQ 开放平台 adapter 作为首个真实外部渠道接入。按 doneCriteria 与现状缺口拆分为以下提交单元：
+
+1. **workspace 与项目脚手架**：新增 `apps/adapter-qq` 作为独立 package，配置 tsconfig/package.json（依赖 `protocol`、`utils`），同步根 `tsconfig.json` references、`pnpm-workspace.yaml`、根 `package.json` 的 adapter-qq 脚本、`AGENTS.md` 依赖表与 `.env.example` 的 QQ 环境变量，确保 `./init.sh` 能覆盖。标题：`chore(workspace): 新增 apps/adapter-qq 并同步依赖表`。验证：`./init.sh`，`pnpm -F @caicaiclaw/adapter-qq typecheck`。
+
+2. **access_token 管理与自动续期**：实现 QQ access_token 获取（POST `/app/getAppAccessToken`）与 7200s 过期前的自动续期逻辑；凭据仅从环境变量读取，token 不进入日志或错误信息。标题：`feat(adapter-qq): 实现 access_token 自动续期`。验证：`./init.sh`，临时 probe 验证续期调度与错误处理（不真实请求，用 fake timer）。
+
+3. **WebSocket 网关连接与心跳**：实现官方 WS 网关连接（wss://api.bot.qq.com/websocket/），按 intents 位订阅 `GROUP_AND_C2C_EVENT (1<<25)`，处理 OpCode 10 Hello、OpCode 2 Identify、OpCode 1 Heartbeat、OpCode 11 Heartbeat ACK、OpCode 0 Dispatch (READY)，落 `channel.connected` 事件（channel="qq"）。标题：`feat(adapter-qq): 接入 WS 网关与心跳维护`。验证：`./init.sh`，临时 probe 验证心跳调度与 READY 解析（mock WS 服务端）。
+
+4. **断线重连与 Resume**：实现 OpCode 6 Resume 逻辑，记录 session_id 与最新 seq，断线后自动重连并补发遗漏事件，收到 RESUMED 后恢复正常；连接失败或不可恢复错误时落 `channel.disconnected` 并明确原因。标题：`feat(adapter-qq): 实现断线重连与 session resume`。验证：`./init.sh`，临时 probe 模拟断线与 resume 流程。
+
+5. **入站事件归一化**：将 `GROUP_AT_MESSAGE_CREATE` 与 `C2C_MESSAGE_CREATE` 归一化为 `ChannelEvent`：channel="qq"，conversationId 为 `qq:group/<group_openid>` 或 `qq:c2c/<user_openid>`，kind 为 "mention" 或 "dm"，platformMessageId 取 msg_id，replyTo 取 msg_id（被动回复凭据），author.isSelf 按自身 openid 判定（从 READY event 的 user.id 获取），payload 保留平台原始结构。标题：`feat(adapter-qq): 归一化 QQ 入站事件为 ChannelEvent`。验证：`./init.sh`，临时 probe 验证两种事件的转换正确性。
+
+6. **去重门口**：在 server 的 intake 路径实现 `(channel, platformMessageId)` 去重逻辑，重复投递落 `input.dropped` 且 reason="duplicate"（补齐现有枚举但无生产路径的缺口）。标题：`feat(server): 实现入站消息去重门口`。验证：`./init.sh`，临时 probe 验证同一 msg_id 的第二次投递被 drop。
+
+7. **出站 MCP 工具：群聊被动回复**：adapter 注册 MCP tool `qq_send_group_message`，接受 group_openid / content / msg_id / msg_seq，调用 `POST /v2/groups/{group_openid}/messages`，超出 5 分钟窗口或平台拒绝时明确失败并记录（不静默退化为主动消息），成功时返回平台 message_id。标题：`feat(adapter-qq): 实现群聊被动回复 MCP 工具`。验证：`./init.sh`，临时 probe 验证工具注册、参数校验与超窗口错误。
+
+8. **出站 MCP 工具：单聊被动回复**：adapter 注册 MCP tool `qq_send_c2c_message`，接受 user_openid / content / msg_id / msg_seq，调用 `POST /v2/users/{user_openid}/messages`，超出 60 分钟窗口时明确失败。标题：`feat(adapter-qq): 实现单聊被动回复 MCP 工具`。验证：`./init.sh`，临时 probe 验证工具注册与参数。
+
+9. **L1 闸门：reply.maxChars 与 rateLimitPerMin**：在 server 输出路由侧实现 README 已定但代码尚未实现的 L1 闸门，按 channel 配置裁剪超长消息、拒绝超频请求并记录（不静默丢弃），落 `outbound.failed` 事件。标题：`feat(server): 实现 L1 出站闸门`。验证：`./init.sh`，临时 probe 验证裁剪与限流逻辑。
+
+10. **权限分级映射**：明确 QQ 工具的权限级别（被动回复 L1，主动消息 L2，富媒体/广播 L3），并在 adapter 注册时声明；未分级工具默认 L3。标题：`feat(adapter-qq): 声明 QQ 工具权限分级`。验证：`./init.sh`，临时 probe 验证 gate 对 L1/L2/L3 工具的不同处理。
+
+11. **集成验证与真实手动验收**：在 QQ 沙箱环境（需用户提供 AppID/AppSecret）下完成真实往返：群聊 @ 与单聊各至少一次（入站进入正确车道且回复真的抵达 QQ 客户端），重复 msg_id 被去重，超窗口回复的失败表现，L3 动作经 admin 审批后才真正投递。标题：无提交，纯验收。证据：记录到 `progress.md` 与 `feature_list.json` 的 evidence。
+
+拆分依据：workspace 脚手架先行，token 管理与 WS 连接分离，入站与出站分别独立，去重与闸门补齐现状缺口，权限分级最后统一声明。每个提交是可独立回滚的原子单元。
+
+### feat-014 实施进度（2026-08-19）
+
+已完成并提交的单元（计划 3 与 4 合并：resume / 重连与连接状态机在同一个类里紧耦合，按文件或行数切开会让中间提交无法通过类型检查与运行契约；计划 7 与 8 合并，见下）：
+
+- `36947eb` 单元 1 workspace 脚手架。同步根 `tsconfig.json` references、根 `package.json` 脚本、`AGENTS.md` 依赖表与 `.env.example`。验证：`./init.sh` 通过。
+- `71e4b33` 单元 2 access_token 自动续期。验证：`./init.sh` 通过；本地假 `/app/getAppAccessToken` probe 输出 `{"reusedWithoutRefetch":true,"credentialsSent":true,"renewedAfterExpiry":true,"errorSurfaced":true,"errorLeaksSecret":false}`，覆盖缓存复用、过期续期、平台 err_code 透出与 secret 不泄露。probe 已删除。
+- `98b0253` 单元 3+4 WS 网关、心跳、resume 与重连。验证：`./init.sh` 通过；本地假网关 probe 输出 identify token 格式 / intents / shard 正确、`selfId=BOT-SELF`、心跳携带递增 s、`GROUP_AT_MESSAGE_CREATE` 被转发而 READY / RESUMED 未被转发、4009 断开后发出带 `session_id` 的 Resume（`connections=2`、`resumeSent=true`）。probe 已删除。
+- `85347c8` 单元 6 去重门口。验证：`./init.sh` 通过；probe 输出 `{"repeatReason":"duplicate","otherIdAccepted":true,"localBothAccepted":true,"otherChannelAccepted":true,"restartRepeatReason":"duplicate","restartFreshAccepted":true}`，覆盖同键拒收、不同键与不同 channel 放行、无 platformMessageId 不参与去重、回放预热后重启仍识别重复。probe 已删除。
+- `86b5ff7` 单元 5 入站归一化。验证：`./init.sh` 通过；probe 用官方文档事件示例，输出两种事件的 conversationId / kind / platformMessageId / replyTo / author openid 与 role / 两条 isSelf 路径 / RFC3339 解析与回落 / 未知字段放行 / 非法输入结构化拒收，且归一化结果通过 `channelEventSchema`。probe 已删除。
+- `b09b38b` 消息发送 HTTP 客户端。验证：`./init.sh` 通过；probe 覆盖群聊 / 单聊路径拼接、被动与主动 body 差异、失败分类与 secret 脱敏。probe 已删除。
+- `e7e4a2e` 被动回复窗口与 msg_seq 追踪。验证：`./init.sh` 通过；probe（注入时钟）覆盖窗口过期、条数上限、msg_seq 递增、重复 register 不重置已用配额、release 只接受最新 seq。probe 已删除。
+- `efcf901` 单元 9 L1 出站闸门。验证：`./init.sh` 通过；probe 覆盖超长裁剪（带 truncatedFrom）与超频拒绝落 `outbound.failed`，闸门按整轮 AI 文本评估而非逐个 delta。probe 已删除。
+- `914bcfe` 单元 7+8+10 出站 MCP 工具面（计划 7、8 合并：群聊与单聊只是 scope 不同，同一个工具带 scope 参数比两个近乎重复的工具更不容易漂移）。验证：`./init.sh` 通过；真实 MCP client 经 `InMemoryTransport` probe 输出超窗口回复不产生平台调用且不回退主动消息、L3 富媒体明确 not_implemented 不降级为文本。probe 已删除。
+- `3fb0953` 入站 WS 面与重投策略。验证：`./init.sh` 通过；probe 输出 `buffer_full` 重试一次后被接受，而 `duplicate` / `self_echo` 只记录不重投。probe 已删除。
+- `ac381dc` channel 生命周期事件契约。验证：`./init.sh` 通过；probe 输出 `{"afterConnect":{"connected":true,"selfId":"BOT-SELF"},"afterDisconnect":{"connected":false,"lastResumable":true},"selfIdSurvivedDisconnect":true,"missingResumedRejected":true}`。probe 已删除。
+- `ab1b676` adapter 进程组装（双面入口）。验证：`./init.sh` 通过；probe 拉起真实 adapter 子进程对接假 QQ HTTP / 假网关 / 假 server，输出 `intentsIsGroupAndC2c=true`、role 先于任何 input 声明、群 @ 与单聊都归一化投递、不支持的事件类型只记日志、四个 MCP 工具经 stdout 正常 tools/list、`stdoutOnlyJsonRpc=true`、`secretLeaked=false`、SIGTERM 优雅退出。probe 已删除。
+- `16923f3` MCP 工具权限分级真正生效。验证：`./init.sh` 通过；两个 probe 分别输出 `McpToolHost` 把四个工具的 L0/L1/L2/L3 全部解析进 `permissionsByName`，以及 runtime 判定 `{"configuredOverridesAdapter":"L2","adapterDeclared":"L0","ungradedDefaultsL3":"L3","historyStillL0":"L0","staleDeclarationCleared":"L3"}`。probe 已删除。
+- `3570e96` + `12803e1` 被动回复经输出路由真正抵达平台。验证：`./init.sh` 通过；端到端 probe（真实 adapter 子进程 + 假平台）输出首次回复真的打到 `/v2/groups/G1/messages` 且带 `msg_id` 与 `msg_seq=1`、同一 msg_id 二次回复 `msg_seq=2`、未登记 msg_id 与缺少 replyTo 都只记失败日志且平台调用数不增加（`noActiveFallback=true`）、`secretLeaked=false`。probe 已删除。
+
+实施中发现并处理的偏差（均已在上述提交内）：
+
+1. **去重需要跨重启**：`IntakeController` 是进程内状态，仅在内存去重会让重启后的第一条平台重复投递被放行。已在回放状态里新增 `seenPlatformMessages`，回放 `input.accepted` / `input.dropped` 时重建，并在 runtime 启动时预热 intake。去重键由 `platformDedupeKey` 单点生成，回放侧与门口侧共用。
+2. **adapter-qq 需要 zod**：归一化要在协议边界做结构化校验（AGENTS.md 要求）。zod 是仓库既有依赖、`protocol` 与 `utils` 已用同一版本 `^4.4.3`，故只在 `apps/adapter-qq/package.json` 登记，未引入新依赖。
+3. **`author.id` 不是必填**：按官方 autogen 事件文档，群聊身份在 `member_openid`、单聊在 `user_openid`，`id` 并非必然下发。此前 normalize 要求 `author.id` 必填，会让真实群 @ 与单聊事件全部被判为非法负载（probe 实测三条事件全被拒）。已改为三者皆可选、按场景取到 openid 后再校验非空。
+4. **权限分级此前没有生效路径**：`apps/server` 从不填充 runtime 的 `toolPermissions`，`permissionForTool` 对所有 MCP 工具一律返回默认 L3。已改为 adapter 在 `tools/list` 时用 `_meta` 的 `com.caicaiclaw/permission` 自报级别，`McpToolHost` 校验后随 snapshot 输出，server 交给 `replaceDeepTools`。优先级为 history 工具固定 L0 → 运维显式配置 → MCP 自报 → 默认 L3，运维配置压过自报以防 adapter 用元数据自行提权。
+5. **闸门后的回复没有出口**：L1 闸门只落 `outbound.delivered`，成品文本无处可去，且闸门在流式结束后才评估——adapter 若自行拼接 `assistant_delta` 会发出未裁剪原文。已新增 `outbound_reply` 服务端消息承载闸门后的成品文本，由 adapter 消费并带 `msg_id` / `msg_seq` 投递。同时修正 `applyReplyGate` 的早退：渠道未配置 `maxChars` / `rateLimitPerMin` 时原本直接 return，等于未配策略的渠道永远收不到回复；未配置只应表示不裁剪不限流。
+6. **stdout 被 MCP 协议占用**：adapter 用 `StdioServerTransport`，任何写 stdout 的日志都会破坏协议帧。`token-manager` 原本用 `console.log`，已统一改为 `console.error`；probe 断言 stdout 只出现 JSON-RPC 帧。
+
+**残留阻塞（feat-014 唯一未满足的 doneCriteria）**：最后一条要求 QQ 沙箱真实手动验收——群聊 @ 与单聊各至少一次真实往返（入站进入正确车道且回复真的抵达 QQ 客户端）、重复 `msg_id` 被去重、超窗口回复的失败表现、L3 动作经 admin 审批后才真正投递。这需要用户提供 QQ 机器人 AppID / AppSecret 与沙箱环境，并在开放平台配置好群聊 @ 与单聊权限。所有代码路径目前只经过假网关 / 假平台 / 注入时钟验证；平台错误码到失败分类的映射（`QQ_ERROR_CODE_CATEGORIES`）也刻意留空，需真实沙箱调用校准。
+
+**下一步**：拿到沙箱凭据后执行单元 11 验收并把 feat-014 置为 done；在此之前不要开工 feat-015（M3-7 后台队列、adapter 视图与调试入口），遵守一次只做一个 feature。
 
 ### feat-013 提交计划
 

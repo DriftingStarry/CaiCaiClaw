@@ -251,7 +251,7 @@
             "dependencies": [
                 "feat-013"
             ],
-            "status": "not-started",
+            "status": "in-progress",
             "doneCriteria": [
                 "新增 apps/adapter-qq 独立进程，持有 AppID/AppSecret 并在 access_token（7200s，不随请求刷新）过期前主动续期；核心与 adapter 之间只有 ChannelEvent 与 MCP 工具两个契约，依赖方向为 apps/adapter-qq <- protocol, utils 且不依赖 agent-core，AGENTS.md 依赖表、根 tsconfig.json references、pnpm-workspace.yaml 与根 package.json 脚本同步",
                 "adapter 经官方 WebSocket 网关按 intents 位订阅 GROUP_AT_MESSAGE_CREATE 与 C2C_MESSAGE_CREATE，实现鉴权、心跳、resume 与断线重连，并落 channel.connected / channel.disconnected",
@@ -262,7 +262,8 @@
                 "出站动作按权限分级执行：只读查询 L0，被动回复 L1（输出路由 + 上述闸门），主动消息（未带 msg_id）L2 且全量记录，富媒体与广播型发布 L3 走 admin 人工审批；未分级工具仍默认 L3",
                 "凭据不进入日志、错误信息、事件负载与 admin 展示：AppSecret 与 access_token 不出现在 history.jsonl、channel.* / outbound.* 事件及 adapter/server 的错误文本中；adapter 配置只从环境读取并同步 .env.example",
                 "./init.sh 通过，并记录 QQ 沙箱环境下的真实手动验收：群聊 @ 与单聊各至少一次真实往返（入站进入正确车道且回复真的抵达 QQ 客户端）、重复 msg_id 被去重、超窗口回复的失败表现、L3 动作经 admin 审批后才真正投递"
-            ]
+            ],
+            "evidence": "代码单元全部完成并提交，**沙箱真实验收未完成故仍为 in-progress**。提交：`36947eb` workspace 脚手架（含 AGENTS.md 依赖表、根 tsconfig references、根 package.json 脚本、.env.example 同步）、`71e4b33` access_token 自动续期、`98b0253` WS 网关/心跳/resume/重连、`85347c8` (channel, platformMessageId) 去重门口（补齐 reason=\"duplicate\" 的生产路径）、`86b5ff7` 入站归一化为 ChannelEvent、`b09b38b` 发送 HTTP 客户端、`e7e4a2e` 被动回复窗口与 msg_seq 追踪、`efcf901` L1 闸门 reply.maxChars / rateLimitPerMin、`914bcfe` 出站 MCP 工具面与权限分级声明、`3fb0953` 入站 WS 面与重投策略、`ac381dc` channel.connected / channel.disconnected 契约、`ab1b676` adapter 双面进程组装、`16923f3` 权限分级从 adapter 传导到 runtime（此前 server 从不填充 toolPermissions，所有 MCP 工具实际都是默认 L3）、`3570e96`+`12803e1` outbound_reply 输出路由使被动回复真正抵达平台。每个提交均在 `./init.sh` 通过后落地，并各自用临时 probe 验证（probe 全部跑完即删，详见 progress.md 的逐单元证据）。端到端 probe（真实 adapter 子进程 + 假 QQ 平台）确认：回复带 msg_id 且 msg_seq 从 1 递增到 2、窗口不可用时不降级为主动消息、stdout 只有 MCP JSON-RPC 帧、AppSecret 与 access_token 不出现在日志中。**未满足**：最后一条 doneCriteria 的 QQ 沙箱真实手动验收（群聊 @ 与单聊真实往返、重复 msg_id 去重、超窗口失败表现、L3 经 admin 审批后投递）需用户提供 AppID / AppSecret 与沙箱环境；平台错误码到失败分类的映射（QQ_ERROR_CODE_CATEGORIES）刻意留空，待真实调用校准。"
         },
         {
             "id": "feat-015",
