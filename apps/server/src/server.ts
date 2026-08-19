@@ -27,7 +27,11 @@ type ClientConnection = {
     role?: ConnectionRole;
 };
 
-export function createServer(serverConfig: ServerConfig, model?: AgentConfig["model"]): RunningServer {
+export function createServer(
+    serverConfig: ServerConfig,
+    model?: AgentConfig["model"],
+    models: { fastModel?: AgentConfig["model"]; backgroundModel?: AgentConfig["model"] } = {},
+): RunningServer {
     const clients = new Map<string, ClientConnection>();
     let nextConnectionId = 1;
     let closing = false;
@@ -79,8 +83,8 @@ export function createServer(serverConfig: ServerConfig, model?: AgentConfig["mo
         // server 显式传入 memoryDir 后 runtime 默认会收紧缺失文件策略；保持服务端原有宽松行为。
         allowMissingMemoryFiles: true,
         compactionModelName: serverConfig.openrouterModel,
-        fastModel: createOpenrouterModel(serverConfig.fastModel),
-        backgroundModel: createOpenrouterModel(serverConfig.backgroundModel),
+        fastModel: models.fastModel ?? createOpenrouterModel(serverConfig.fastModel),
+        backgroundModel: models.backgroundModel ?? createOpenrouterModel(serverConfig.backgroundModel),
         intakePolicyPath: serverConfig.channelPolicyPath,
         onOutput: async (event) => {
             for (const message of runtimeOutputToServerMessages(event)) {

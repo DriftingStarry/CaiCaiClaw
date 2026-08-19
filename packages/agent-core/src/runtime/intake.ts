@@ -62,10 +62,20 @@ export class IntakeController {
             return { disposition: "accepted", lane };
         }
 
-        const priority = intake.alwaysKeep.includes(event.kind);
         const conversationPending = this.pending.filter(
             (item) => item.event.channel === event.channel && item.event.conversationId === event.conversationId,
         );
+        const recent = conversationPending.find(
+            (item) => intake.mergeWindowMs > 0 && event.receivedAt - item.event.receivedAt <= intake.mergeWindowMs,
+        );
+        if (recent) {
+            const batchId = recent.batchId ?? `batch-${this.nextBatch++}`;
+            recent.batchId = batchId;
+            this.pending.push({ event, lane, batchId });
+            return { disposition: "merged", lane, batchId };
+        }
+
+        const priority = intake.alwaysKeep.includes(event.kind);
         const generalCount = conversationPending.filter(
             (item) => !this.isPriority(item.event, item.event.channel),
         ).length;
@@ -76,16 +86,8 @@ export class IntakeController {
             return { disposition: "dropped", lane, reason: priority ? "priority_buffer_full" : "buffer_full" };
         }
 
-        const recent = conversationPending.find(
-            (item) =>
-                item.event.conversationId === event.conversationId &&
-                item.event.channel === event.channel &&
-                intake.mergeWindowMs > 0 &&
-                event.receivedAt - item.event.receivedAt <= intake.mergeWindowMs,
-        );
-        const batchId = recent?.batchId ?? (intake.mergeWindowMs > 0 ? `batch-${this.nextBatch++}` : undefined);
+        const batchId = intake.mergeWindowMs > 0 ? `batch-${this.nextBatch++}` : undefined;
         this.pending.push({ event, lane, batchId });
-        if (recent) return { disposition: "merged", lane, batchId: batchId as string };
         return { disposition: "accepted", lane, ...(batchId ? { batchId } : {}) };
     }
 
