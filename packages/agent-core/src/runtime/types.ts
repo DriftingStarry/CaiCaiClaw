@@ -11,6 +11,13 @@ export type TurnContext = {
     turnId: string;
     lane: Lane;
     conversationId: string;
+    target: OutputTarget;
+};
+
+export type OutputTarget = {
+    channel: string;
+    conversationId: string;
+    replyTo?: string;
 };
 
 export type RuntimeInput = ChannelEvent & {
@@ -26,6 +33,7 @@ export type RuntimeOutputEvent =
     | {
           readonly type: "input_accepted";
           readonly turnId: string;
+          readonly lane: Lane;
           readonly event: ChannelEvent;
           readonly requestId?: string;
           readonly createdAt: number;
@@ -33,23 +41,28 @@ export type RuntimeOutputEvent =
     | {
           readonly type: "turn_start";
           readonly turnId: string;
+          readonly lane: Lane;
           readonly createdAt: number;
       }
     | {
           readonly type: "assistant_delta";
           readonly turnId: string;
+          readonly lane: Lane;
           readonly text: string;
           readonly metadata: JsonObject;
+          readonly target?: OutputTarget;
       }
     | {
           readonly type: "reasoning_delta";
           readonly turnId: string;
+          readonly lane: Lane;
           readonly text: string;
           readonly metadata: JsonObject;
       }
     | {
           readonly type: "tool_call_start";
           readonly turnId: string;
+          readonly lane: Lane;
           readonly toolCallId: string;
           readonly name: string;
           readonly args: JsonObject;
@@ -58,6 +71,7 @@ export type RuntimeOutputEvent =
     | {
           readonly type: "tool_call_result";
           readonly turnId: string;
+          readonly lane: Lane;
           readonly toolCallId: string;
           readonly name: string;
           readonly status: "success" | "error";
@@ -67,9 +81,11 @@ export type RuntimeOutputEvent =
     | {
           readonly type: "done";
           readonly turnId: string;
+          readonly lane: Lane;
       }
     | {
           readonly type: "error";
+          readonly lane: Lane;
           readonly turnId?: string;
           readonly error: unknown;
       };

@@ -247,9 +247,22 @@ function requireTurnContext(value: unknown): TurnContext {
         typeof value !== "object" ||
         typeof (value as { turnId?: unknown }).turnId !== "string" ||
         typeof (value as { conversationId?: unknown }).conversationId !== "string" ||
+        !isValidOutputTarget((value as { target?: unknown }).target) ||
         ((value as { lane?: unknown }).lane !== "fast" && (value as { lane?: unknown }).lane !== "deep")
     ) {
         throw new Error("toolNode requires a valid turn context in RunnableConfig.configurable");
     }
     return value as TurnContext;
+}
+
+function isValidOutputTarget(value: unknown): boolean {
+    if (!value || typeof value !== "object") return false;
+    const target = value as { channel?: unknown; conversationId?: unknown; replyTo?: unknown };
+    return (
+        typeof target.channel === "string" &&
+        target.channel.length > 0 &&
+        typeof target.conversationId === "string" &&
+        target.conversationId.length > 0 &&
+        (target.replyTo === undefined || (typeof target.replyTo === "string" && target.replyTo.length > 0))
+    );
 }

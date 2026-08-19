@@ -222,6 +222,11 @@ export class AgentRuntime {
             turnId,
             lane: "deep",
             conversationId: firstEvent.conversationId,
+            target: {
+                channel: firstEvent.channel,
+                conversationId: firstEvent.conversationId,
+                ...(firstEvent.replyTo ? { replyTo: firstEvent.replyTo } : {}),
+            },
         };
         this.activeTurns.set(turnContext.lane, turnContext);
 
@@ -238,13 +243,14 @@ export class AgentRuntime {
                 await this.emitOutput({
                     type: "input_accepted",
                     turnId,
+                    lane: turnContext.lane,
                     event: toChannelEvent(event),
                     requestId: event.requestId,
                     createdAt: event.receivedAt,
                 });
             }
 
-            await this.emitOutput({ type: "turn_start", turnId, createdAt: turnCreatedAt });
+            await this.emitOutput({ type: "turn_start", turnId, lane: turnContext.lane, createdAt: turnCreatedAt });
 
             const inputMessages = events.map((event) => this.createHumanMessage(event));
             const executionInput: ExecutionState = {
@@ -272,7 +278,7 @@ export class AgentRuntime {
             });
             outputCommitted = true;
 
-            await this.emitOutput({ type: "done", turnId });
+            await this.emitOutput({ type: "done", turnId, lane: turnContext.lane });
         } catch (error) {
             if (outputCommitted) throw error;
 
@@ -285,7 +291,7 @@ export class AgentRuntime {
                 });
             }
 
-            await this.emitOutput({ type: "error", turnId, error });
+            await this.emitOutput({ type: "error", turnId, lane: turnContext.lane, error });
         } finally {
             if (this.activeTurns.get(turnContext.lane)?.turnId === turnContext.turnId) {
                 this.activeTurns.delete(turnContext.lane);
@@ -514,6 +520,7 @@ export class AgentRuntime {
         await this.emitOutput({
             type: "tool_call_start",
             turnId: event.turnId,
+            lane: event.lane,
             toolCallId: event.toolCallId,
             name: event.name,
             args: event.args,
@@ -538,6 +545,7 @@ export class AgentRuntime {
         await this.emitOutput({
             type: "tool_call_result",
             turnId: event.turnId,
+            lane: event.lane,
             toolCallId: event.toolCallId,
             name: event.name,
             status: event.status,

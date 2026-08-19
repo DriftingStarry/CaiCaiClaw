@@ -6,6 +6,7 @@ export type {
     AgentRuntimeOptions,
     ExecutionState,
     Lane,
+    OutputTarget,
     RuntimeInput,
     MaybePromise,
     MessageStreamChunk,

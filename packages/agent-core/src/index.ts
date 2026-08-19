@@ -6,6 +6,7 @@ export {
     type AgentRuntimeOptions,
     type ExecutionState,
     type Lane,
+    type OutputTarget,
     type RuntimeInput,
     type MessageStreamChunk,
     type RuntimeOutputEvent,

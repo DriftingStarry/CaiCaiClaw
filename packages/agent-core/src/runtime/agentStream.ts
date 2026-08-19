@@ -22,7 +22,7 @@ export async function runAgentStream(
         const [mode, payload] = chunk;
 
         if (mode === "messages") {
-            await emitMessageDelta(turnContext.turnId, payload, emitOutput);
+            await emitMessageDelta(turnContext, payload, emitOutput);
             continue;
         }
 
@@ -33,7 +33,7 @@ export async function runAgentStream(
 }
 
 async function emitMessageDelta(
-    turnId: string,
+    turnContext: TurnContext,
     chunk: MessageStreamChunk,
     emitOutput: RuntimeOutputEmitter,
 ): Promise<void> {
@@ -45,7 +45,8 @@ async function emitMessageDelta(
     if (reasoningText) {
         await emitOutput({
             type: "reasoning_delta",
-            turnId,
+            turnId: turnContext.turnId,
+            lane: turnContext.lane,
             text: reasoningText,
             metadata: normalizedMetadata,
         });
@@ -56,8 +57,10 @@ async function emitMessageDelta(
 
     await emitOutput({
         type: "assistant_delta",
-        turnId,
+        turnId: turnContext.turnId,
+        lane: turnContext.lane,
         text,
         metadata: normalizedMetadata,
+        target: turnContext.target,
     });
 }
