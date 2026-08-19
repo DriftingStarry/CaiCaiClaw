@@ -16,9 +16,13 @@ import { loadServerConfig, type ServerConfig } from "./config";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import { McpToolHost } from "./mcpHost";
 
 export type RunningServer = {
     close: () => Promise<void>;
+    connectMcpAdapter: (adapterId: string, transport: Transport) => Promise<void>;
+    disconnectMcpAdapter: (adapterId: string) => Promise<void>;
 };
 
 type ClientConnection = {
@@ -37,6 +41,7 @@ export function createServer(
     let closing = false;
     let committedTurnCount = 0;
     let scheduledCompactInFlight = false;
+    const mcpHost = new McpToolHost();
 
     const config: AgentConfig = {
         maxStepLimit: serverConfig.maxStepLimit,
@@ -95,6 +100,25 @@ export function createServer(
             }
         },
     });
+
+    async function refreshMcpTools(): Promise<void> {
+        await runtime.replaceDeepTools(mcpHost.snapshot().toolsByName);
+    }
+
+    async function connectMcpAdapter(adapterId: string, transport: Transport): Promise<void> {
+        await mcpHost.connect(adapterId, transport);
+        try {
+            await refreshMcpTools();
+        } catch (error) {
+            await mcpHost.disconnect(adapterId);
+            throw error;
+        }
+    }
+
+    async function disconnectMcpAdapter(adapterId: string): Promise<void> {
+        await mcpHost.disconnect(adapterId);
+        await refreshMcpTools();
+    }
 
     function scheduleCompactIfDue(): void {
         if (closing || serverConfig.compactEveryTurns === 0) return;
@@ -265,9 +289,12 @@ export function createServer(
             await serverClosed;
 
             runtime.stop();
+            await mcpHost.close();
             // rejection 已在 runtimeTask.catch 中处理，重复 await 时需要避免再次抛出。
             await runtimeTask.catch(() => {});
         },
+        connectMcpAdapter,
+        disconnectMcpAdapter,
     };
 }
 

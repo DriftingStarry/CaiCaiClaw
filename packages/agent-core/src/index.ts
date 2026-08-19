@@ -17,3 +17,5 @@ export {
 export { IntakeController, dropReasonSchema, intakePolicySchema, loadIntakePolicy } from "./runtime/index";
 export type { AdmissionResult, DropReason, IntakePolicy } from "./runtime/index";
 export { execTool, fileEditTool, fileReadTool, fileWriteTool, toolsByName } from "./tools/index";
+export { createDynamicTool } from "./tools/dynamicTool";
+export type { DynamicStructuredTool } from "@langchain/core/tools";

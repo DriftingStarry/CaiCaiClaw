@@ -57,7 +57,7 @@ export class AgentRuntime {
     private readonly queue = new EventQueue();
     private readonly fastQueue = new EventQueue();
     private readonly executionStates = new Map<Lane, ExecutionState>();
-    private readonly agent: ReturnType<typeof getAgent>;
+    private agent: ReturnType<typeof getAgent>;
     private readonly fastAgent: ReturnType<typeof getAgent>;
     private running = false;
     private readonly heartbeatMs: number;
@@ -79,6 +79,9 @@ export class AgentRuntime {
     private readonly compactionModelName: string;
     private readonly maintenanceWaiters: MaintenanceRequest[] = [];
     private readonly intake: IntakeController;
+    private readonly runtimeToolsByName: Record<string, DynamicStructuredTool>;
+    private readonly staticToolNames: ReadonlySet<string>;
+    private readonly deepAgentConfig: AgentConfig;
     private operationTail: Promise<void> = Promise.resolve();
     private operationBusyCount = 0;
     private fatalError?: Error;
@@ -127,25 +130,18 @@ export class AgentRuntime {
 
         this.loadSystemPrompt();
 
-        const toolsByName = {
+        this.runtimeToolsByName = {
             ...config.toolsByName,
             history_read: createHistoryReadTool((input) =>
                 this.history.readToolResult(input.turnId, input.toolCallId, input.offset, input.limit),
             ),
             history_query: createHistoryQueryTool((input) => this.history.queryHistory(input)),
         };
-        this.agent = getAgent({
+        this.staticToolNames = new Set(Object.keys(config.toolsByName));
+        this.deepAgentConfig = config;
+        this.agent = this.createDeepAgent({
             ...config,
-            toolsByName,
-            onToolStart: async (event) => {
-                await this.emitToolStart(event);
-                await config.onToolStart?.(event);
-            },
-            onToolResult: async (event) => {
-                await this.emitToolResult(event);
-                await config.onToolResult?.(event);
-            },
-            toolResultMessage: (event, message) => this.projectToolResult(event, message),
+            toolsByName: this.runtimeToolsByName,
         });
         this.fastAgent = getAgent({
             ...config,
@@ -161,6 +157,38 @@ export class AgentRuntime {
             onDeferToDeep: async (context) => {
                 this.deferredFastTurns.add(context.turnId);
             },
+        });
+    }
+
+    public async replaceDeepTools(toolsByName: Record<string, DynamicStructuredTool>): Promise<void> {
+        this.assertAvailable();
+        await this.runExclusive(async () => {
+            Object.keys(this.runtimeToolsByName).forEach((name) => {
+                if (
+                    !(name in toolsByName) &&
+                    !this.staticToolNames.has(name) &&
+                    !(name === "history_read" || name === "history_query")
+                ) {
+                    delete this.runtimeToolsByName[name];
+                }
+            });
+            Object.assign(this.runtimeToolsByName, toolsByName);
+            this.agent = this.createDeepAgent({ ...this.deepAgentConfig, toolsByName: { ...this.runtimeToolsByName } });
+        });
+    }
+
+    private createDeepAgent(config: AgentConfig): ReturnType<typeof getAgent> {
+        return getAgent({
+            ...config,
+            onToolStart: async (event) => {
+                await this.emitToolStart(event);
+                await config.onToolStart?.(event);
+            },
+            onToolResult: async (event) => {
+                await this.emitToolResult(event);
+                await config.onToolResult?.(event);
+            },
+            toolResultMessage: (event, message) => this.projectToolResult(event, message),
         });
     }
 
