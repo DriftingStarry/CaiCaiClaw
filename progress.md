@@ -25,6 +25,25 @@
 
 拆分依据：先补数据（1-3 只读/统计，不改裁决行为），再开协议面（4-5），再落三个视图（6-8 纯前端消费），最后加两个带写入语义因而风险最高的调试入口（9-10）。JSONL 对后台严格只读不变：调试注入与审批决策都走 runtime 公开入口。
 
+### feat-015 实施进度（2026-08-19）
+
+已完成并提交：
+
+- `50aa1f8` 单元 1 按 reason 分类 droppedCount。总数语义不变，新增稀疏的 `droppedByReason`（Partial 而非全量 Record，视图才能区分「没发生」与「发生过被清零」）。`DropReason` 从 `RawHistoryEvent` Extract 而非硬编码第二份字面量联合。验证：`./init.sh` 通过；probe 回放 6 条含 4 种 reason 的 `input.dropped`，输出 `droppedCount=6`、分类计数求和等于总数、未发生的 `priority_buffer_full` 不出现。probe 已删除。
+- `9920e96` 单元 2 车道与 intake 快照读取 API。`IntakeController.conversationSnapshots / effectivePolicies`，`AgentRuntime.laneSnapshots / intakeSnapshots / effectivePolicies / channelSnapshots`。通用槽与保留槽的划分复用 `admit` 内部同一个私有 `isPriority`，不另写第二份判定。验证：`./init.sh` 通过；probe 用真实 `admit` 跑满槽位，输出 `slotsMatchAdmit=true`（快照的 2 通用 + 1 保留与 admit 的 accepted/accepted/buffer_full/accepted 一致）、`copyIsolated=true`（返回的是拷贝，改不到内部状态）。probe 已删除。
+- `a8ce97d` 单元 3 入站速率与 outbound 成败。速率按渠道 60s 滑动窗口，记录点在 `admit` **之前**（被丢弃的也算入站），用本地 `Date.now()` 而非 adapter 的 `receivedAt`（后者可能时钟偏差）。验证：`./init.sh` 通过；probe 输出 `qqCountIncludesDropped=true`（3 条含 1 条自回声丢弃）、`lastErrorIsLatest=true`。probe 已删除。
+- `2805d53` 单元 4 三种快照协议消息与推送。协议版本 6 → 7。验证：`./init.sh` 通过；probe 拉起真实 server、以 observer 身份连 WS 并注入一条 ChannelEvent，输出三种快照全部收到、`pushedOnStateTransition=true`、`lanesCoverBothLanes=true`、`policiesIncludeDefaults=true`、`inboundRateRecorded=1`。probe 已删除。
+
+实施中的取舍（均已在上述提交内并写了代码注释）：
+
+1. **快照不挂在流式增量上**：`assistant_delta` / `reasoning_delta` 是高频事件，若在其上推送会把快照打成洪水。只在 `input_accepted` / `input_dropped` / `turn_start` / `done` / `error` 这些状态迁移点推，另加 5s 低频轮询兜底。
+2. **outbound 汇总按 toolName 而非 channel**：outbound 事件本身不带 channel 字段，渠道信息只在 args 里且格式随工具而异。按 toolName 是唯一无歧义的口径，视图可从 `mcp__<adapter>__` 前缀自行推断归属。
+3. **未声明权限的工具在视图里显示 L3**：与 runtime 的默认兜底一致——视图的目的是呈现实际生效级别，而不是「未配置」。
+4. **`effectivePolicies` 用 `isDefaults` 布尔而非比较 `"(defaults)"` 字符串**：真实渠道理论上可以叫同名。
+5. **`laneSnapshots` 没有 startedAt**：`TurnContext` 当前不含起始时间字段，不编造。
+
+剩余单元：5（admin 角色连接 / `buildWsUrl` 加 adminToken）、6（队列视图）、7（adapter 视图）、8（审批视图）、9（入站注入调试入口）、10（出站 dry-run 调试入口）、11（状态与证据登记）。
+
 ### feat-014 平台选型（2026-08-19，仅文档，未开工）
 
 用户指定首个真实外部渠道改为 **QQ 开放平台机器人（api-v2）**，原定的「个人博客或 bilibili 开放平台」退场。本次只改 `feature_list.json` 的 feat-014、`README.md` 的 M3 章节与本文件，**不含任何实现**。三项由用户当场拍板的决策：
