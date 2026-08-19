@@ -10,6 +10,7 @@
     "dependencies": {
         "@caicaiclaw/protocol": "workspace:*",
         "@caicaiclaw/utils": "workspace:*",
+        "@modelcontextprotocol/sdk": "^1.30.0",
         "ws": "^8.18.0",
         "zod": "^4.4.3"
     },
