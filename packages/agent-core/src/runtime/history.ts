@@ -1,6 +1,6 @@
 import { AIMessage, BaseMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
 import type { ChannelEvent } from "@caicaiclaw/utils/history";
-import { RawHistoryEvent, RawHistoryInput } from "./historyEvents";
+import type { RawHistoryEvent, RawHistoryInput } from "./historyEvents";
 import { restoreStoredMessages, serializeHistoryMessages } from "./historyMessages";
 import { platformDedupeKey } from "./intake";
 
@@ -59,12 +59,15 @@ export type ApprovalUpdate = {
     createdAt: number;
 };
 
+type DropReason = Extract<RawHistoryEvent, { type: "input.dropped" }>["reason"];
+
 export type RawHistoryConversationProjection = {
     recent: BaseMessage[];
     lastActivityAt: number;
     lastActivitySequence: number;
-    // Admission-time intake will populate this in feat-011; replay keeps it at zero for now.
+    // 总数与分 reason 计数都由回放 input.dropped 累加。
     droppedCount: number;
+    droppedByReason: Partial<Record<DropReason, number>>;
     digest?: string;
     digestCoveredSequence?: number;
 };
@@ -247,8 +250,10 @@ export function applyRawHistoryEvent(state: RawHistoryState, event: RawHistoryEv
                     lastActivityAt: event.createdAt,
                     lastActivitySequence: event.sequence,
                     droppedCount: 0,
+                    droppedByReason: {},
                 } satisfies RawHistoryConversationProjection);
             projection.droppedCount += 1;
+            projection.droppedByReason[event.reason] = (projection.droppedByReason[event.reason] ?? 0) + 1;
             projection.lastActivityAt = event.createdAt;
             projection.lastActivitySequence = event.sequence;
             state.conversations.set(event.event.conversationId, projection);
@@ -262,6 +267,7 @@ export function applyRawHistoryEvent(state: RawHistoryState, event: RawHistoryEv
                     lastActivityAt: event.createdAt,
                     lastActivitySequence: 0,
                     droppedCount: 0,
+                    droppedByReason: {},
                 } satisfies RawHistoryConversationProjection);
             if (event.coveredSequence >= event.sequence) {
                 throw new Error(`digest ${event.digestId} cannot cover its own event or a future sequence`);
@@ -550,6 +556,7 @@ function appendConversationMessages(
             lastActivityAt: activityAt,
             lastActivitySequence: activitySequence,
             droppedCount: 0,
+            droppedByReason: {},
         } satisfies RawHistoryConversationProjection);
     projection.recent.push(...messages);
     if (projection.recent.length > MAX_CONVERSATION_RECENT_MESSAGES) {
