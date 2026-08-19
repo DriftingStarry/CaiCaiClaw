@@ -31,6 +31,14 @@ export type RawHistoryToolEvent = {
     createdAt: number;
 };
 
+export type PendingApproval = {
+    approvalId: string;
+    turnId: string;
+    toolName: string;
+    args: Record<string, unknown>;
+    expiresAt: number;
+};
+
 export type RawHistoryConversationProjection = {
     recent: BaseMessage[];
     lastActivityAt: number;
@@ -56,6 +64,7 @@ export type RawHistoryState = {
     toolEvents: RawHistoryToolEvent[];
     contextCheckpoint?: RawHistoryCheckpoint;
     knownCompactionIds: Set<string>;
+    pendingApprovals: Map<string, PendingApproval>;
     conversations: Map<string, RawHistoryConversationProjection>;
     lastSequence: number;
 };
@@ -75,6 +84,7 @@ export function createEmptyRawHistoryState(): RawHistoryState {
         interruptedTurnIds: new Set(),
         toolEvents: [],
         knownCompactionIds: new Set(),
+        pendingApprovals: new Map(),
         conversations: new Map(),
         lastSequence: 0,
     };
@@ -90,6 +100,26 @@ export function applyRawHistoryEvent(state: RawHistoryState, event: RawHistoryEv
     }
 
     switch (event.type) {
+        case "approval.requested":
+            if (state.pendingApprovals.has(event.approvalId)) throw new Error(`duplicate approval ${event.approvalId}`);
+            state.pendingApprovals.set(event.approvalId, {
+                approvalId: event.approvalId,
+                turnId: event.turnId,
+                toolName: event.toolName,
+                args: event.args,
+                expiresAt: event.expiresAt,
+            });
+            break;
+        case "approval.decided":
+            if (!state.pendingApprovals.has(event.approvalId))
+                throw new Error(`approval ${event.approvalId} is not pending`);
+            state.pendingApprovals.delete(event.approvalId);
+            break;
+        case "approval.expired":
+            if (!state.pendingApprovals.has(event.approvalId))
+                throw new Error(`approval ${event.approvalId} is not pending`);
+            state.pendingApprovals.delete(event.approvalId);
+            break;
         case "input.accepted": {
             if (state.knownInputIds.has(event.inputId)) {
                 throw new Error(`duplicate input ${event.inputId}`);

@@ -58,6 +58,9 @@ export const HISTORY_EVENT_TYPES = [
     "input.accepted",
     "input.dropped",
     "conversation.digested",
+    "approval.requested",
+    "approval.decided",
+    "approval.expired",
     "turn.started",
     "tool.started",
     "tool.completed",
@@ -69,6 +72,36 @@ export const HISTORY_EVENT_TYPES = [
 export type HistoryEventType = (typeof HISTORY_EVENT_TYPES)[number];
 
 export const rawHistoryEventSchema = z.discriminatedUnion("type", [
+    z.object({
+        version: z.literal(HISTORY_VERSION),
+        sequence: z.number().int().positive(),
+        eventId: z.string().min(1),
+        type: z.literal("approval.requested"),
+        createdAt: z.number().int().nonnegative(),
+        approvalId: z.string().min(1),
+        turnId: z.string().min(1),
+        toolName: z.string().min(1),
+        args: jsonObjectSchema,
+        expiresAt: z.number().int().positive(),
+    }),
+    z.object({
+        version: z.literal(HISTORY_VERSION),
+        sequence: z.number().int().positive(),
+        eventId: z.string().min(1),
+        type: z.literal("approval.decided"),
+        createdAt: z.number().int().nonnegative(),
+        approvalId: z.string().min(1),
+        decision: z.enum(["approve", "deny"]),
+        decidedBy: z.string().min(1),
+    }),
+    z.object({
+        version: z.literal(HISTORY_VERSION),
+        sequence: z.number().int().positive(),
+        eventId: z.string().min(1),
+        type: z.literal("approval.expired"),
+        createdAt: z.number().int().nonnegative(),
+        approvalId: z.string().min(1),
+    }),
     z.object({
         version: z.literal(HISTORY_VERSION),
         sequence: z.number().int().positive(),
