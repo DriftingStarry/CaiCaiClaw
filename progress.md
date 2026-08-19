@@ -10,7 +10,10 @@
 - `dc079f7`：runtime 执行可加载 intake policy；按 channel/conversation 分区通用槽与保留槽，self echo/容量拒绝落 `input.dropped`，accepted/merged 使用稳定 batchId；协议 ack 与 output mapper 暴露 disposition/reason/batchId。
 - `0c93b91`：fast/deep 使用独立队列和 agent，按 conversation 分桶串行；fast 只绑定 `defer_to_deep`，快上下文仅安全前言、Role.md、态势、conversation projection 与当前批次。fake-model probe 通过（两 lane 各调用一次，fast 未注入完整系统记忆，target 正确）。
 - `36ea1b2`：server 只透传 `CAICAI_CHANNEL_POLICY_PATH`、`CAICAI_FAST_MODEL`、`CAICAI_BACKGROUND_MODEL`；配置 fallback probe 通过。三个提交均经 `./init.sh`、暂存区 diff check。
-- 未完成：真实 WS intake disposition/streaming 验收；约 200 条弹幕期间无队头阻塞实测；compact/daydreaming 仅需 deep 空闲的并发验收；fast/background 启动日志回落提示；dropCount projection 及 `defer_to_deep` 实际升级行为仍需补齐或验证。
+- `95d9711`：server 保留 adapter 原始 `author.isSelf`，self_echo admission 可生效；`input.dropped` 回放按 conversation 累计 projection `droppedCount`。
+- `7457530`：fast/background 未配置时打印明确 fallback 日志。
+- `1f5886a`：fast agent 通过 turn context 回调把 defer 事件重新落 accepted 并投 deep queue。fake-model defer probe 通过：fast calls=2（tool call + follow-up）、deep calls=1、accepted=2、fast/deep turn 均出现。
+- 未完成：真实 WS intake disposition/streaming 验收；约 200 条弹幕期间无队头阻塞实测；compact/daydreaming 仅需 deep 空闲的并发验收。上述均需后续真实 runtime/WS 验收，不宣称已完成。
 
 ### feat-011 提交计划
 
