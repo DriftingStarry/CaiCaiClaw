@@ -54,3 +54,9 @@
 ## Recommended Next Step
 
 - 选定 feat-004（server compact / memory 调度入口）或 feat-005（TUI 鼠标修复与真实终端验收），先补全其 `doneCriteria`，再开工。
+
+## feat-010 Handoff
+
+- feat-010 已完成，`feature_list.json` 状态为 `done`。
+- 三个可独立回滚提交：`33c4fe5`（agent-core lane/target）、`c57fa3d`（protocol v5 与连接角色）、`70f6101`（server 定向路由及 adapter 入站 channel 校验）。
+- `./init.sh` 与真实 WebSocketServer harness 均通过；harness 覆盖 observer 全量、匹配/错配 adapter、未声明 role 先 ping、伪造入站 channel，临时文件已清理。

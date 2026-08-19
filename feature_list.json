@@ -177,14 +177,15 @@
             "dependencies": [
                 "feat-009"
             ],
-            "status": "not-started",
+            "status": "done",
             "doneCriteria": [
                 "RuntimeOutputEvent 带 lane 与可选 target { channel, conversationId, replyTo }",
                 "server 区分 observer 连接与 adapter 连接：observer 收到全部输出，adapter 只收到 target 匹配自身 channel 的输出",
                 "来源渠道的回复不经过任何 tool call，由输出路由投递且支持流式增量",
                 "假 adapter 与 observer 双连接实测定向投递与全量观察，协议版本与 schema 同步更新",
                 "./init.sh 通过"
-            ]
+            ],
+            "evidence": "2026-08-19 完成。提交：33c4fe5（agent-core RuntimeOutputEvent lane/target 与 TurnContext 派生）、c57fa3d（protocol v5、lane/target schema 与 observer|adapter role）、70f6101（server 按角色定向投递及 adapter 入站 channel 一致性校验）。observer 收全部 runtime/control 输出，adapter 仅收匹配 target.channel 的流式回复，无 target 不投 adapter；TUI/admin/client-core 自动声明 observer。./init.sh 通过。真实 WebSocketServer + fake SimpleChatModel harness 通过：observer 收到 hello/input_accepted/agent_turn_start/assistant_message_delta/agent_turn_done 全量，匹配 bilibili-live adapter 收到 ack 与 assistant 增量，不匹配 qq adapter 未收到输出，未声明 role 先 ping 被拒，伪造 qq 入站被 channel 错误拒绝。临时脚本与 history 已清理。"
         },
         {
             "id": "feat-011",

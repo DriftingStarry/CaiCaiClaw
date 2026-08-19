@@ -3,7 +3,24 @@
 ## Current State
 
 **Last Updated:** 2026-08-19
-**Active Feature:** feat-009（M3-1 turn 上下文参数透传）已 `done`，落为 `2818ed5`（类型层）与 `ae1a2e6`（行为层）两个可独立回滚的提交。feat-001 ~ feat-009 为 `done`；本次只实现单 deep lane 下的 TurnContext 透传与 active lane 状态改造，不实现双车道调度、intake 裁决、fast model、MCP 或审批。下一步是 feat-010（出站路由：`RuntimeOutputEvent` 携带 lane 与 target，区分 observer 与 adapter）。
+**Active Feature:** feat-010（M3-2 出站路由与 adapter 定向投递）已完成。feat-001 ~ feat-009 为 `done`（feat-009 落为 `2818ed5` 类型层 + `ae1a2e6` 行为层两个可独立回滚的提交）。本次只做出站方向的 lane / target 与连接角色路由，不实现 MCP、不实现真实 adapter、不动入站 intake。
+
+### feat-010 提交计划
+
+1. **类型层**：`RuntimeOutputEvent` 各分支增加 `lane`，面向渠道的分支增加可选 `target { channel, conversationId, replyTo? }`；runtime 从 `TurnContext` 派生并填充。预期文件：`packages/agent-core/src/runtime/types.ts`、`packages/agent-core/src/runtime/agentRuntime.ts`、`packages/agent-core/src/runtime/agentStream.ts`。标题：`feat(agent-core): 出站事件携带车道与投递目标`。验证：`./init.sh`。
+2. **协议层**：`ServerMessage` 同步 `lane` / `target`，新增连接角色声明（`role=observer|adapter` 与 adapter 的 `channel`），`WS_PROTOCOL_VERSION` 4→5。预期文件：`packages/protocol/src/index.ts`。标题：`feat(protocol): 增加连接角色与出站目标字段`。验证：`./init.sh`。
+3. **路由层**：server 的 `broadcast` 拆为按角色投递 —— observer 收全量，adapter 只收 `target.channel` 等于自身 channel 的输出；无 target 的输出不投给任何 adapter。预期文件：`apps/server/src/server.ts`、`apps/server/src/runtimeOutputMapper.ts`。标题：`feat(server): 按连接角色定向投递出站事件`。验证：`./init.sh` 与假 adapter/observer 双连接实测。
+
+拆分依据：类型层与协议层各自可独立通过 `./init.sh` 且可单独 revert；路由层是行为改动，单独一提交便于回滚。若协议层与路由层出现「schema 已改而 server 未同步导致运行契约失效」的紧耦合，则按 AGENTS.md 合并为一个提交并在此记录原因。
+
+### feat-010 实现与验收证据
+
+- 类型层：`RuntimeOutputEvent` 所有分支增加 `lane`；`TurnContext` 增加来源 `target`，由首个 `ChannelEvent` 的 `channel` / `conversationId` / `replyTo` 派生；`assistant_delta` 流式增量携带 target，未新增 runtime 实例状态。`toolNode` context 校验同步要求合法 target。
+- 协议层：`WS_PROTOCOL_VERSION` 由 4 提升到 5；runtime 对应的 `ServerMessage` 分支增加 `lane`，assistant 增量增加可选 target；新增 `{ type: "role", role: "observer" | "adapter", channel? }`，adapter 缺 channel 与非法 role 均由 schema 拒绝。client-core、TUI、admin control 连接自动声明 observer。
+- 路由层：server 连接保存已验证 role；observer 收 runtime 与控制广播全量，adapter 只收带 target 且 `target.channel` 匹配自身 channel 的 runtime 输出；无 target 的输出不投 adapter。adapter 入站事件的 `event.channel` 必须与声明 channel 一致，防止伪造来源导致错投。保留 `verifyClient` token 鉴权逻辑不变，local 行为不变。
+- 静态验证实跑通过：`./init.sh` 输出 `pnpm typecheck`、`pnpm lint`、`pnpm format:check` 全部通过并输出 `=== Verification complete ===`；`pnpm --filter @caicaiclaw/admin build` 输出 `Compiled successfully`、`Finished TypeScript`、静态页 `10/10`。
+- 网络 harness：2026-08-19 在本机真实 WebSocketServer + fake SimpleChatModel 上通过。observer 收到 `hello/input_accepted/agent_turn_start/assistant_message_delta/agent_turn_done` 全量；匹配 `bilibili-live` adapter 收到 ack 与 assistant 流式增量；不匹配 `qq` adapter 仅收到 hello；伪造 `qq` 入站被拒并返回 channel 错误；未声明 role 先 ping 被拒。临时脚本与 history 目录已清理。
+- 三个提交单元已分别提交并验证：`33c4fe5`（agent-core 类型/target）、`c57fa3d`（protocol v5/role/schema）、`70f6101`（server 路由及 adapter 入站 channel 边界）。每个提交均审查暂存区并执行 `git diff --cached --check`；最终 `./init.sh` 通过。
 
 ### feat-009 提交计划
 
