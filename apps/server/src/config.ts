@@ -32,6 +32,10 @@ export function loadServerConfig(env: NodeJS.ProcessEnv = process.env): ServerCo
     }
     const fastModel = env.CAICAI_FAST_MODEL || openrouterModel;
     const backgroundModel = env.CAICAI_BACKGROUND_MODEL || openrouterModel;
+    if (!env.CAICAI_FAST_MODEL)
+        console.warn(`[config] CAICAI_FAST_MODEL not set; fast lane falls back to ${openrouterModel}`);
+    if (!env.CAICAI_BACKGROUND_MODEL)
+        console.warn(`[config] CAICAI_BACKGROUND_MODEL not set; background work falls back to ${openrouterModel}`);
 
     const systemPromptPath = env.CAICAI_SYSTEM_PROMPT_PATH ?? DEFAULT_SYSTEM_PROMPT_PATH;
     const rawHistoryPath = env.CAICAI_RAW_HISTORY_PATH ?? DEFAULT_RAW_HISTORY_PATH;
