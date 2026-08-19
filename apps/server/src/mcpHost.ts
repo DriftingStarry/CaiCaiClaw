@@ -142,5 +142,14 @@ function namespaceToolName(adapterId: string, toolName: string): string {
 
 function normalizeToolResult(result: unknown): string {
     if (typeof result === "string") return result;
+    if (result && typeof result === "object" && "content" in result && Array.isArray(result.content)) {
+        const text = result.content
+            .map((item) =>
+                item && typeof item === "object" && "text" in item && typeof item.text === "string" ? item.text : "",
+            )
+            .filter(Boolean)
+            .join("\n");
+        if (text) return text;
+    }
     return JSON.stringify(result);
 }

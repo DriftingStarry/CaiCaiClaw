@@ -8,7 +8,7 @@
 ### feat-013 提交计划
 
 1. **MCP SDK 依赖**：将 `@modelcontextprotocol/sdk` 仅加入 `apps/server`，更新 lockfile，不改 agent-core 依赖方向。标题：`chore(server): 添加 MCP client SDK`。验证：`./init.sh`。
-2. **MCP host 与动态工具注册**：server host 管理 adapter 的 MCP client、连接/断开、工具发现和将调用包装成 runtime 可加载工具；断开后明确解绑，图重建保留 runtime state。标题：`feat(server): 接入 MCP adapter 工具 host`。验证：`./init.sh` 与假 MCP adapter connect/disconnect probe。
+2. **MCP host 与动态工具注册**：server host 管理 adapter 的 MCP client、连接/断开、工具发现和将调用包装成 runtime 可加载工具；断开后明确解绑，图重建保留 runtime state。标题：`feat(server): 接入 MCP adapter 工具 host`。验证：`./init.sh` 与假 MCP adapter connect/disconnect probe。已完成提交 `0366a5f`、`8024e4d`：新增 `McpToolHost`、命名空间工具包装、server connect/disconnect API、runtime deep tool 图重建，并保留/校验 MCP `inputSchema`；`./init.sh` 通过。真实 SDK `Server` + 成对 Transport probe 输出 `{\"discovered\":true,\"validCall\":true,\"invalidRejected\":true,\"calls\":1,\"disconnected\":true}`，验证旧 tool 断开后失败且非法 args 未触发 adapter call；临时 probe 已删除。
 3. **权限与审批状态机**：共享 history 事件契约、runtime L0-L3 gate、pending approval 回放/TTL、受信 admin decision 与 server 路由。标题：`feat(agent-core): 实现 L3 审批状态机`。验证：`./init.sh` 与假 adapter 的权限/approve/replay/TTL probe。
 
 SDK 影响说明：MCP client host 需要其 transport、capability negotiation 与 tools/list/call 协议实现；替代方案是自行维护 JSON-RPC/MCP 子集，开发成本高、兼容风险也更大，故采用官方 SDK。依赖只位于 server，不进入共享 runtime。
