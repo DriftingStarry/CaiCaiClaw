@@ -2,7 +2,7 @@ import { z } from "zod";
 import { channelEventSchema } from "@caicaiclaw/utils/history";
 import type { ChannelEvent } from "@caicaiclaw/utils/history";
 
-export const WS_PROTOCOL_VERSION = 5;
+export const WS_PROTOCOL_VERSION = 6;
 export const MAX_CLIENT_ID_LENGTH = 64;
 export const CLIENT_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
@@ -34,6 +34,15 @@ export const clientDaydreamingMessageSchema = z
     })
     .strict();
 
+export const clientApprovalDecisionMessageSchema = z
+    .object({
+        type: z.literal("approval_decision"),
+        approvalId: z.string().min(1),
+        decision: z.enum(["approve", "deny"]),
+        requestId: requestIdSchema,
+    })
+    .strict();
+
 export const observerRoleMessageSchema = z
     .object({
         type: z.literal("role"),
@@ -49,10 +58,22 @@ export const adapterRoleMessageSchema = z
     })
     .strict();
 
-export const clientRoleMessageSchema = z.union([observerRoleMessageSchema, adapterRoleMessageSchema]);
+export const adminRoleMessageSchema = z
+    .object({
+        type: z.literal("role"),
+        role: z.literal("admin"),
+    })
+    .strict();
+
+export const clientRoleMessageSchema = z.union([
+    observerRoleMessageSchema,
+    adapterRoleMessageSchema,
+    adminRoleMessageSchema,
+]);
 export const connectionRoleSchema = z.discriminatedUnion("role", [
     z.object({ role: z.literal("observer") }).strict(),
     z.object({ role: z.literal("adapter"), channel: z.string().min(1) }).strict(),
+    z.object({ role: z.literal("admin") }).strict(),
 ]);
 
 export type ConnectionRole = z.infer<typeof connectionRoleSchema>;
@@ -63,6 +84,7 @@ export const clientMessageSchema = z.union([
     clientPingMessageSchema,
     clientCompactMessageSchema,
     clientDaydreamingMessageSchema,
+    clientApprovalDecisionMessageSchema,
     clientRoleMessageSchema,
 ]);
 

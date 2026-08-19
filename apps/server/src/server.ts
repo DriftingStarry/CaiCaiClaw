@@ -53,14 +53,16 @@ export function createServer(
     function sendToObservers(message: ServerMessage): void {
         const payload = serializeServerMessage(message);
         for (const connection of clients.values()) {
-            if (connection.role?.role === "observer") sendPayload(connection.socket, payload);
+            if (connection.role?.role === "observer" || connection.role?.role === "admin") {
+                sendPayload(connection.socket, payload);
+            }
         }
     }
 
     function sendRuntimeOutput(message: ServerMessage): void {
         const payload = serializeServerMessage(message);
         for (const connection of clients.values()) {
-            if (connection.role?.role === "observer") {
+            if (connection.role?.role === "observer" || connection.role?.role === "admin") {
                 sendPayload(connection.socket, payload);
                 continue;
             }
@@ -88,6 +90,7 @@ export function createServer(
         // server 显式传入 memoryDir 后 runtime 默认会收紧缺失文件策略；保持服务端原有宽松行为。
         allowMissingMemoryFiles: true,
         compactionModelName: serverConfig.openrouterModel,
+        approvalTtlMs: serverConfig.approvalTtlMs,
         fastModel: models.fastModel ?? createOpenrouterModel(serverConfig.fastModel),
         backgroundModel: models.backgroundModel ?? createOpenrouterModel(serverConfig.backgroundModel),
         intakePolicyPath: serverConfig.channelPolicyPath,
@@ -185,6 +188,14 @@ export function createServer(
 
                 if (message.type === "role") {
                     if (connection.role) throw new Error("connection role has already been declared");
+                    if (
+                        message.role === "admin" &&
+                        (!serverConfig.wsToken ||
+                            !serverConfig.adminToken ||
+                            !tokensEqual(getRequestAdminToken(request.url), serverConfig.adminToken))
+                    ) {
+                        throw new Error("admin connections require CAICAI_ADMIN_TOKEN authentication");
+                    }
                     connection.role = toConnectionRole(message);
                     return;
                 }
@@ -224,6 +235,15 @@ export function createServer(
                         summary,
                         requestId: message.requestId,
                     });
+                    return;
+                }
+
+                if (message.type === "approval_decision") {
+                    if (connection.role.role !== "admin") {
+                        throw new Error("approval decisions require an admin connection");
+                    }
+                    await runtime.decideApproval(message.approvalId, message.decision, `admin:${connection.clientId}`);
+                    send(socket, { type: "ack", requestId: message.requestId });
                     return;
                 }
 
@@ -302,6 +322,15 @@ function getRequestToken(requestUrl: string | undefined): string | undefined {
     if (!requestUrl) return undefined;
     try {
         return new URL(requestUrl, "ws://localhost").searchParams.get("token") ?? undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+function getRequestAdminToken(requestUrl: string | undefined): string | undefined {
+    if (!requestUrl) return undefined;
+    try {
+        return new URL(requestUrl, "ws://localhost").searchParams.get("adminToken") ?? undefined;
     } catch {
         return undefined;
     }
@@ -410,6 +439,7 @@ function sendPayload(socket: WebSocket, payload: string): void {
 
 function toConnectionRole(message: ClientRoleMessage): ConnectionRole {
     if (message.role === "observer") return { role: "observer" };
+    if (message.role === "admin") return { role: "admin" };
     return { role: "adapter", channel: message.channel };
 }
 

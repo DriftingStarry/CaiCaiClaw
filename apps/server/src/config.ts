@@ -7,6 +7,7 @@ export type ServerConfig = {
     openrouterModel: string;
     fastModel: string;
     backgroundModel: string;
+    approvalTtlMs: number;
     channelPolicyPath?: string;
     systemPromptPath: string;
     rawHistoryPath: string;
@@ -15,6 +16,7 @@ export type ServerConfig = {
     maxStepLimit: number;
     loopWarningLength: number;
     wsToken: string;
+    adminToken: string;
 };
 
 const DEFAULT_HOST = "127.0.0.1";
@@ -51,6 +53,12 @@ export function loadServerConfig(env: NodeJS.ProcessEnv = process.env): ServerCo
         openrouterModel,
         fastModel,
         backgroundModel,
+        approvalTtlMs: parseInteger(
+            env.CAICAI_APPROVAL_TTL_MS,
+            15 * 60_000,
+            (value) => value >= 1,
+            "CAICAI_APPROVAL_TTL_MS must be an integer >= 1",
+        ),
         channelPolicyPath: env.CAICAI_CHANNEL_POLICY_PATH || undefined,
         // 必须用 ?? 而不是 ||：空串是有意义的取值，表示不加载 system prompt。
         systemPromptPath,
@@ -76,6 +84,7 @@ export function loadServerConfig(env: NodeJS.ProcessEnv = process.env): ServerCo
             "CAICAI_LOOP_WARNING_LENGTH must be an integer >= 1",
         ),
         wsToken: env.CAICAI_WS_TOKEN ?? "",
+        adminToken: env.CAICAI_ADMIN_TOKEN ?? "",
     };
 }
 
