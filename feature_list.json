@@ -194,7 +194,7 @@
             "dependencies": [
                 "feat-010"
             ],
-            "status": "not-started",
+            "status": "in-progress",
             "doneCriteria": [
                 "分流策略来自可加载配置，由 runtime 执行；优先级为显式策略 > laneHint > defaults，ws server 不做分流决策",
                 "回执区分 accepted / merged / dropped；一旦回执 accepted 该事件必定进入模型上下文，丢弃只发生在门口，不淘汰已受理事件",

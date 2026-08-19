@@ -3,7 +3,15 @@
 ## Current State
 
 **Last Updated:** 2026-08-19
-**Active Feature:** feat-010（M3-2 出站路由与 adapter 定向投递）已完成。feat-001 ~ feat-009 为 `done`（feat-009 落为 `2818ed5` 类型层 + `ae1a2e6` 行为层两个可独立回滚的提交）。本次只做出站方向的 lane / target 与连接角色路由，不实现 MCP、不实现真实 adapter、不动入站 intake。
+**Active Feature:** feat-011（M3-3 门口裁决 intake 与双车道）进行中。feat-010 已完成并落为 `33c4fe5`（agent-core 出站 lane/target）、`c57fa3d`（protocol v5/role）和 `70f6101`（server 定向路由）三个可独立回滚提交；下一步把分流、门口裁决和双车道收敛在 runtime，server 仍只负责鉴权、校验、归一化和路由。
+
+### feat-011 提交计划
+
+1. **intake 契约与策略**：新增 runtime lane/intake 类型、可加载 JSON 策略、优先级裁决、分区槽位和 accepted/merged/dropped 回执；同步协议 ack 与 dropped 事件。预期文件：`packages/agent-core/src/runtime/intake.ts`、`packages/agent-core/src/runtime/types.ts`、`packages/protocol/src/index.ts`。标题：`feat(agent-core): 增加 intake 策略与门口裁决`。验证：`./init.sh` 与临时 runtime admission probe。
+2. **双车道执行**：runtime 按 lane 独立排队与串行执行，接入 fast model、fast 安全上下文和仅允许 `defer_to_deep` 的工具集合，deep 保持现有 ReAct。预期文件：`packages/agent-core/src/runtime/agentRuntime.ts`、`packages/agent-core/src/runtime/agentStream.ts`、`packages/agent-core/src/agent.ts`。标题：`feat(agent-core): 实现 fast 与 deep 独立车道`。验证：`./init.sh` 与 fake-model 并发/上下文 probe。
+3. **server 配置与回执**：接入 `CAICAI_CHANNEL_POLICY_PATH`、`CAICAI_FAST_MODEL`、`CAICAI_BACKGROUND_MODEL`，server 只透传 runtime admission 结果，WS ack 同步 disposition/reason/batchId。预期文件：`apps/server/src/config.ts`、`apps/server/src/server.ts`、`.env.example`。标题：`feat(server): 接入双车道配置与 intake 回执`。验证：`./init.sh`、admin build 与真实 WS harness。
+
+拆分依据：策略/契约不依赖 server；双 lane 执行依赖第一单元但可单独 revert；server 配置和协议字段与 runtime 回执紧耦合，合并为第三单元。
 
 ### feat-010 提交计划
 
