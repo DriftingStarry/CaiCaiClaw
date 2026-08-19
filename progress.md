@@ -3,7 +3,15 @@
 ## Current State
 
 **Last Updated:** 2026-08-19
-**Active Feature:** feat-011（M3-3 门口裁决 intake 与双车道）进行中。已完成三个可独立回滚代码单元：`dc079f7` intake 策略/门口裁决、`0c93b91` per-conversation 双 lane 与 fast 限制、`36ea1b2` server 模型/策略配置接入。feat-010 已完成并落为 `33c4fe5`、`c57fa3d`、`70f6101`；下一步做真实 WS 回执、深 lane 长任务期间 fast 响应、维护边界与完整 doneCriteria 验收。
+**Active Feature:** feat-012（M3-4 历史查询工具与社交近况）进行中。feat-011 已完成：intake 与双车道、真实 WS disposition/fast streaming、slow deep 下 200 fast、deep-idle maintenance、并发 checkpoint 的排它 transaction 及重启回放均有证据；提交链至 `c26e880`，状态证据 `cae833e`。本次仅实现只读 history_query、heartbeat digest 与深车道社交近况，不提前接入 MCP/审批。
+
+### feat-012 提交计划
+
+1. **历史查询契约与只读工具**：定义结构化筛选、分页与明确越界错误；在 agent-core 以限定 history projection/JSONL 事件读取实现，禁止任意路径读取。标题：`feat(agent-core): 增加受限历史查询工具`。验证：`./init.sh` 与临时筛选/分页 probe。
+2. **Digest 事件与回放投影**：扩展共享 history schema 与 projection，记录 `conversation.digested`，按 conversation 管理未摘要活动。标题：`feat(utils): 增加 conversation digest 事件契约`。验证：`./init.sh`、回放 probe。
+3. **Heartbeat digest 与深上下文**：background model 为活动 conversation 生成有界 digest，深 lane 注入跨渠道社交近况且不写 Memory.md；快车道不进 checkpoint。标题：`feat(agent-core): 注入社交近况并调度 digest`。验证：`./init.sh` 与 fake-model heartbeat/deep-context probe。
+
+拆分依据：受限查询工具独立于 digest；事件 schema 先于调度行为；最终行为单元在契约稳定后接入。
 
 ### feat-011 当前实现证据
 

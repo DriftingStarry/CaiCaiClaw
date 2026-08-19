@@ -214,7 +214,7 @@
             "dependencies": [
                 "feat-011"
             ],
-            "status": "not-started",
+            "status": "in-progress",
             "doneCriteria": [
                 "history_query 支持按 conversationId / channel / kind / 时间区间 / authorId 过滤与 offset+limit 分页，缺失与越界返回明确错误，且不能退化为任意文件读取",
                 "heartbeat 为有新活动的 conversation 生成极短 digest 并落 conversation.digested，使用 background model",
