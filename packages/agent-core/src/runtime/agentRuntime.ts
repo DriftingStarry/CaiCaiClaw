@@ -80,7 +80,8 @@ export class AgentRuntime {
     private readonly compactionSummaryBudget: number;
     private readonly digestSummaryBudget: number;
     private readonly approvalTtlMs: number;
-    private readonly toolPermissions: Readonly<Record<string, ToolPermissionLevel>>;
+    private readonly configuredToolPermissions: Readonly<Record<string, ToolPermissionLevel>>;
+    private mcpToolPermissions: Record<string, ToolPermissionLevel> = {};
     private readonly toolResultProjectionThreshold: number;
     private readonly compactionModelName: string;
     private readonly maintenanceWaiters: MaintenanceRequest[] = [];
@@ -106,7 +107,7 @@ export class AgentRuntime {
         this.compactionSummaryBudget = options.compactionSummaryBudget ?? DEFAULT_COMPACTION_SUMMARY_BUDGET;
         this.digestSummaryBudget = options.digestSummaryBudget ?? DEFAULT_DIGEST_SUMMARY_BUDGET;
         this.approvalTtlMs = options.approvalTtlMs ?? DEFAULT_APPROVAL_TTL_MS;
-        this.toolPermissions = options.toolPermissions ?? {};
+        this.configuredToolPermissions = options.toolPermissions ?? {};
         this.toolResultProjectionThreshold =
             options.toolResultProjectionThreshold ?? DEFAULT_TOOL_RESULT_PROJECTION_THRESHOLD;
         if (!Number.isInteger(this.compactionSummaryBudget) || this.compactionSummaryBudget < 1) {
@@ -254,9 +255,13 @@ export class AgentRuntime {
         return { disposition: "pending" as const, result: JSON.stringify({ status: "pending", approvalId }) };
     }
 
-    public async replaceDeepTools(toolsByName: Record<string, DynamicStructuredTool>): Promise<void> {
+    public async replaceDeepTools(
+        toolsByName: Record<string, DynamicStructuredTool>,
+        permissionsByName?: Readonly<Record<string, ToolPermissionLevel>>,
+    ): Promise<void> {
         this.assertAvailable();
         await this.runExclusive(async () => {
+            this.mcpToolPermissions = { ...(permissionsByName ?? {}) };
             Object.keys(this.runtimeToolsByName).forEach((name) => {
                 if (
                     !(name in toolsByName) &&
@@ -905,8 +910,10 @@ export class AgentRuntime {
     }
 
     private permissionForTool(name: string): ToolPermissionLevel {
+        // 权限优先级：history_read/history_query 固定 L0 → 运维配置 → MCP 声明 → 默认 L3。
+        // 运维显式配置优先，避免 adapter 通过元数据自行提权；未声明默认 L3，确保未知工具不会被放行。
         if (name === "history_read" || name === "history_query") return "L0";
-        return this.toolPermissions[name] ?? "L3";
+        return this.configuredToolPermissions[name] ?? this.mcpToolPermissions[name] ?? "L3";
     }
 
     private findToolArgs(turnId: string, toolCallId: string): Record<string, unknown> {

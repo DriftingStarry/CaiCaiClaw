@@ -1,9 +1,12 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import { createDynamicTool, type DynamicStructuredTool } from "@caicaiclaw/agent-core";
+import { createDynamicTool, type DynamicStructuredTool, type ToolPermissionLevel } from "@caicaiclaw/agent-core";
+
+const MCP_PERMISSION_META_KEY = "com.caicaiclaw/permission";
 
 export type McpToolHostSnapshot = {
     toolsByName: Record<string, DynamicStructuredTool>;
+    permissionsByName: Record<string, ToolPermissionLevel>;
     connectedAdapters: string[];
 };
 
@@ -15,6 +18,7 @@ type ConnectedAdapter = {
 type McpToolDefinition = {
     remoteName: string;
     inputSchema: JsonSchema;
+    permission?: ToolPermissionLevel;
 };
 
 type JsonSchema = {
@@ -39,7 +43,14 @@ export class McpToolHost {
         for (const tool of listed.tools) {
             const name = namespaceToolName(adapterId, tool.name);
             if (tools.has(name)) throw new Error(`MCP adapter returned duplicate tool ${tool.name}`);
-            tools.set(name, { remoteName: tool.name, inputSchema: normalizeJsonSchema(tool.inputSchema) });
+            const permission = isToolPermissionLevel(tool._meta?.[MCP_PERMISSION_META_KEY])
+                ? tool._meta[MCP_PERMISSION_META_KEY]
+                : undefined;
+            tools.set(name, {
+                remoteName: tool.name,
+                inputSchema: normalizeJsonSchema(tool.inputSchema),
+                ...(permission === undefined ? {} : { permission }),
+            });
         }
         this.adapters.set(adapterId, { client, tools });
         return this.snapshot();
@@ -55,8 +66,9 @@ export class McpToolHost {
 
     public snapshot(): McpToolHostSnapshot {
         const toolsByName: Record<string, DynamicStructuredTool> = {};
+        const permissionsByName: Record<string, ToolPermissionLevel> = {};
         for (const [adapterId, adapter] of this.adapters) {
-            for (const [name] of adapter.tools) {
+            for (const [name, definition] of adapter.tools) {
                 const toolName = name.slice(`mcp__${adapterId}__`.length);
                 toolsByName[name] = createDynamicTool(
                     name,
@@ -76,15 +88,20 @@ export class McpToolHost {
                         return normalizeToolResult(result);
                     },
                 );
+                if (definition.permission !== undefined) permissionsByName[name] = definition.permission;
             }
         }
-        return { toolsByName, connectedAdapters: [...this.adapters.keys()] };
+        return { toolsByName, permissionsByName, connectedAdapters: [...this.adapters.keys()] };
     }
 
     public async close(): Promise<void> {
         const adapterIds = [...this.adapters.keys()];
         for (const adapterId of adapterIds) await this.disconnect(adapterId);
     }
+}
+
+function isToolPermissionLevel(value: unknown): value is ToolPermissionLevel {
+    return value === "L0" || value === "L1" || value === "L2" || value === "L3";
 }
 
 function normalizeJsonSchema(value: unknown): JsonSchema {

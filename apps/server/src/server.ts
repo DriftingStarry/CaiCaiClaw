@@ -105,7 +105,8 @@ export function createServer(
     });
 
     async function refreshMcpTools(): Promise<void> {
-        await runtime.replaceDeepTools(mcpHost.snapshot().toolsByName);
+        const snapshot = mcpHost.snapshot();
+        await runtime.replaceDeepTools(snapshot.toolsByName, snapshot.permissionsByName);
     }
 
     async function connectMcpAdapter(adapterId: string, transport: Transport): Promise<void> {

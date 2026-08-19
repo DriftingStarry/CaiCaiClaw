@@ -7,6 +7,8 @@ import { type ClaimResult, type ReplyWindowTracker } from "./reply-window";
 
 export type QqToolPermission = "L0" | "L1" | "L2" | "L3";
 
+export const QQ_PERMISSION_META_KEY = "com.caicaiclaw/permission";
+
 export const QQ_TOOL_PERMISSIONS: Readonly<Record<string, QqToolPermission>> = {
     qq_reply_in_conversation: "L1",
     qq_send_active_message: "L2",
@@ -110,6 +112,7 @@ export function createQqMcpServer(deps: QqMcpDependencies): McpServer {
         "qq_reply_in_conversation",
         {
             description: "使用已知 QQ 消息的被动回复窗口追加一次回复。窗口或配额不可用时不会改发主动消息。",
+            _meta: { [QQ_PERMISSION_META_KEY]: QQ_TOOL_PERMISSIONS.qq_reply_in_conversation },
             inputSchema: {
                 scope: sendScopeSchema,
                 openid: z.string().min(1),
@@ -174,6 +177,7 @@ export function createQqMcpServer(deps: QqMcpDependencies): McpServer {
         "qq_send_active_message",
         {
             description: "发送不带 msg_id 的 QQ 主动消息。该动作受主动消息额度限制并需要完整审计。",
+            _meta: { [QQ_PERMISSION_META_KEY]: QQ_TOOL_PERMISSIONS.qq_send_active_message },
             inputSchema: {
                 scope: sendScopeSchema,
                 openid: z.string().min(1),
@@ -214,6 +218,7 @@ export function createQqMcpServer(deps: QqMcpDependencies): McpServer {
         "qq_get_self_identity",
         {
             description: "读取 QQ adapter 自身身份与被动回复窗口限制，不发起平台请求。",
+            _meta: { [QQ_PERMISSION_META_KEY]: QQ_TOOL_PERMISSIONS.qq_get_self_identity },
         },
         async () =>
             jsonResponse({
@@ -231,6 +236,7 @@ export function createQqMcpServer(deps: QqMcpDependencies): McpServer {
         "qq_send_media_message",
         {
             description: "提交 QQ 富媒体发布动作。当前仅占位并明确返回未实现，不能降级为文本消息。",
+            _meta: { [QQ_PERMISSION_META_KEY]: QQ_TOOL_PERMISSIONS.qq_send_media_message },
             inputSchema: {
                 scope: sendScopeSchema,
                 openid: z.string().min(1),
