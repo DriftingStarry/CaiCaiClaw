@@ -3,6 +3,7 @@
 import { Alert, Space, Typography } from "antd";
 import { useEffect } from "react";
 import { AdapterPanel } from "../../src/components/AdapterPanel";
+import { ApprovalPanel } from "../../src/components/ApprovalPanel";
 import { ConnectionBadge } from "../../src/components/ConnectionBadge";
 import { LaneQueuePanel } from "../../src/components/LaneQueuePanel";
 import { useAgentClientStore } from "../../src/stores/useAgentClientStore";
@@ -11,6 +12,8 @@ import { useAgentSupervisorPolling, useAgentSupervisorStore } from "../../src/st
 export default function RuntimePage() {
     useAgentSupervisorPolling();
     const clientId = useAgentClientStore((state) => state.clientId);
+    const approvalSnapshot = useAgentClientStore((state) => state.approvalSnapshot);
+    const decideApproval = useAgentClientStore((state) => state.decideApproval);
     const channelSnapshot = useAgentClientStore((state) => state.channelSnapshot);
     const connectionStatus = useAgentClientStore((state) => state.connectionStatus);
     const connect = useAgentClientStore((state) => state.connect);
@@ -52,6 +55,7 @@ export default function RuntimePage() {
                 <section className="flex flex-col gap-4">
                     <LaneQueuePanel intakeSnapshot={intakeSnapshot} laneSnapshot={laneSnapshot} />
                     <AdapterPanel channelSnapshot={channelSnapshot} />
+                    <ApprovalPanel approvalSnapshot={approvalSnapshot} onDecide={decideApproval} />
                 </section>
             </div>
         </main>

@@ -17,6 +17,7 @@ export type AgentClientStore = ClientState & {
     connect: () => Promise<void>;
     disconnect: () => void;
     sendInput: (text: string) => void;
+    decideApproval: (approvalId: string, decision: "approve" | "deny") => void;
 };
 
 let wsClient: CaiCaiWsClient | undefined;
@@ -115,6 +116,14 @@ export const useAgentClientStore = create<AgentClientStore>((set) => ({
                 },
                 requestId,
             });
+        } catch (error) {
+            set((state) => ({ ...state, errors: [...state.errors, errorMessage(error)] }));
+        }
+    },
+    decideApproval: (approvalId: string, decision: "approve" | "deny") => {
+        const requestId = crypto.randomUUID();
+        try {
+            wsClient?.send({ type: "approval_decision", approvalId, decision, requestId });
         } catch (error) {
             set((state) => ({ ...state, errors: [...state.errors, errorMessage(error)] }));
         }
