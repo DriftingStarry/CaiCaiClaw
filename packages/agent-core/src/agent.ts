@@ -28,6 +28,7 @@ export interface AgentConfig {
     onToolStart?: (event: ToolStartEvent) => MaybePromise<void>;
     onToolResult?: (event: ToolResultEvent) => MaybePromise<void>;
     toolResultMessage?: (event: ToolResultEvent, message: ToolMessage) => ToolMessage;
+    onDeferToDeep?: (context: TurnContext, reason: string) => MaybePromise<void>;
 }
 
 export type ToolStartEvent = {
@@ -57,8 +58,16 @@ const MessageState = new StateSchema({
 });
 
 export const getAgent = (config: AgentConfig) => {
-    const { maxStepLimit, loopWarningLength, model, toolsByName, onToolStart, onToolResult, toolResultMessage } =
-        config;
+    const {
+        maxStepLimit,
+        loopWarningLength,
+        model,
+        toolsByName,
+        onToolStart,
+        onToolResult,
+        toolResultMessage,
+        onDeferToDeep,
+    } = config;
     const tools = Object.values(toolsByName);
     const modelWithTools = model.bindTools(tools);
 
@@ -148,6 +157,10 @@ export const getAgent = (config: AgentConfig) => {
             }
 
             try {
+                if (call.name === "defer_to_deep") {
+                    const reason = typeof call.args.reason === "string" ? call.args.reason : "fast lane escalation";
+                    await onDeferToDeep?.(turnContext, reason);
+                }
                 const rawToolResult = await tool.invoke(call.args);
                 const serializedToolResult = toJsonValue(rawToolResult);
                 await onToolResult?.({

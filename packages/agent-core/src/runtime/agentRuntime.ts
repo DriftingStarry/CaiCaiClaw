@@ -58,6 +58,7 @@ export class AgentRuntime {
     private readonly history: RawHistoryStore;
     // Runtime lane state is distinct from history.projection.activeTurns, which maps turn IDs to input IDs.
     private readonly activeTurns = new Map<Lane, TurnContext>();
+    private readonly deferredFastTurns = new Set<string>();
     private readonly systemPromptPath: string;
     private readonly memoryDir: string;
     private readonly allowMissingMemoryFiles: boolean;
@@ -142,6 +143,9 @@ export class AgentRuntime {
                     schema: z.object({ reason: z.string().min(1) }),
                     func: async ({ reason }) => `deferred to deep lane: ${reason}`,
                 }),
+            },
+            onDeferToDeep: async (context) => {
+                this.deferredFastTurns.add(context.turnId);
             },
         });
     }
@@ -344,6 +348,9 @@ export class AgentRuntime {
             outputCommitted = true;
 
             await this.emitOutput({ type: "done", turnId, lane: turnContext.lane });
+            if (lane === "fast" && this.deferredFastTurns.delete(turnId)) {
+                for (const event of events) await this.enqueueDeferred(event);
+            }
         } catch (error) {
             if (outputCommitted) throw error;
 
@@ -362,6 +369,21 @@ export class AgentRuntime {
                 this.activeTurns.delete(turnContext.lane);
             }
         }
+    }
+
+    private async enqueueDeferred(event: RuntimeInput): Promise<void> {
+        const inputId = this.createId("input");
+        const normalizedEvent: RuntimeInput = { ...event, inputId, laneHint: "deep" };
+        const message = this.createHumanMessage(normalizedEvent);
+        await this.history.append({
+            type: "input.accepted",
+            createdAt: normalizedEvent.receivedAt,
+            inputId,
+            event: toChannelEvent(normalizedEvent),
+            requestId: normalizedEvent.requestId,
+            message: serializeHistoryMessage(message),
+        });
+        this.queue.enqueue(normalizedEvent);
     }
 
     private async handleLaneEvents(events: RuntimeInput[], lane: Lane): Promise<void> {
