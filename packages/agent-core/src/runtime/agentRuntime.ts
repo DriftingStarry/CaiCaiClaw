@@ -1,4 +1,4 @@
-import { BaseMessage, HumanMessage, SystemMessage, ToolMessage } from "@langchain/core/messages";
+import { AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage } from "@langchain/core/messages";
 import { randomUUID } from "node:crypto";
 import { renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -23,7 +23,9 @@ import {
 } from "./types";
 import { DEFAULT_MEMORY_BUDGETS, readMemorySnapshot, MemorySnapshot } from "./memory";
 import { createHistoryQueryTool, createHistoryReadTool } from "./historyTool";
-import { AdmissionResult, IntakeController, loadIntakePolicy } from "./intake";
+import { extractTextContent } from "./messageContent";
+import { AdmissionResult, IntakeController, loadIntakePolicy, type IntakePolicy } from "./intake";
+import { ReplyGate } from "./replyGate";
 import { DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
 
@@ -83,6 +85,7 @@ export class AgentRuntime {
     private readonly compactionModelName: string;
     private readonly maintenanceWaiters: MaintenanceRequest[] = [];
     private readonly intake: IntakeController;
+    private readonly replyGate: ReplyGate;
     private readonly runtimeToolsByName: Record<string, DynamicStructuredTool>;
     private readonly staticToolNames: ReadonlySet<string>;
     private readonly deepAgentConfig: AgentConfig;
@@ -122,7 +125,10 @@ export class AgentRuntime {
         if (!this.compactionPromptVersion.trim()) throw new Error("compactionPromptVersion must not be empty");
         if (!this.compactionModelName.trim()) throw new Error("compactionModelName must not be empty");
         this.heartbeatMs = options.heartbeatMs ?? 30_000;
-        this.intake = new IntakeController(options.intakePolicy ?? loadIntakePolicy(options.intakePolicyPath));
+        const intakePolicy: IntakePolicy = options.intakePolicy ?? loadIntakePolicy(options.intakePolicyPath);
+        this.intake = new IntakeController(intakePolicy);
+        // L1 闸门与分流策略同源：reply 块就住在 channel policy 里。
+        this.replyGate = new ReplyGate(intakePolicy);
         this.onOutput = options.onOutput;
         this.history = new RawHistoryStore({
             path: options.rawHistoryPath,
@@ -488,6 +494,10 @@ export class AgentRuntime {
                 messages: serializeHistoryMessages(completedState.messages.slice(baselineMessageCount)),
             });
             outputCommitted = true;
+
+            // L1 闸门作用在「一次对外投递」而不是单个流式 delta 上：本轮对来源渠道的
+            // 完整回复文本合起来判一次，否则限频会把一条回复的多个 delta 记成多次投递。
+            await this.applyReplyGate(turnContext, completedState.messages.slice(baselineMessageCount));
 
             await this.emitOutput({ type: "done", turnId, lane: turnContext.lane });
             if (lane === "fast" && this.deferredFastTurns.delete(turnId)) {
@@ -877,6 +887,47 @@ export class AgentRuntime {
             }
         }
         return {};
+    }
+
+    /**
+     * 对本轮流向来源渠道的回复执行 L1 闸门。
+     *
+     * 只作用于带 target 的 turn（即回复外部渠道的输出路由），本地 observer 输出不受限。
+     * 超长按 maxChars 裁剪后记为 delivered 并带 truncatedFrom；超频则拒绝该次投递并落
+     * outbound.failed —— 不静默丢弃，事后可从日志看出被闸门挡住。
+     */
+    private async applyReplyGate(turnContext: TurnContext, producedMessages: BaseMessage[]): Promise<void> {
+        const target = turnContext.target;
+        if (!target) return;
+
+        const text = producedMessages
+            .filter((message) => AIMessage.isInstance(message))
+            .map((message) => extractTextContent(message.content))
+            .filter((chunk) => chunk.length > 0)
+            .join("");
+        if (!text) return;
+
+        const policy = this.replyGate.replyPolicyFor(target.channel);
+        if (policy.maxChars === 0 && policy.rateLimitPerMin === 0) return;
+
+        const args = {
+            channel: target.channel,
+            conversationId: target.conversationId,
+            ...(target.replyTo ? { replyTo: target.replyTo } : {}),
+            turnId: turnContext.turnId,
+            lane: turnContext.lane,
+            chars: text.length,
+        };
+        const decision = this.replyGate.evaluate(target.channel, text);
+        if (!decision.allowed) {
+            await this.recordOutboundFailed("reply.output_route", args, `L1 gate: ${decision.detail}`);
+            return;
+        }
+
+        await this.recordOutboundDelivered("reply.output_route", args, {
+            chars: decision.text.length,
+            ...(decision.truncatedFrom === undefined ? {} : { truncatedFrom: decision.truncatedFrom }),
+        });
     }
 
     private async recordOutboundDelivered(

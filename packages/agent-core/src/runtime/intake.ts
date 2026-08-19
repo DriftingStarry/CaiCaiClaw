@@ -20,9 +20,20 @@ const intakeConfigSchema = z.object({
     alwaysKeep: z.array(z.string().min(1)).default([]),
 });
 
+/**
+ * L1 闸门配置（README 分流策略里的 reply 块）。maxChars 为 0 表示不限长，
+ * rateLimitPerMin 为 0 表示不限频——两者都省略时该 channel 的回复侧没有闸门。
+ */
+const replyConfigSchema = z.object({
+    maxChars: z.number().int().nonnegative().default(0),
+    rateLimitPerMin: z.number().int().nonnegative().default(0),
+});
+const defaultReplyConfig = { maxChars: 0, rateLimitPerMin: 0 };
+
 const channelPolicySchema = z.object({
     lane: z.record(z.string(), z.enum(["fast", "deep"])).default({}),
     intake: intakeConfigSchema.default(defaultIntakeConfig),
+    reply: replyConfigSchema.default(defaultReplyConfig),
 });
 
 /**
@@ -37,10 +48,12 @@ export const intakePolicySchema = z.object({
         .object({
             lane: z.enum(["fast", "deep"]).default("deep"),
             intake: intakeConfigSchema.default(defaultIntakeConfig),
+            reply: replyConfigSchema.default(defaultReplyConfig),
         })
-        .default({ lane: "deep", intake: defaultIntakeConfig }),
+        .default({ lane: "deep", intake: defaultIntakeConfig, reply: defaultReplyConfig }),
 });
 export type IntakePolicy = z.infer<typeof intakePolicySchema>;
+export type ReplyPolicy = z.infer<typeof replyConfigSchema>;
 
 export type AdmissionResult =
     | { disposition: "accepted"; lane: Lane; batchId?: string }

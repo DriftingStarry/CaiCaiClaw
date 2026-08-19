@@ -17,5 +17,7 @@ export type {
     TurnContext,
 } from "./types";
 export { IntakeController, dropReasonSchema, intakePolicySchema, loadIntakePolicy } from "./intake";
-export type { AdmissionResult, DropReason, IntakePolicy } from "./intake";
+export type { AdmissionResult, DropReason, IntakePolicy, ReplyPolicy } from "./intake";
+export { ReplyGate } from "./replyGate";
+export type { ReplyGateDecision } from "./replyGate";
 export type { MemorySnapshot, MemorySnapshotOptions } from "./memory";
