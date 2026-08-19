@@ -2,7 +2,7 @@ import { BaseMessage, HumanMessage, SystemMessage, ToolMessage } from "@langchai
 import { randomUUID } from "node:crypto";
 import { renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { errorMessage } from "@caicaiclaw/utils";
+import { errorMessage, toJsonObject, toJsonValue } from "@caicaiclaw/utils";
 import type { ChannelEvent } from "@caicaiclaw/utils/history";
 import { AgentConfig, getAgent, ToolResultEvent, ToolStartEvent } from "../agent";
 import { runAgentStream } from "./agentStream";
@@ -18,9 +18,9 @@ import {
     RuntimeInput,
     RuntimeOutputEmitter,
     RuntimeOutputEvent,
+    ToolPermissionLevel,
     TurnContext,
 } from "./types";
-import { toJsonObject } from "@caicaiclaw/utils";
 import { DEFAULT_MEMORY_BUDGETS, readMemorySnapshot, MemorySnapshot } from "./memory";
 import { createHistoryQueryTool, createHistoryReadTool } from "./historyTool";
 import { AdmissionResult, IntakeController, loadIntakePolicy } from "./intake";
@@ -78,6 +78,7 @@ export class AgentRuntime {
     private readonly compactionSummaryBudget: number;
     private readonly digestSummaryBudget: number;
     private readonly approvalTtlMs: number;
+    private readonly toolPermissions: Readonly<Record<string, ToolPermissionLevel>>;
     private readonly toolResultProjectionThreshold: number;
     private readonly compactionModelName: string;
     private readonly maintenanceWaiters: MaintenanceRequest[] = [];
@@ -102,6 +103,7 @@ export class AgentRuntime {
         this.compactionSummaryBudget = options.compactionSummaryBudget ?? DEFAULT_COMPACTION_SUMMARY_BUDGET;
         this.digestSummaryBudget = options.digestSummaryBudget ?? DEFAULT_DIGEST_SUMMARY_BUDGET;
         this.approvalTtlMs = options.approvalTtlMs ?? DEFAULT_APPROVAL_TTL_MS;
+        this.toolPermissions = options.toolPermissions ?? {};
         this.toolResultProjectionThreshold =
             options.toolResultProjectionThreshold ?? DEFAULT_TOOL_RESULT_PROJECTION_THRESHOLD;
         if (!Number.isInteger(this.compactionSummaryBudget) || this.compactionSummaryBudget < 1) {
@@ -176,34 +178,47 @@ export class AgentRuntime {
     }
 
     public async expireApprovals(now = Date.now()): Promise<string[]> {
-        return await this.history.withExclusive(async (append) => {
-            const expired = [...this.history.projection.pendingApprovals.values()]
-                .filter((approval) => approval.expiresAt <= now)
-                .map((approval) => approval.approvalId);
-            for (const approvalId of expired) {
-                await append({ type: "approval.expired", createdAt: now, approvalId });
-            }
-            return expired;
+        this.assertAvailable();
+        return await this.runExclusive(async () => {
+            return await this.history.withExclusive(async (append) => {
+                const expired = [...this.history.projection.pendingApprovals.values()]
+                    .filter((approval) => approval.expiresAt <= now)
+                    .map((approval) => approval.approvalId);
+                for (const approvalId of expired) {
+                    await append({ type: "approval.expired", createdAt: now, approvalId });
+                }
+                return expired;
+            });
         });
     }
 
     public async decideApproval(approvalId: string, decision: "approve" | "deny", decidedBy: string): Promise<unknown> {
         if (!decidedBy.trim()) throw new Error("decidedBy must not be empty");
-        return await this.history.withExclusive(async (append) => {
-            const approval = this.history.projection.pendingApprovals.get(approvalId);
-            if (!approval) throw new Error(`approval ${approvalId} is not pending`);
-            if (approval.expiresAt <= Date.now()) {
-                await append({ type: "approval.expired", createdAt: Date.now(), approvalId });
-                throw new Error(`approval ${approvalId} has expired`);
-            }
-            await append({ type: "approval.decided", createdAt: Date.now(), approvalId, decision, decidedBy });
+        if (decision !== "approve" && decision !== "deny") throw new Error("approval decision must be approve or deny");
+        this.assertAvailable();
+        return await this.runExclusive(async () => {
+            const approval = await this.history.withExclusive(async (append) => {
+                const pending = this.history.projection.pendingApprovals.get(approvalId);
+                if (!pending) throw new Error(`approval ${approvalId} is not pending`);
+                const createdAt = Date.now();
+                if (pending.expiresAt <= createdAt) {
+                    await append({ type: "approval.expired", createdAt, approvalId });
+                    throw new Error(`approval ${approvalId} has expired`);
+                }
+                await append({ type: "approval.decided", createdAt, approvalId, decision, decidedBy });
+                return pending;
+            });
             if (decision === "deny") return { status: "denied", approvalId };
             const tool = this.runtimeToolsByName[approval.toolName];
-            if (!tool) throw new Error(`approved tool ${approval.toolName} is no longer available`);
             try {
-                return { status: "executed", approvalId, result: await tool.invoke(approval.args) };
+                if (!tool) throw new Error(`approved tool ${approval.toolName} is no longer available`);
+                const result = toJsonValue(await tool.invoke(approval.args));
+                await this.recordOutboundDelivered(approval.toolName, approval.args, result, approvalId);
+                return { status: "executed", approvalId, result };
             } catch (error) {
-                throw new Error(`approved tool ${approval.toolName} failed: ${errorMessage(error)}`, { cause: error });
+                const message = `approved tool ${approval.toolName} failed: ${errorMessage(error)}`;
+                await this.recordOutboundFailed(approval.toolName, approval.args, message, approvalId);
+                return { status: "failed", approvalId, message };
             }
         });
     }
@@ -215,9 +230,7 @@ export class AgentRuntime {
         args: import("@caicaiclaw/utils").JsonObject;
     }) {
         if (event.lane === "fast") return { disposition: "allow" as const };
-        if (event.name === "history_read" || event.name === "history_query") {
-            return { disposition: "allow" as const };
-        }
+        if (this.permissionForTool(event.name) !== "L3") return { disposition: "allow" as const };
         const approvalId = this.createId("approval");
         const expiresAt = Date.now() + this.approvalTtlMs;
         await this.history.append({
@@ -714,6 +727,7 @@ export class AgentRuntime {
         if (this.digestInFlight) return;
         this.digestInFlight = true;
         try {
+            await this.expireApprovals();
             while (true) {
                 const candidate = await this.history.withExclusive(async () => {
                     for (const [conversationId, projection] of this.history.projection.conversations) {
@@ -830,6 +844,61 @@ export class AgentRuntime {
             status: event.status,
             result: event.result,
             createdAt: event.createdAt,
+        });
+        if (this.permissionForTool(event.name) === "L1" || this.permissionForTool(event.name) === "L2") {
+            const args = this.findToolArgs(event.turnId, event.toolCallId);
+            if (event.status === "success") {
+                await this.recordOutboundDelivered(event.name, args, event.result);
+            } else {
+                await this.recordOutboundFailed(event.name, args, stringifyToolResult(event.result));
+            }
+        }
+    }
+
+    private permissionForTool(name: string): ToolPermissionLevel {
+        if (name === "history_read" || name === "history_query") return "L0";
+        return this.toolPermissions[name] ?? "L3";
+    }
+
+    private findToolArgs(turnId: string, toolCallId: string): Record<string, unknown> {
+        for (let index = this.history.projection.toolEvents.length - 1; index >= 0; index -= 1) {
+            const event = this.history.projection.toolEvents[index];
+            if (event?.type === "started" && event.turnId === turnId && event.toolCallId === toolCallId) {
+                return event.args ? { ...event.args } : {};
+            }
+        }
+        return {};
+    }
+
+    private async recordOutboundDelivered(
+        toolName: string,
+        args: Record<string, unknown>,
+        result: unknown,
+        approvalId?: string,
+    ): Promise<void> {
+        await this.history.append({
+            type: "outbound.delivered",
+            createdAt: Date.now(),
+            toolName,
+            args: toJsonObject(args),
+            result: toJsonValue(result),
+            ...(approvalId ? { approvalId } : {}),
+        });
+    }
+
+    private async recordOutboundFailed(
+        toolName: string,
+        args: Record<string, unknown>,
+        message: string,
+        approvalId?: string,
+    ): Promise<void> {
+        await this.history.append({
+            type: "outbound.failed",
+            createdAt: Date.now(),
+            toolName,
+            args: toJsonObject(args),
+            message: message || "tool execution failed",
+            ...(approvalId ? { approvalId } : {}),
         });
     }
 

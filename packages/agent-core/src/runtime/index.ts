@@ -13,6 +13,7 @@ export type {
     RuntimeOutputEvent,
     CompactOptions,
     ToolResultPage,
+    ToolPermissionLevel,
     TurnContext,
 } from "./types";
 export { IntakeController, dropReasonSchema, intakePolicySchema, loadIntakePolicy } from "./intake";

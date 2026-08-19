@@ -12,6 +12,7 @@ export {
     type RuntimeOutputEvent,
     type CompactOptions,
     type ToolResultPage,
+    type ToolPermissionLevel,
     type TurnContext,
 } from "./runtime/index";
 export { IntakeController, dropReasonSchema, intakePolicySchema, loadIntakePolicy } from "./runtime/index";

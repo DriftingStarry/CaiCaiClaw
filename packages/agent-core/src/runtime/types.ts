@@ -8,6 +8,8 @@ export type { MaybePromise } from "@caicaiclaw/utils";
 
 export type Lane = "fast" | "deep";
 
+export type ToolPermissionLevel = "L0" | "L1" | "L2" | "L3";
+
 export type TurnContext = {
     turnId: string;
     lane: Lane;
@@ -110,6 +112,7 @@ export type AgentRuntimeOptions = {
     compactionSummaryBudget?: number;
     digestSummaryBudget?: number;
     approvalTtlMs?: number;
+    toolPermissions?: Readonly<Record<string, ToolPermissionLevel>>;
     toolResultProjectionThreshold?: number;
     memoryBudgets?: {
         system?: number;

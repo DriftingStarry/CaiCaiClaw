@@ -39,6 +39,16 @@ export type PendingApproval = {
     expiresAt: number;
 };
 
+export type RawHistoryOutboundEvent = {
+    type: "delivered" | "failed";
+    toolName: string;
+    args: Record<string, unknown>;
+    createdAt: number;
+    approvalId?: string;
+    result?: unknown;
+    message?: string;
+};
+
 export type RawHistoryConversationProjection = {
     recent: BaseMessage[];
     lastActivityAt: number;
@@ -65,6 +75,7 @@ export type RawHistoryState = {
     contextCheckpoint?: RawHistoryCheckpoint;
     knownCompactionIds: Set<string>;
     pendingApprovals: Map<string, PendingApproval>;
+    outboundEvents: RawHistoryOutboundEvent[];
     conversations: Map<string, RawHistoryConversationProjection>;
     lastSequence: number;
 };
@@ -85,6 +96,7 @@ export function createEmptyRawHistoryState(): RawHistoryState {
         toolEvents: [],
         knownCompactionIds: new Set(),
         pendingApprovals: new Map(),
+        outboundEvents: [],
         conversations: new Map(),
         lastSequence: 0,
     };
@@ -119,6 +131,26 @@ export function applyRawHistoryEvent(state: RawHistoryState, event: RawHistoryEv
             if (!state.pendingApprovals.has(event.approvalId))
                 throw new Error(`approval ${event.approvalId} is not pending`);
             state.pendingApprovals.delete(event.approvalId);
+            break;
+        case "outbound.delivered":
+            state.outboundEvents.push({
+                type: "delivered",
+                toolName: event.toolName,
+                args: event.args,
+                result: event.result,
+                createdAt: event.createdAt,
+                approvalId: event.approvalId,
+            });
+            break;
+        case "outbound.failed":
+            state.outboundEvents.push({
+                type: "failed",
+                toolName: event.toolName,
+                args: event.args,
+                message: event.message,
+                createdAt: event.createdAt,
+                approvalId: event.approvalId,
+            });
             break;
         case "input.accepted": {
             if (state.knownInputIds.has(event.inputId)) {
