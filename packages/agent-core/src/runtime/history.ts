@@ -36,6 +36,8 @@ export type RawHistoryConversationProjection = {
     lastActivityAt: number;
     // Admission-time intake will populate this in feat-011; replay keeps it at zero for now.
     droppedCount: number;
+    digest?: string;
+    digestCoveredSequence?: number;
 };
 
 export type RawHistoryState = {
@@ -122,6 +124,20 @@ export function applyRawHistoryEvent(state: RawHistoryState, event: RawHistoryEv
             projection.droppedCount += 1;
             projection.lastActivityAt = event.createdAt;
             state.conversations.set(event.event.conversationId, projection);
+            break;
+        }
+        case "conversation.digested": {
+            const projection =
+                state.conversations.get(event.conversationId) ??
+                ({
+                    recent: [],
+                    lastActivityAt: event.createdAt,
+                    droppedCount: 0,
+                } satisfies RawHistoryConversationProjection);
+            projection.digest = event.digest;
+            projection.digestCoveredSequence = event.coveredSequence;
+            projection.lastActivityAt = event.createdAt;
+            state.conversations.set(event.conversationId, projection);
             break;
         }
         case "turn.started": {

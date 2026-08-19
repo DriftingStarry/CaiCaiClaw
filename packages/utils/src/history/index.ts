@@ -57,6 +57,7 @@ const compactedTurnSchema = z.object({
 export const HISTORY_EVENT_TYPES = [
     "input.accepted",
     "input.dropped",
+    "conversation.digested",
     "turn.started",
     "tool.started",
     "tool.completed",
@@ -68,6 +69,18 @@ export const HISTORY_EVENT_TYPES = [
 export type HistoryEventType = (typeof HISTORY_EVENT_TYPES)[number];
 
 export const rawHistoryEventSchema = z.discriminatedUnion("type", [
+    z.object({
+        version: z.literal(HISTORY_VERSION),
+        sequence: z.number().int().positive(),
+        eventId: z.string().min(1),
+        type: z.literal("conversation.digested"),
+        createdAt: z.number().int().nonnegative(),
+        digestId: z.string().min(1),
+        conversationId: z.string().min(1),
+        coveredSequence: z.number().int().nonnegative(),
+        digest: z.string().min(1),
+        model: z.string().min(1),
+    }),
     z.object({
         version: z.literal(HISTORY_VERSION),
         sequence: z.number().int().positive(),
