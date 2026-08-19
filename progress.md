@@ -3,7 +3,15 @@
 ## Current State
 
 **Last Updated:** 2026-08-19
-**Active Feature:** feat-012（M3-4 历史查询工具与社交近况）已完成。feat-011 已完成：intake 与双车道、真实 WS disposition/fast streaming、slow deep 下 200 fast、deep-idle maintenance、并发 checkpoint 的排它 transaction 及重启回放均有证据；提交链至 `c26e880`，状态证据 `cae833e`。本次仅实现只读 history_query、heartbeat digest 与深车道社交近况，不提前接入 MCP/审批。
+**Active Feature:** feat-013（M3-5 MCP host、动态工具与 L3 审批）进行中。feat-012 已完成：受限 history_query、conversation digest 契约和 background heartbeat 摘要均已验证并落为 `2659a78` / `cd1e094` / `21eee0f`；状态证据 `cb3b099`。用户已授权将 `@modelcontextprotocol/sdk` 仅加入 apps/server，agent-core 保持不 import MCP 或渠道 SDK。
+
+### feat-013 提交计划
+
+1. **MCP SDK 依赖**：将 `@modelcontextprotocol/sdk` 仅加入 `apps/server`，更新 lockfile，不改 agent-core 依赖方向。标题：`chore(server): 添加 MCP client SDK`。验证：`./init.sh`。
+2. **MCP host 与动态工具注册**：server host 管理 adapter 的 MCP client、连接/断开、工具发现和将调用包装成 runtime 可加载工具；断开后明确解绑，图重建保留 runtime state。标题：`feat(server): 接入 MCP adapter 工具 host`。验证：`./init.sh` 与假 MCP adapter connect/disconnect probe。
+3. **权限与审批状态机**：共享 history 事件契约、runtime L0-L3 gate、pending approval 回放/TTL、受信 admin decision 与 server 路由。标题：`feat(agent-core): 实现 L3 审批状态机`。验证：`./init.sh` 与假 adapter 的权限/approve/replay/TTL probe。
+
+SDK 影响说明：MCP client host 需要其 transport、capability negotiation 与 tools/list/call 协议实现；替代方案是自行维护 JSON-RPC/MCP 子集，开发成本高、兼容风险也更大，故采用官方 SDK。依赖只位于 server，不进入共享 runtime。
 
 ### feat-012 提交计划
 

@@ -231,7 +231,7 @@
             "dependencies": [
                 "feat-012"
             ],
-            "status": "not-started",
+            "status": "in-progress",
             "doneCriteria": [
                 "MCP host 位于 apps/server，agent-core 不 import MCP SDK 或任何渠道 SDK",
                 "adapter 连接/断开时重建图并保留 state；断开后其工具解绑或调用明确失败，不会让模型调用不存在的工具",

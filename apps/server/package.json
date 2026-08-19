@@ -10,6 +10,7 @@
         "@caicaiclaw/agent-core": "workspace:*",
         "@caicaiclaw/protocol": "workspace:*",
         "@caicaiclaw/utils": "workspace:*",
+        "@modelcontextprotocol/sdk": "^1.30.0",
         "ws": "^8.21.0"
     },
     "devDependencies": {
