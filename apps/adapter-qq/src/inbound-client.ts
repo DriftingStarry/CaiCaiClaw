@@ -28,8 +28,8 @@ type QqOutboundReply = {
 
 export type QqInboundClientOptions = {
     serverUrl: string;
+    serverToken: string;
     channel: string;
-    token?: string;
     onDisposition?: (info: QqInboundDispositionInfo) => void;
     onOutboundReply?: (reply: QqOutboundReply) => void;
 };
@@ -43,6 +43,7 @@ type PendingInput = {
 
 export class QqInboundClient {
     private readonly serverUrl: string;
+    private readonly serverToken: string;
     private readonly channel: string;
     private readonly onDisposition?: (info: QqInboundDispositionInfo) => void;
     private readonly onOutboundReply?: (reply: QqOutboundReply) => void;
@@ -57,10 +58,8 @@ export class QqInboundClient {
     private closed = false;
 
     constructor(options: QqInboundClientOptions) {
-        const serverUrl = new URL(options.serverUrl);
-        if (options.token !== undefined) serverUrl.searchParams.set("token", options.token);
-
-        this.serverUrl = serverUrl.toString();
+        this.serverUrl = options.serverUrl;
+        this.serverToken = options.serverToken;
         this.channel = options.channel;
         this.onDisposition = options.onDisposition;
         this.onOutboundReply = options.onOutboundReply;
@@ -108,7 +107,7 @@ export class QqInboundClient {
         try {
             socket.close(1_000, "Client closed");
         } catch (error) {
-            console.error("[QqInboundClient] Failed to close WebSocket:", errorName(error));
+            console.error("[QqInboundClient] Failed to close WebSocket:", error);
             socket.terminate();
         }
     }
@@ -125,14 +124,17 @@ export class QqInboundClient {
         if (!this.started || this.closed || this.socket) return;
 
         try {
-            const socket = new WebSocket(this.serverUrl);
+            const tokenSeparator = this.serverUrl.includes("?") ? "&" : "?";
+            const socket = new WebSocket(
+                `${this.serverUrl}${tokenSeparator}token=${encodeURIComponent(this.serverToken)}`,
+            );
             this.socket = socket;
             socket.on("open", () => this.handleOpen(socket));
             socket.on("message", (data: RawData) => this.handleMessage(socket, data));
             socket.on("error", (error: Error) => this.handleError(socket, error));
             socket.on("close", () => this.handleClose(socket));
         } catch (error) {
-            console.error("[QqInboundClient] Failed to establish connection:", errorName(error));
+            console.error("[QqInboundClient] Failed to establish connection:", error);
             this.scheduleReconnect();
         }
     }
@@ -158,7 +160,7 @@ export class QqInboundClient {
         try {
             message = parseServerMessage(data.toString());
         } catch (error) {
-            console.error("[QqInboundClient] Invalid server message:", errorName(error));
+            console.error("[QqInboundClient] Invalid server message:", error);
             return;
         }
 
@@ -172,7 +174,7 @@ export class QqInboundClient {
         try {
             this.onOutboundReply?.(message);
         } catch (error) {
-            console.error("[QqInboundClient] onOutboundReply callback failed:", errorName(error));
+            console.error("[QqInboundClient] onOutboundReply callback failed:", error);
         }
     }
 
@@ -191,7 +193,7 @@ export class QqInboundClient {
         try {
             this.onDisposition?.(dispositionInfo);
         } catch (error) {
-            console.error("[QqInboundClient] onDisposition callback failed:", errorName(error));
+            console.error("[QqInboundClient] onDisposition callback failed:", error);
         }
 
         const pending = this.pending.get(message.requestId);
@@ -257,7 +259,7 @@ export class QqInboundClient {
             payload = serializeClientMessage({ type: "input", event: pending.event, requestId });
         } catch (error) {
             this.removePending(requestId);
-            console.error("[QqInboundClient] Failed to serialize input:", errorName(error));
+            console.error("[QqInboundClient] Failed to serialize input:", error);
             return false;
         }
 
@@ -275,14 +277,14 @@ export class QqInboundClient {
     private handleError(socket: WebSocket, error: Error): void {
         if (this.socket !== socket || this.closed) return;
 
-        console.error("[QqInboundClient] WebSocket error:", errorName(error));
+        console.error("[QqInboundClient] WebSocket error:", error);
         this.handleSocketFailure(socket, error);
     }
 
     private handleSocketFailure(socket: WebSocket, error: unknown): void {
         if (this.socket !== socket || this.closed) return;
 
-        console.error("[QqInboundClient] Connection failure:", errorName(error));
+        console.error("[QqInboundClient] Connection failure:", error);
         this.requeuePending();
         this.scheduleReconnect();
     }
@@ -310,7 +312,7 @@ export class QqInboundClient {
                 try {
                     staleSocket.close();
                 } catch (error) {
-                    console.error("[QqInboundClient] Failed to close stale WebSocket:", errorName(error));
+                    console.error("[QqInboundClient] Failed to close stale WebSocket:", error);
                 }
             }
             this.connect();
@@ -372,8 +374,4 @@ export class QqInboundClient {
         clearTimeout(this.reconnectTimer);
         this.reconnectTimer = null;
     }
-}
-
-function errorName(error: unknown): string {
-    return error instanceof Error ? error.name : "UnknownError";
 }

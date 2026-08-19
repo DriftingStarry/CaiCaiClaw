@@ -124,7 +124,7 @@ export class QqGateway {
             this.socket = socket;
             this.bindSocketEvents(socket);
         } catch (error) {
-            console.error("[QqGateway] Failed to establish connection:", errorName(error));
+            console.error("[QqGateway] Failed to establish connection:", error);
             this.scheduleReconnect();
         } finally {
             this.connecting = false;
@@ -139,7 +139,8 @@ export class QqGateway {
         });
 
         if (!response.ok) {
-            throw new Error(`Gateway request failed with HTTP ${response.status}`);
+            const responseBody = (await response.text()).slice(0, 500);
+            throw new Error(`Gateway request failed with HTTP ${response.status}: ${responseBody}`);
         }
 
         const data: unknown = await response.json();
@@ -154,7 +155,7 @@ export class QqGateway {
         socket.on("open", () => this.handleOpen(socket));
         socket.on("message", (data: RawData) => this.handleMessage(socket, data));
         socket.on("error", (error: Error) => {
-            console.error("[QqGateway] WebSocket error:", errorName(error));
+            console.error("[QqGateway] WebSocket error:", error);
         });
         socket.on("close", (code: number, reason: Buffer) => this.handleClose(socket, code, reason));
     }

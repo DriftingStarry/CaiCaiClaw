@@ -20,7 +20,7 @@ const QQ_BOT_APP_ID = process.env.QQ_BOT_APP_ID;
 const QQ_BOT_CLIENT_SECRET = process.env.QQ_BOT_CLIENT_SECRET;
 const QQ_API_BASE_URL = process.env.QQ_API_BASE_URL || "https://api.bot.qq.com";
 const QQ_ADAPTER_SERVER_WS_URL = process.env.QQ_ADAPTER_SERVER_WS_URL || "ws://127.0.0.1:8787";
-const CAICAI_WS_TOKEN = process.env.CAICAI_WS_TOKEN;
+const QQ_ADAPTER_SERVER_TOKEN = process.env.QQ_ADAPTER_SERVER_TOKEN || "";
 
 // GROUP_AND_C2C_EVENT 订阅群聊 @ 与 C2C 私聊事件，值为 QQ 平台定义的第 25 位 intent。
 const GROUP_AND_C2C_EVENT = 1 << 25;
@@ -28,6 +28,9 @@ const GROUP_AND_C2C_EVENT = 1 << 25;
 if (!QQ_BOT_APP_ID || !QQ_BOT_CLIENT_SECRET) {
     console.error("[adapter-qq] Missing required env: QQ_BOT_APP_ID or QQ_BOT_CLIENT_SECRET");
     process.exit(1);
+}
+if (!QQ_ADAPTER_SERVER_TOKEN) {
+    throw new Error("QQ_ADAPTER_SERVER_TOKEN is required");
 }
 
 // StdioServerTransport 使用 stdout 传输 MCP 协议帧，任何写入 stdout 的日志都会破坏协议帧。
@@ -165,8 +168,8 @@ async function startAdapter(): Promise<void> {
 
     const inboundClient = new QqInboundClient({
         serverUrl: QQ_ADAPTER_SERVER_WS_URL,
+        serverToken: QQ_ADAPTER_SERVER_TOKEN,
         channel: "qq",
-        ...(CAICAI_WS_TOKEN === undefined ? {} : { token: CAICAI_WS_TOKEN }),
         onDisposition: (info) => {
             const reason = info.reason === undefined ? "" : ` reason=${errorText(info.reason)}`;
             console.error(`[adapter-qq] Inbound disposition ${info.disposition}${reason}`);
