@@ -133,14 +133,22 @@ function isMessageEvent(event: unknown): event is { data: unknown } {
     return typeof event === "object" && event !== null && "data" in event;
 }
 
-export function buildWsUrl(baseUrl: string, clientId?: string, token?: string): string {
+// 使用联合类型承载可选 token，避免继续增加容易错位的位置参数；adminToken 仅在 admin 角色连接时需要。
+export function buildWsUrl(
+    baseUrl: string,
+    clientId?: string,
+    token?: string | { token?: string; adminToken?: string },
+): string {
     const url = new URL(baseUrl);
 
     if (clientId) {
         url.searchParams.set("clientId", clientId);
     }
-    if (token) {
-        url.searchParams.set("token", token);
+    if (typeof token === "string") {
+        if (token) url.searchParams.set("token", token);
+    } else if (token) {
+        if (token.token) url.searchParams.set("token", token.token);
+        if (token.adminToken) url.searchParams.set("adminToken", token.adminToken);
     }
 
     return url.toString();

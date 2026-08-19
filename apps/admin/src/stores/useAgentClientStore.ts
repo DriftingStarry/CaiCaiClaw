@@ -33,11 +33,14 @@ export const useAgentClientStore = create<AgentClientStore>((set) => ({
         if (wsClient || connectionRequest) return connectionRequest ?? Promise.resolve();
         const generation = connectionGeneration;
         set((state) => reduceClientState(state, { type: "connection_status", status: "connecting" }));
-        const attempt = readAgentWsToken()
-            .then((token) => {
+        const attempt = readAgentConnectionTokens()
+            .then(({ token, adminToken }) => {
                 if (!shouldConnect || generation !== connectionGeneration) return;
                 wsClient = new CaiCaiWsClient(
-                    buildWsUrl(process.env.NEXT_PUBLIC_CAICAI_WS_URL ?? DEFAULT_WS_URL, getOrCreateClientId(), token),
+                    buildWsUrl(process.env.NEXT_PUBLIC_CAICAI_WS_URL ?? DEFAULT_WS_URL, getOrCreateClientId(), {
+                        token,
+                        adminToken,
+                    }),
                     {
                         onOpen: () =>
                             set((state) =>
@@ -69,6 +72,7 @@ export const useAgentClientStore = create<AgentClientStore>((set) => ({
                         },
                     },
                     browserSocketFactory,
+                    { type: "role", role: "admin" },
                 );
                 wsClient.connect();
             })
@@ -117,7 +121,7 @@ export const useAgentClientStore = create<AgentClientStore>((set) => ({
     },
 }));
 
-async function readAgentWsToken(): Promise<string> {
+async function readAgentConnectionTokens(): Promise<{ token: string; adminToken: string }> {
     const response = await fetch("/api/agent-auth/connection", { cache: "no-store" });
     const body: unknown = await response.json().catch(() => undefined);
     if (
@@ -125,9 +129,11 @@ async function readAgentWsToken(): Promise<string> {
         typeof body !== "object" ||
         body === null ||
         !("token" in body) ||
-        typeof body.token !== "string"
+        typeof body.token !== "string" ||
+        !("adminToken" in body) ||
+        typeof body.adminToken !== "string"
     ) {
         throw new Error("无法读取 agent WebSocket 鉴权设置");
     }
-    return body.token;
+    return { token: body.token, adminToken: body.adminToken };
 }
