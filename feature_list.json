@@ -205,7 +205,7 @@
                 "CAICAI_FAST_MODEL 与 CAICAI_BACKGROUND_MODEL 已接入并同步 .env.example，未配置时回落到主模型且启动日志明确告知",
                 "./init.sh 通过并记录上述行为验收"
             ],
-            "evidence": "已完成代码单元：dc079f7 intake policy/门口裁决与 input.dropped；0c93b91 per-conversation 独立 fast/deep 队列、fast 仅 defer_to_deep 与 fast 上下文；36ea1b2 server 接入 channel policy、fast/background model 配置；95d9711 保留 adapter self_echo 并按 reason 更新 conversation droppedCount；7457530 增加 fast/background fallback 启动日志；1f5886a fast defer 通过 turn context 重新落 accepted 并进入 deep queue；eaa01b5 将 deep/fast 调度拆为独立 lane worker 并按 lane 隔离 executionState。所有代码提交通过 ./init.sh；fake-model lane/defer probes 通过；slow deep + 200 个独立 fast conversation 压测通过（deep 约 327ms 完成前 200 fast turn 全部完成）。剩余真实 WS disposition/streaming 与维护 deep-idle 边界验收。"
+            "evidence": "已完成代码单元：dc079f7 intake policy/门口裁决与 input.dropped；0c93b91 per-conversation 独立 fast/deep 队列、fast 仅 defer_to_deep 与 fast 上下文；36ea1b2 server 接入 channel policy、fast/background model 配置；95d9711 保留 adapter self_echo 并按 reason 更新 conversation droppedCount；7457530 增加 fast/background fallback 启动日志；1f5886a fast defer 通过 turn context 重新落 accepted 并进入 deep queue；eaa01b5 将 deep/fast 调度拆为独立 lane worker 并按 lane 隔离 executionState；70c50ae 修复 merge 优先级并支持 server fake model 注入。所有代码提交通过 ./init.sh；fake-model lane/defer probes、slow deep + 200 fast 压测、真实 WS accepted/merged/dropped ack + input_dropped + fast streaming 均通过。maintenance 有 checkpoint 的真实并发 probe 尚未完成，feat 仍保持 in-progress。"
         },
         {
             "id": "feat-012",
