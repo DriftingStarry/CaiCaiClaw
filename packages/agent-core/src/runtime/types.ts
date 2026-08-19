@@ -64,6 +64,15 @@ export type RuntimeOutputEvent =
           readonly target?: OutputTarget;
       }
     | {
+          readonly type: "outbound_reply";
+          readonly turnId: string;
+          readonly lane: Lane;
+          readonly target: OutputTarget;
+          readonly text: string;
+          readonly truncatedFrom?: number;
+          readonly createdAt: number;
+      }
+    | {
           readonly type: "reasoning_delta";
           readonly turnId: string;
           readonly lane: Lane;

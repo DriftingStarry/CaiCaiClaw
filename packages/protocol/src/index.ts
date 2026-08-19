@@ -148,6 +148,18 @@ export const serverAssistantMessageDeltaSchema = z.object({
     target: outputTargetSchema.optional(),
 });
 
+export const serverOutboundReplyMessageSchema = z
+    .object({
+        type: z.literal("outbound_reply"),
+        turnId: z.string().min(1),
+        lane: laneSchema,
+        target: outputTargetSchema,
+        text: z.string().min(1),
+        truncatedFrom: z.number().int().positive().optional(),
+        createdAt: z.number(),
+    })
+    .strict();
+
 export const serverReasoningDeltaSchema = z.object({
     type: z.literal("reasoning_delta"),
     turnId: z.string(),
@@ -221,6 +233,7 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
     serverInputAcceptedMessageSchema,
     serverAgentTurnStartMessageSchema,
     serverAssistantMessageDeltaSchema,
+    serverOutboundReplyMessageSchema,
     serverReasoningDeltaSchema,
     serverToolCallStartMessageSchema,
     serverToolCallResultMessageSchema,

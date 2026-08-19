@@ -944,9 +944,6 @@ export class AgentRuntime {
             .join("");
         if (!text) return;
 
-        const policy = this.replyGate.replyPolicyFor(target.channel);
-        if (policy.maxChars === 0 && policy.rateLimitPerMin === 0) return;
-
         const args = {
             channel: target.channel,
             conversationId: target.conversationId,
@@ -955,15 +952,33 @@ export class AgentRuntime {
             lane: turnContext.lane,
             chars: text.length,
         };
-        const decision = this.replyGate.evaluate(target.channel, text);
-        if (!decision.allowed) {
-            await this.recordOutboundFailed("reply.output_route", args, `L1 gate: ${decision.detail}`);
-            return;
+        let deliveryText = text;
+        let truncatedFrom: number | undefined;
+        const policy = this.replyGate.replyPolicyFor(target.channel);
+        if (policy.maxChars > 0 || policy.rateLimitPerMin > 0) {
+            const decision = this.replyGate.evaluate(target.channel, text);
+            if (!decision.allowed) {
+                await this.recordOutboundFailed("reply.output_route", args, `L1 gate: ${decision.detail}`);
+                return;
+            }
+            deliveryText = decision.text;
+            truncatedFrom = decision.truncatedFrom;
         }
 
         await this.recordOutboundDelivered("reply.output_route", args, {
-            chars: decision.text.length,
-            ...(decision.truncatedFrom === undefined ? {} : { truncatedFrom: decision.truncatedFrom }),
+            chars: deliveryText.length,
+            ...(truncatedFrom === undefined ? {} : { truncatedFrom }),
+        });
+
+        // 未配置闸门只表示不裁剪、不限流，不能阻止回复投递；两条放行路径都必须发出成品文本。
+        await this.emitOutput({
+            type: "outbound_reply",
+            turnId: turnContext.turnId,
+            lane: turnContext.lane,
+            target,
+            text: deliveryText,
+            ...(truncatedFrom === undefined ? {} : { truncatedFrom }),
+            createdAt: Date.now(),
         });
     }
 

@@ -38,6 +38,18 @@ export function runtimeOutputToServerMessages(event: RuntimeOutputEvent): Server
                     target: event.target,
                 },
             ];
+        case "outbound_reply":
+            return [
+                {
+                    type: "outbound_reply",
+                    turnId: event.turnId,
+                    lane: event.lane,
+                    target: event.target,
+                    text: event.text,
+                    ...(event.truncatedFrom === undefined ? {} : { truncatedFrom: event.truncatedFrom }),
+                    createdAt: event.createdAt,
+                },
+            ];
         case "reasoning_delta":
             return [
                 {
