@@ -392,6 +392,12 @@ export class AgentRuntime {
         if (digests.length) {
             context.splice(1, 0, new SystemMessage("--- Social recent ---\n" + digests.join("\n")));
         }
+        const approvalUpdates = this.history.projection.approvalUpdates.map(
+            (update) => `${update.toolName} (${update.approvalId}): ${update.status}`,
+        );
+        if (approvalUpdates.length) {
+            context.splice(1, 0, new SystemMessage("--- Approval updates ---\n" + approvalUpdates.join("\n")));
+        }
         return context;
     }
 

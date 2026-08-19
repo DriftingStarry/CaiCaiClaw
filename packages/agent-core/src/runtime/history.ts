@@ -3,6 +3,7 @@ import { RawHistoryEvent, RawHistoryInput } from "./historyEvents";
 import { restoreStoredMessages, serializeHistoryMessages } from "./historyMessages";
 
 const MAX_CONVERSATION_RECENT_MESSAGES = 30;
+const MAX_APPROVAL_UPDATES = 30;
 
 export type RawHistoryTurn = {
     turnId: string;
@@ -49,6 +50,13 @@ export type RawHistoryOutboundEvent = {
     message?: string;
 };
 
+export type ApprovalUpdate = {
+    approvalId: string;
+    toolName: string;
+    status: "approved" | "denied" | "expired";
+    createdAt: number;
+};
+
 export type RawHistoryConversationProjection = {
     recent: BaseMessage[];
     lastActivityAt: number;
@@ -75,6 +83,7 @@ export type RawHistoryState = {
     contextCheckpoint?: RawHistoryCheckpoint;
     knownCompactionIds: Set<string>;
     pendingApprovals: Map<string, PendingApproval>;
+    approvalUpdates: ApprovalUpdate[];
     outboundEvents: RawHistoryOutboundEvent[];
     conversations: Map<string, RawHistoryConversationProjection>;
     lastSequence: number;
@@ -96,6 +105,7 @@ export function createEmptyRawHistoryState(): RawHistoryState {
         toolEvents: [],
         knownCompactionIds: new Set(),
         pendingApprovals: new Map(),
+        approvalUpdates: [],
         outboundEvents: [],
         conversations: new Map(),
         lastSequence: 0,
@@ -125,11 +135,23 @@ export function applyRawHistoryEvent(state: RawHistoryState, event: RawHistoryEv
         case "approval.decided":
             if (!state.pendingApprovals.has(event.approvalId))
                 throw new Error(`approval ${event.approvalId} is not pending`);
+            appendApprovalUpdate(state, {
+                approvalId: event.approvalId,
+                toolName: state.pendingApprovals.get(event.approvalId)?.toolName ?? "unknown",
+                status: event.decision === "approve" ? "approved" : "denied",
+                createdAt: event.createdAt,
+            });
             state.pendingApprovals.delete(event.approvalId);
             break;
         case "approval.expired":
             if (!state.pendingApprovals.has(event.approvalId))
                 throw new Error(`approval ${event.approvalId} is not pending`);
+            appendApprovalUpdate(state, {
+                approvalId: event.approvalId,
+                toolName: state.pendingApprovals.get(event.approvalId)?.toolName ?? "unknown",
+                status: "expired",
+                createdAt: event.createdAt,
+            });
             state.pendingApprovals.delete(event.approvalId);
             break;
         case "outbound.delivered":
@@ -406,6 +428,11 @@ function assertPreservedTurnSuffix(
             throw new Error(`compaction ${event.compactionId} changed preserved turn messages for ${actual.turnId}`);
         }
     }
+}
+
+function appendApprovalUpdate(state: RawHistoryState, update: ApprovalUpdate): void {
+    state.approvalUpdates.push(update);
+    if (state.approvalUpdates.length > MAX_APPROVAL_UPDATES) state.approvalUpdates.shift();
 }
 
 function toComparableStoredMessages(messages: BaseMessage[]) {
