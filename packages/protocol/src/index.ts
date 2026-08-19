@@ -2,12 +2,13 @@ import { z } from "zod";
 import { channelEventSchema } from "@caicaiclaw/utils/history";
 import type { ChannelEvent } from "@caicaiclaw/utils/history";
 
-export const WS_PROTOCOL_VERSION = 7;
+export const WS_PROTOCOL_VERSION = 8;
 export const MAX_CLIENT_ID_LENGTH = 64;
 export const CLIENT_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
 export const requestIdSchema = z.string().min(1).optional();
 export const clientIdSchema = z.string().min(1).max(MAX_CLIENT_ID_LENGTH).regex(CLIENT_ID_PATTERN);
+const jsonObjectSchema = z.record(z.string(), z.json());
 
 export const clientInputMessageSchema = z.object({
     type: z.literal("input"),
@@ -39,6 +40,16 @@ export const clientApprovalDecisionMessageSchema = z
         type: z.literal("approval_decision"),
         approvalId: z.string().min(1),
         decision: z.enum(["approve", "deny"]),
+        requestId: requestIdSchema,
+    })
+    .strict();
+
+export const clientDebugToolCallMessageSchema = z
+    .object({
+        type: z.literal("debug_tool_call"),
+        toolName: z.string().min(1),
+        args: jsonObjectSchema,
+        dryRun: z.boolean(),
         requestId: requestIdSchema,
     })
     .strict();
@@ -85,12 +96,12 @@ export const clientMessageSchema = z.union([
     clientCompactMessageSchema,
     clientDaydreamingMessageSchema,
     clientApprovalDecisionMessageSchema,
+    clientDebugToolCallMessageSchema,
     clientRoleMessageSchema,
 ]);
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
 
-const jsonObjectSchema = z.record(z.string(), z.json());
 const laneSchema = z.enum(["fast", "deep"]);
 const outputTargetSchema = z
     .object({
@@ -347,6 +358,18 @@ export const serverApprovalSnapshotMessageSchema = z
     })
     .strict();
 
+export const serverDebugToolResultMessageSchema = z
+    .object({
+        type: z.literal("debug_tool_result"),
+        requestId: requestIdSchema,
+        toolName: z.string().min(1),
+        permission: z.enum(["L0", "L1", "L2", "L3"]),
+        outcome: z.enum(["dry_run_ok", "dry_run_invalid", "executed", "pending_approval", "failed"]),
+        detail: z.string().min(1).optional(),
+        approvalId: z.string().min(1).optional(),
+    })
+    .strict();
+
 export const serverMessageSchema = z.discriminatedUnion("type", [
     serverHelloMessageSchema,
     serverAckMessageSchema,
@@ -367,6 +390,7 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
     serverIntakeSnapshotMessageSchema,
     serverChannelSnapshotMessageSchema,
     serverApprovalSnapshotMessageSchema,
+    serverDebugToolResultMessageSchema,
 ]);
 
 export type ServerMessage = z.infer<typeof serverMessageSchema>;
