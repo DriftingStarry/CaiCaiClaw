@@ -3,7 +3,7 @@
 ## Current State
 
 **Last Updated:** 2026-08-19
-**Active Feature:** feat-015（M3-7 后台队列、adapter 视图与调试入口）开工中。feat-014（M3-6 QQ 开放平台渠道）代码单元全部完成并提交，状态已置为 **blocked**：唯一未满足的 doneCriteria 是 QQ 沙箱真实往返验收，需要用户提供 AppID / AppSecret 并在开放平台配置群聊 @ 与单聊权限，这是外部依赖而非未完成的实现工作（详见「feat-014 实施进度」的残留阻塞）。feat-015 依赖 feat-013 而不依赖 feat-014，故可在 feat-014 解除阻塞前推进，仍满足「一次只推进一个未阻塞 feature」。用户已授权将 `@modelcontextprotocol/sdk` 仅加入 apps/server，agent-core 保持不 import MCP 或渠道 SDK。
+**Active Feature:** feat-015（M3-7 后台队列、adapter 视图与调试入口）**11 个提交单元全部完成**，`./init.sh` 与 admin production build 均通过，行为验收已逐条记录（见「feat-015 实施进度」）。feat-014（M3-6 QQ 开放平台渠道）代码单元全部完成并提交，状态为 **blocked**：唯一未满足的 doneCriteria 是 QQ 沙箱真实往返验收，需要用户提供 AppID / AppSecret 并在开放平台配置群聊 @ 与单聊权限，这是外部依赖而非未完成的实现工作（详见「feat-014 实施进度」的残留阻塞）。feat-015 依赖 feat-013 而不依赖 feat-014，故在 feat-014 解除阻塞前推进，仍满足「一次只推进一个未阻塞 feature」。用户已授权将 `@modelcontextprotocol/sdk` 仅加入 apps/server，agent-core 保持不 import MCP 或渠道 SDK。
 
 ### feat-015 提交计划（2026-08-19 立）
 
@@ -34,6 +34,14 @@
 - `a8ce97d` 单元 3 入站速率与 outbound 成败。速率按渠道 60s 滑动窗口，记录点在 `admit` **之前**（被丢弃的也算入站），用本地 `Date.now()` 而非 adapter 的 `receivedAt`（后者可能时钟偏差）。验证：`./init.sh` 通过；probe 输出 `qqCountIncludesDropped=true`（3 条含 1 条自回声丢弃）、`lastErrorIsLatest=true`。probe 已删除。
 - `2805d53` 单元 4 三种快照协议消息与推送。协议版本 6 → 7。验证：`./init.sh` 通过；probe 拉起真实 server、以 observer 身份连 WS 并注入一条 ChannelEvent，输出三种快照全部收到、`pushedOnStateTransition=true`、`lanesCoverBothLanes=true`、`policiesIncludeDefaults=true`、`inboundRateRecorded=1`。probe 已删除。
 
+- `b224d5f` 单元 5 admin 角色连接。`buildWsUrl` 的第三个参数改为联合类型（`string | { token?, adminToken? }`）而不是继续加位置参数，避免位置错位。admin 前端从 `/api/agent-auth/connection` 同时取 WS token 与 admin token，以 `{ type: "role", role: "admin" }` 作为 `CaiCaiWsClient` 构造参数握手（而非在 `onOpen` 里手发，否则会双发 role 而被 server 以「role 已声明」拒绝）。验证：`./init.sh` 通过；probe 校验带 adminToken 的 admin 握手被接受、缺 adminToken 被拒。probe 已删除。
+- `380ffaf` 单元 5b 审批快照与 client-core 归约。四种快照在 `ClientState` 上的类型由 `Omit<Extract<ServerMessage, { type: "..." }>, "type">` 推导，协议变更自动传导而不需手写第二份结构。归约是全量替换而非增量合并。验证：`./init.sh` 通过。
+- `fa2cf1b` 单元 6 车道与队列视图（`/runtime` 页面 + `LaneQueuePanel`）。
+- `c6ee1ad` 单元 7 adapter 视图（`AdapterPanel`）。
+- `f3d25fb` 单元 8 L3 审批视图（`ApprovalPanel`）。pending 完整展示 toolName 与 args（`JSON.stringify(args, null, 2)`，不截断不折叠），approve / deny 各带二次确认。决策走既有的 `approval_decision` 公开入口，admin 不触碰 `history.jsonl`，未新增任何 REST 路由。
+- `c5f8277` + `4360d85` 单元 9 入站注入调试入口。server 按连接角色判定 `debugOrigin`：admin 一律标记 `admin`，非 admin 即使自带也剥掉。验证：`./init.sh` + admin build 通过；probe 拉起真实 server，admin 注入落 JSONL 为 `debugOrigin=admin`、adapter 显式传 `debugOrigin=admin` 落盘为 `undefined`、admin 注入 `isSelf=true` 回执为 `disposition=dropped` / `reason=self_echo`。probe 已删除。
+- `83bde45` + `a8cc11b` + `7e296bd` 单元 10 出站工具直调（默认 dry-run）。协议版本 7 → 8。dry-run 只在 `McpToolHost` 解析 adapter 路由并复用既有 `validateJsonSchema` 校验参数，不调用 `client.callTool`；真实执行走新增的 `AgentRuntime.debugInvokeTool`，复用既有权限判定与审批路径。验证：`./init.sh` + admin build 通过；probe 拉起真实 server 并挂一个真实 MCP adapter（两个工具分别声明 L1 / L3），输出三次 dry-run 后真实调用计数为 `0`、真实 L1 调用计数变 `1`、真实 L3 返回 `pending_approval` 且计数不变、经 admin 审批后计数变 `2` 并落 `outbound.delivered`。probe 已删除。
+
 实施中的取舍（均已在上述提交内并写了代码注释）：
 
 1. **快照不挂在流式增量上**：`assistant_delta` / `reasoning_delta` 是高频事件，若在其上推送会把快照打成洪水。只在 `input_accepted` / `input_dropped` / `turn_start` / `done` / `error` 这些状态迁移点推，另加 5s 低频轮询兜底。
@@ -41,8 +49,16 @@
 3. **未声明权限的工具在视图里显示 L3**：与 runtime 的默认兜底一致——视图的目的是呈现实际生效级别，而不是「未配置」。
 4. **`effectivePolicies` 用 `isDefaults` 布尔而非比较 `"(defaults)"` 字符串**：真实渠道理论上可以叫同名。
 5. **`laneSnapshots` 没有 startedAt**：`TurnContext` 当前不含起始时间字段，不编造。
+6. **`reply.maxChars` / `rateLimitPerMin` 为 0 在视图里渲染成「不限」**：0 的语义是不限长 / 不限频，直接渲染 `0` 会被读成「禁止回复」，是会导致误判的呈现错误。
+7. **admin token 经 JS 可读的路由下发**：server 的 admin 角色握手要求 token 出现在 WS URL query 中，httpOnly cookie 里的值 JS 读不到，除此之外没有可用通路。这会扩大 XSS 影响面（拿到 token 即可冒充 admin 连 WS），因此该路由必须始终受 `requireAuth` 保护且响应不可缓存——已写进路由文件头注释。
+8. **`debugOrigin` 由服务端按连接角色判定，不信任客户端自述**：否则 adapter 可以伪造调试来源，让真实平台事件在审计里看起来像人工注入。
+9. **调试直调的 dry-run 是默认路径且只走 server 侧**：dry-run 分支根本不调 `runtime.debugInvokeTool`，从代码路径上就不可能产生投递，而不是依赖一个「记得别执行」的运行时判断。
+10. **L3 调试直调只创建审批请求，`turnId` 用合成 id**：`approval.requested` 的投影不校验 `turnId` 是否是已知 turn（已核对 `history.ts`），因此合成 `debug-turn-*` 不会破坏回放；这样调试直调与正常轮次共用同一条审批出口。
+11. **`debug_tool_result` 不进 `ClientState`**：它是一次性回执而非可回放状态，`client-core` 的归约走 `default` 分支不处理，回执只存在 admin store 的 `debugReceipts` 里（上限 20 条）。
 
-剩余单元：5（admin 角色连接 / `buildWsUrl` 加 adminToken）、6（队列视图）、7（adapter 视图）、8（审批视图）、9（入站注入调试入口）、10（出站 dry-run 调试入口）、11（状态与证据登记）。
+剩余单元：11（状态与证据登记，本次进行中）。
+
+断连恢复验收（doneCriteria「事件推送为主、低频轮询兜底，断连后能恢复」）：probe 拉起真实 server，第一条 admin 连接经一次状态迁移收到四种快照后断开；第二条 admin 连接**不再注入任何事件**，仅靠 5s 低频轮询在 6.5s 内重新收齐四种快照，输出 `recoveredWithoutNewEvents=true`。probe 已删除。
 
 ### feat-014 平台选型（2026-08-19，仅文档，未开工）
 
@@ -121,7 +137,7 @@ QQ 开放平台 adapter 作为首个真实外部渠道接入。按 doneCriteria 
 
 **残留阻塞（feat-014 唯一未满足的 doneCriteria）**：最后一条要求 QQ 沙箱真实手动验收——群聊 @ 与单聊各至少一次真实往返（入站进入正确车道且回复真的抵达 QQ 客户端）、重复 `msg_id` 被去重、超窗口回复的失败表现、L3 动作经 admin 审批后才真正投递。这需要用户提供 QQ 机器人 AppID / AppSecret 与沙箱环境，并在开放平台配置好群聊 @ 与单聊权限。所有代码路径目前只经过假网关 / 假平台 / 注入时钟验证；平台错误码到失败分类的映射（`QQ_ERROR_CODE_CATEGORIES`）也刻意留空，需真实沙箱调用校准。
 
-**下一步**：拿到沙箱凭据后执行单元 11 验收并把 feat-014 置为 done；在此之前不要开工 feat-015（M3-7 后台队列、adapter 视图与调试入口），遵守一次只做一个 feature。
+**下一步**：拿到沙箱凭据后执行 feat-014 单元 11 验收并把 feat-014 置为 done。（原写的「在此之前不要开工 feat-015」已作废：feat-015 依赖 feat-013 而非 feat-014，feat-014 属外部依赖阻塞而非未完成，故 feat-015 已推进并完成。）
 
 ### feat-013 提交计划
 

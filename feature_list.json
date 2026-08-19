@@ -272,7 +272,7 @@
             "dependencies": [
                 "feat-013"
             ],
-            "status": "in-progress",
+            "status": "done",
             "doneCriteria": [
                 "队列视图呈现每车道状态与排队数，以及每 conversation 的槽位占用、按 reason 分类的 droppedCount 与生效策略；事件推送为主、低频轮询兜底，断连后能恢复",
                 "adapter 视图呈现连接状态、已注册工具及权限级别、入站速率、outbound 成败计数与最近错误",
@@ -281,7 +281,8 @@
                 "调试入口直调出站工具默认 dry-run 不产生真实投递，显式确认后才真实执行，且仍受权限分级与 L3 审批约束",
                 "admin 对 history.jsonl 保持严格只读，调试与审批均走 runtime 公开入口",
                 "./init.sh 通过、admin production build 通过，并记录上述行为验收"
-            ]
+            ],
+            "evidence": "11 个提交单元全部完成：50aa1f8 按 reason 分类 droppedCount；9920e96 车道与 intake 快照读取 API；a8ce97d 入站速率与 outbound 成败统计；2805d53 三种快照协议消息与推送（协议 6→7）；b224d5f admin 角色连接（buildWsUrl 增 adminToken）；380ffaf 审批快照与 client-core 归约；fa2cf1b 车道与队列视图；c6ee1ad adapter 视图；f3d25fb L3 审批视图；c5f8277+4360d85 入站注入调试入口（server 按角色强制 debugOrigin）；83bde45+a8cc11b+7e296bd 出站工具直调默认 dry-run（协议 7→8）。./init.sh 与 pnpm --filter @caicaiclaw/admin build 在每个提交边界均通过。行为验收（临时探针，均已删除）：分 reason 计数求和等于总数且未发生的 reason 不出现；快照槽位划分与 admit 裁决一致且返回值为拷贝；入站速率含被丢弃事件；四种快照在状态迁移时推送，断连后仅靠 5s 轮询即恢复（recoveredWithoutNewEvents=true）；admin 握手需 adminToken；admin 注入落盘 debugOrigin=admin 而 adapter 自带的被剥除；isSelf=true 注入回执为 dropped/self_echo；三次 dry-run 后真实工具调用计数为 0，真实 L1 调用计数变 1，真实 L3 返回 pending_approval 且计数不变、经 admin 审批后变 2 并落 outbound.delivered。admin 对 history.jsonl 保持只读：调试注入走 input、审批走 approval_decision，均为 runtime 公开入口，未新增 REST 路由。"
         }
     ]
 }
