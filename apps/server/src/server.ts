@@ -7,6 +7,8 @@ import {
     serializeServerMessage,
     ServerMessage,
     WS_PROTOCOL_VERSION,
+    type ConnectionRole,
+    type ClientRoleMessage,
 } from "@caicaiclaw/protocol";
 import { runtimeOutputToServerMessages } from "./runtimeOutputMapper";
 import { loadServerConfig, type ServerConfig } from "./config";
@@ -22,6 +24,7 @@ export type RunningServer = {
 type ClientConnection = {
     clientId: string;
     socket: WebSocket;
+    role?: ConnectionRole;
 };
 
 export function createServer(serverConfig: ServerConfig, model?: AgentConfig["model"]): RunningServer {
@@ -38,11 +41,27 @@ export function createServer(serverConfig: ServerConfig, model?: AgentConfig["mo
         toolsByName,
     };
 
-    function broadcast(message: ServerMessage): void {
+    function sendToObservers(message: ServerMessage): void {
         const payload = serializeServerMessage(message);
         for (const connection of clients.values()) {
-            if (connection.socket.readyState === WebSocket.OPEN) {
-                connection.socket.send(payload);
+            if (connection.role?.role === "observer") sendPayload(connection.socket, payload);
+        }
+    }
+
+    function sendRuntimeOutput(message: ServerMessage): void {
+        const payload = serializeServerMessage(message);
+        for (const connection of clients.values()) {
+            if (connection.role?.role === "observer") {
+                sendPayload(connection.socket, payload);
+                continue;
+            }
+
+            if (
+                connection.role?.role === "adapter" &&
+                "target" in message &&
+                message.target?.channel === connection.role.channel
+            ) {
+                sendPayload(connection.socket, payload);
             }
         }
     }
@@ -62,7 +81,7 @@ export function createServer(serverConfig: ServerConfig, model?: AgentConfig["mo
         compactionModelName: serverConfig.openrouterModel,
         onOutput: async (event) => {
             for (const message of runtimeOutputToServerMessages(event)) {
-                broadcast(message);
+                sendRuntimeOutput(message);
             }
             if (event.type === "done") {
                 scheduleCompactIfDue();
@@ -79,12 +98,12 @@ export function createServer(serverConfig: ServerConfig, model?: AgentConfig["mo
         void runtime
             .compact({ trigger: "scheduled" })
             .then((summary) => {
-                broadcast({ type: "compact_result", summary, trigger: "scheduled" });
+                sendToObservers({ type: "compact_result", summary, trigger: "scheduled" });
             })
             .catch((error: unknown) => {
                 const message = safeErrorMessage(error);
                 console.error(`[runtime] scheduled compact failed: ${message}`);
-                broadcast({ type: "error", message });
+                sendToObservers({ type: "error", message });
             })
             .finally(() => {
                 scheduledCompactInFlight = false;
@@ -93,9 +112,9 @@ export function createServer(serverConfig: ServerConfig, model?: AgentConfig["mo
 
     const runtimeTask = runtime.run();
     runtimeTask.catch((error: unknown) => {
-        const message = errorMessage(error);
+        const message = safeErrorMessage(error);
         console.error(`[runtime] stopped: ${message}`);
-        broadcast({ type: "error", message });
+        sendToObservers({ type: "error", message });
         // runtime 已无法继续工作，交给进程级兜底关闭服务，避免留下僵尸进程。
         throw error;
     });
@@ -116,7 +135,8 @@ export function createServer(serverConfig: ServerConfig, model?: AgentConfig["mo
     wss.on("connection", (socket, request) => {
         const connectionId = createConnectionId();
         const clientId = resolveClientId(request.url);
-        clients.set(connectionId, { clientId, socket });
+        const connection: ClientConnection = { clientId, socket };
+        clients.set(connectionId, connection);
 
         send(socket, {
             type: "hello",
@@ -130,7 +150,25 @@ export function createServer(serverConfig: ServerConfig, model?: AgentConfig["mo
 
             try {
                 const message = parseClientMessage(raw);
-                requestId = message.requestId;
+                requestId = "requestId" in message ? message.requestId : undefined;
+
+                if (message.type === "role") {
+                    if (connection.role) throw new Error("connection role has already been declared");
+                    connection.role = toConnectionRole(message);
+                    return;
+                }
+
+                if (!connection.role) {
+                    throw new Error("connection role must be declared before other messages");
+                }
+
+                if (
+                    connection.role.role === "adapter" &&
+                    message.type === "input" &&
+                    message.event.channel !== connection.role.channel
+                ) {
+                    throw new Error("adapter input channel must match the declared connection channel");
+                }
 
                 if (message.type === "ping") {
                     send(socket, { type: "pong", requestId: message.requestId });
@@ -161,8 +199,6 @@ export function createServer(serverConfig: ServerConfig, model?: AgentConfig["mo
                 const receivedAt = Date.now();
                 await runtime.enqueue({
                     ...message.event,
-                    channel: "local",
-                    conversationId: "local:default",
                     author: { ...message.event.author, isSelf: false },
                     receivedAt,
                     requestId: message.requestId,
@@ -323,6 +359,15 @@ function send(socket: WebSocket, message: ServerMessage): void {
     if (socket.readyState === WebSocket.OPEN) {
         socket.send(serializeServerMessage(message));
     }
+}
+
+function sendPayload(socket: WebSocket, payload: string): void {
+    if (socket.readyState === WebSocket.OPEN) socket.send(payload);
+}
+
+function toConnectionRole(message: ClientRoleMessage): ConnectionRole {
+    if (message.role === "observer") return { role: "observer" };
+    return { role: "adapter", channel: message.channel };
 }
 
 function safeErrorMessage(error: unknown): string {
