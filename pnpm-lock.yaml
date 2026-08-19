@@ -43,6 +43,22 @@ importers:
         specifier: ^8.66.0
         version: 8.66.0(eslint@10.8.1(jiti@2.7.0))(typescript@6.0.3)
 
+  apps/adapter-qq:
+    dependencies:
+      '@caicaiclaw/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@caicaiclaw/utils':
+        specifier: workspace:*
+        version: link:../../packages/utils
+      ws:
+        specifier: ^8.18.0
+        version: 8.21.0
+    devDependencies:
+      '@types/ws':
+        specifier: ^8.5.13
+        version: 8.18.1
+
   apps/admin:
     dependencies:
       '@ant-design/nextjs-registry':

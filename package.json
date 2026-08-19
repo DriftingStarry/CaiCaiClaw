@@ -5,6 +5,7 @@
 		"server": "tsx --env-file-if-exists=.env apps/server/src/server.ts",
 		"admin": "NODE_ENV=production tsx --env-file-if-exists=.env apps/admin/src/server.ts",
 		"tui": "tsx --env-file-if-exists=.env apps/tui/src/main.tsx",
+		"adapter-qq": "tsx --env-file-if-exists=.env apps/adapter-qq/src/main.ts",
 		"typecheck": "tsc -b tsconfig.json",
 		"lint": "eslint .",
 		"lint:fix": "eslint . --fix",

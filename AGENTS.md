@@ -65,6 +65,7 @@ packages/client-core  <- protocol, utils
 apps/server           <- agent-core, protocol, utils
 apps/admin            <- client-core, protocol, utils
 apps/tui              <- client-core, protocol, utils
+apps/adapter-qq       <- protocol, utils
 ```
 
 `packages/utils` 是无工作区依赖的共享基础层：纯函数工具 + 跨包共享的结构化契约。它不做 IO，也不依赖框架或 SDK（langchain / ws / react）。需要 zod 的契约放在 `./history` 等 subpath export 下，避免不需要校验的消费方被动引入 zod。
