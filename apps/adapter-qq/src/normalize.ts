@@ -8,8 +8,12 @@ export const QQ_CHANNEL = "qq";
 const GROUP_AT_MESSAGE_CREATE = "GROUP_AT_MESSAGE_CREATE";
 const C2C_MESSAGE_CREATE = "C2C_MESSAGE_CREATE";
 
+/**
+ * 平台 User 结构：群聊场景身份在 member_openid，单聊在 user_openid，`id` 并非必然下发。
+ * 因此这里三个字段都是可选，由各事件分支按场景取到具体 openid 后再校验非空。
+ */
 const authorSchema = z.looseObject({
-    id: z.string().min(1),
+    id: z.string().min(1).optional(),
     member_openid: z.string().min(1).optional(),
     member_role: z.string().min(1).optional(),
     user_openid: z.string().min(1).optional(),
@@ -56,6 +60,9 @@ export function normalizeQqEvent(eventType: string, data: unknown, ctx: QqNormal
         }
 
         const authorId = parsed.data.author.member_openid ?? parsed.data.author.id;
+        if (authorId === undefined) {
+            return { ok: false, error: `invalid ${eventType} payload: author has neither member_openid nor id` };
+        }
         return buildChannelEvent(
             {
                 channel: QQ_CHANNEL,
@@ -80,6 +87,9 @@ export function normalizeQqEvent(eventType: string, data: unknown, ctx: QqNormal
         }
 
         const authorId = parsed.data.author.user_openid ?? parsed.data.author.id;
+        if (authorId === undefined) {
+            return { ok: false, error: `invalid ${eventType} payload: author has neither user_openid nor id` };
+        }
         return buildChannelEvent(
             {
                 channel: QQ_CHANNEL,

@@ -77,7 +77,8 @@ export class TokenManager {
         this.token = tokenData.access_token;
         this.expiresAt = Date.now() + tokenData.expires_in * 1000;
 
-        console.log(`[TokenManager] access_token refreshed, expires in ${tokenData.expires_in}s`);
+        // 日志只能写 stderr：adapter 的 stdout 被 MCP StdioServerTransport 占用。
+        console.error(`[TokenManager] access_token refreshed, expires in ${tokenData.expires_in}s`);
 
         // 调度下次续期
         this.scheduleRenewal();
