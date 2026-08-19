@@ -21,7 +21,7 @@ import {
     TurnContext,
 } from "./types";
 import { DEFAULT_MEMORY_BUDGETS, readMemorySnapshot, MemorySnapshot } from "./memory";
-import { createHistoryReadTool } from "./historyTool";
+import { createHistoryQueryTool, createHistoryReadTool } from "./historyTool";
 import { AdmissionResult, IntakeController, loadIntakePolicy } from "./intake";
 import { DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
@@ -119,6 +119,7 @@ export class AgentRuntime {
             history_read: createHistoryReadTool((input) =>
                 this.history.readToolResult(input.turnId, input.toolCallId, input.offset, input.limit),
             ),
+            history_query: createHistoryQueryTool((input) => this.history.queryHistory(input)),
         };
         this.agent = getAgent({
             ...config,

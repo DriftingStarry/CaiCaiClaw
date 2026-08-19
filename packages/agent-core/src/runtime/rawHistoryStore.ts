@@ -10,7 +10,7 @@ import {
     type RawHistoryEventDraft,
 } from "@caicaiclaw/utils/history";
 import { applyRawHistoryEvent, createEmptyRawHistoryState, markInterruptedHistory, RawHistoryState } from "./history";
-import { ToolResultPage } from "./types";
+import { HistoryQueryInput, HistoryQueryRecord, ToolResultPage } from "./types";
 
 export type RawHistoryStoreOptions = {
     path: string;
@@ -104,6 +104,45 @@ export class RawHistoryStore {
             };
         }
         throw new Error(`tool result ${turnId}/${toolCallId} was not found`);
+    }
+
+    public queryHistory(input: HistoryQueryInput): HistoryQueryRecord[] {
+        if (!Number.isInteger(input.offset) || input.offset < 0)
+            throw new Error("history query offset must be non-negative");
+        if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 100)
+            throw new Error("history query limit must be between 1 and 100");
+        if (input.from !== undefined && input.to !== undefined && input.from > input.to)
+            throw new Error("history query from must not exceed to");
+        let content: string;
+        try {
+            content = readFileSync(this.path, "utf-8");
+        } catch (error) {
+            throw toError(error, "history query cannot read history");
+        }
+        const matches: HistoryQueryRecord[] = [];
+        for (const [index, line] of content.split(/\r?\n/).entries()) {
+            if (!line.trim()) continue;
+            const parsed = parseHistoryLine(line);
+            if (!parsed.success)
+                throw new Error(`raw history line ${index + 1} ${parsed.error.replace(/^history line /, "")}`);
+            if (parsed.event.type !== "input.accepted") continue;
+            const event = parsed.event.event;
+            if (input.conversationId && event.conversationId !== input.conversationId) continue;
+            if (input.channel && event.channel !== input.channel) continue;
+            if (input.kind && event.kind !== input.kind) continue;
+            if (input.authorId && event.author.id !== input.authorId) continue;
+            if (input.from !== undefined && event.occurredAt < input.from) continue;
+            if (input.to !== undefined && event.occurredAt > input.to) continue;
+            matches.push({
+                inputId: parsed.event.inputId,
+                sequence: parsed.event.sequence,
+                createdAt: parsed.event.createdAt,
+                event,
+            });
+        }
+        if (input.offset > matches.length)
+            throw new Error(`history query offset ${input.offset} is out of bounds for ${matches.length} matches`);
+        return matches.slice(input.offset, input.offset + input.limit);
     }
 
     public load(): void {

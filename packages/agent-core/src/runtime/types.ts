@@ -143,4 +143,32 @@ export type ToolResultPage = {
     hasMore: boolean;
 };
 
+export type HistoryQueryInput = {
+    conversationId?: string;
+    channel?: string;
+    kind?: string;
+    from?: number;
+    to?: number;
+    authorId?: string;
+    offset: number;
+    limit: number;
+};
+
+export type HistoryQueryRecord = {
+    inputId: string;
+    sequence: number;
+    createdAt: number;
+    event: {
+        channel: string;
+        conversationId: string;
+        kind: string;
+        text: string;
+        author: { id: string; displayName?: string; isSelf: boolean; role?: string };
+        occurredAt: number;
+        receivedAt: number;
+        platformMessageId?: string;
+        replyTo?: string;
+    };
+};
+
 export type RuntimeOutputEmitter = (event: RuntimeOutputEvent) => MaybePromise<void>;
