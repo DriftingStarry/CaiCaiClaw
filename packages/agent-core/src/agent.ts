@@ -29,6 +29,12 @@ export interface AgentConfig {
     onToolResult?: (event: ToolResultEvent) => MaybePromise<void>;
     toolResultMessage?: (event: ToolResultEvent, message: ToolMessage) => ToolMessage;
     onDeferToDeep?: (context: TurnContext, reason: string) => MaybePromise<void>;
+    beforeToolCall?: (event: {
+        turnId: string;
+        lane: TurnContext["lane"];
+        name: string;
+        args: JsonObject;
+    }) => MaybePromise<{ disposition: "allow" } | { disposition: "pending"; result: string }>;
 }
 
 export type ToolStartEvent = {
@@ -67,6 +73,7 @@ export const getAgent = (config: AgentConfig) => {
         onToolResult,
         toolResultMessage,
         onDeferToDeep,
+        beforeToolCall,
     } = config;
     const tools = Object.values(toolsByName);
     const modelWithTools = model.bindTools(tools);
@@ -110,6 +117,22 @@ export const getAgent = (config: AgentConfig) => {
         for (const call of lastMessage.tool_calls || []) {
             const tool = toolsByName[call.name];
             const toolCallId = call.id ?? `${call.name}:${Date.now()}`;
+
+            const gate = await beforeToolCall?.({
+                ...toolEventContext,
+                name: call.name,
+                args: toJsonObject(call.args),
+            });
+            if (gate?.disposition === "pending") {
+                res.push(
+                    new ToolMessage({
+                        content: gate.result,
+                        tool_call_id: toolCallId,
+                        name: call.name,
+                    }),
+                );
+                continue;
+            }
 
             await onToolStart?.({
                 ...toolEventContext,
