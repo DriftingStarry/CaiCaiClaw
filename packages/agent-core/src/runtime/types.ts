@@ -116,9 +116,14 @@ export type AgentRuntimeOptions = {
         tasksIndex?: number;
     };
     heartbeatMs?: number;
+    fastModel?: AgentConfigModel;
     intakePolicyPath?: string;
     intakePolicy?: import("./intake").IntakePolicy;
     onOutput?: (event: RuntimeOutputEvent) => MaybePromise<void>;
+};
+
+export type AgentConfigModel = import("@langchain/core/language_models/chat_models").BaseChatModel & {
+    bindTools: NonNullable<import("@langchain/core/language_models/chat_models").BaseChatModel["bindTools"]>;
 };
 
 export type CompactOptions = {
