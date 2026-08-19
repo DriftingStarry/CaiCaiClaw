@@ -9,9 +9,10 @@
 1. 运行 `pwd` 与 `git status --short --branch`，确认仓库位置和用户已有改动。
 2. 完整阅读本文件；按任务需要读取 `README.md` 的相关里程碑和相关源码。
 3. 读取 `feature_list.json` 查看 feature 状态，读取 `progress.md` 恢复上次会话的上下文、残留风险与下一步。
-4. 运行 `git log --oneline -5` 了解最近改动。
-5. 在依赖已安装且任务涉及仓库文件时运行 `./init.sh`，记录基线。若基线已有与本任务无关的失败，记录后继续限定范围，不擅自修复无关问题。
-6. 先确认目标、成功标准、影响模块和验证方式，再编辑文件。
+4. 读取 `session-handoff.md` 的 `Status` 一行：为「无活动交接」时到此为止，其余内容不必读；否则完整读取——它描述一段未完成或受阻的工作，此时它的 Recommended Next Step 优先于 `progress.md` 的 What's Next。
+5. 运行 `git log --oneline -5` 了解最近改动。
+6. 在依赖已安装且任务涉及仓库文件时运行 `./init.sh`，记录基线。若基线已有与本任务无关的失败，记录后继续限定范围，不擅自修复无关问题。
+7. 先确认目标、成功标准、影响模块和验证方式，再编辑文件。
 
 基线验证失败时，先修复基线，再叠加新范围。
 
@@ -46,7 +47,7 @@
 - `feature_list.json` — feature 状态与证据的真相源
 - `progress.md` — 会话连续性日志：当前状态、残留风险、决策与下一步
 - `init.sh` — 统一启动与验证入口
-- `session-handoff.md` — 可选，跨会话的大块工作使用
+- `session-handoff.md` — 未完成或受阻工作的跨会话交接。`Status` 为「无活动交接」时等同空文件；存在活动交接时，其 Recommended Next Step 覆盖 `progress.md` 的 What's Next。它只承载「在飞」的工作，不是历史归档
 
 `feature_list.json` 字段：`id`、`name`、`description`、`status` 必填；`dependencies`、`doneCriteria`、`evidence` 可选。`status` 取值为 `not-started` \| `in-progress` \| `blocked` \| `done`。
 
@@ -110,7 +111,7 @@ apps/tui              <- client-core, protocol, utils
 
 1. 更新 `progress.md` 的当前状态、验证证据、风险与下一步。
 2. 更新 `feature_list.json` 中该 feature 的 `status` 与 `evidence`。
-3. 工作未完成或受阻时填写 `session-handoff.md`。
+3. 工作未完成或受阻时填写 `session-handoff.md`，至少写清 `Status`、`Last Updated`、下一步与阻塞原因。工作已收尾则把 `Status` 改回「无活动交接」并清空各节：完成证据属于 `feature_list.json` 的 `evidence` 与 `progress.md`，不要在交接文件里留下已完成工作的报告或 `## feat-0XX Handoff` 之类的历史附录。
 4. 运行 `git status --short`，确认没有无关文件，并说明验证结果和残余风险。
 5. 在当前授权和运行策略允许时，按 `Git Commit Discipline` 将已完成单元逐个提交；不得在收尾时把整个 feature 压成一个提交。无法提交时记录每个未提交单元、其暂存状态和阻塞原因。
 

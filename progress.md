@@ -289,6 +289,7 @@ pnpm tui
 | --- | --- | --- | --- |
 | Static verification | `./init.sh` | pass | 2026-08-17：`pnpm typecheck`、`pnpm lint`、`pnpm format:check` 全部通过。 |
 | Diff hygiene | `git diff --check` | pass | 无空白错误。 |
+| Harness structure | `node validate-harness.mjs --target .` | 100/100 | 单 lane 迁移后五个子系统全部 5/5（迁移前 76/100，bottleneck: state）。2026-08-19 复跑仍为 100/100 —— 但该检查只看结构，`session-handoff.md` 当时正文已陈旧仍得满分，勿把它当内容正确性证据。 |
 | Web build | `pnpm --filter @caicaiclaw/web build` | pass | Next production build 编译、类型检查与静态页面生成通过。 |
 | feat-003 checkpoint flow | 一次性 TypeScript 验收脚本（已删除） | pass | 连续三次 compact 与重启回放；输出 `{"checkpoints":3,"replayCommittedTurns":3,"longResultLength":10000,"historyPage":"xxxxx"}`。 |
 | feat-003 并发 / 失败原子性 | 一次性 TypeScript 验收脚本（已删除） | pass | compact 期间 enqueue 串行等待；摘要失败不追加 checkpoint。 |
@@ -330,6 +331,9 @@ pnpm tui
 | feat-006 `.env.example` 完备性 | 双向 `grep` 比对示例文件与源码引用 | pass | 补全 `CAICAI_MEMORY_DIR`、`CAICAI_COMPACT_EVERY_TURNS`、`CAICAI_ADMIN_PORT`、`CAICAI_ADMIN_STOP_GRACE_MS`、`CAICAI_ADMIN_STARTUP_TIMEOUT_MS` 五项后，「代码用到但示例未记录」为空。反向仅剩 `OPENROUTER_API_KEY` —— 它由 `@langchain/openrouter` 自行读环境（`createOpenrouterModel` 只传 `model`），源码无字面引用属预期。 |
 
 ## Notes for Next Session
+
+- **`session-handoff.md` 现在有读取路径了（2026-08-19）**：此前它只有写入路径——`AGENTS.md` 的 Required Artifacts 和 End of Session 让你写它，但 Startup Workflow 从不让你读它，`init.sh` 的 Next steps 也没列。结果就是它在 `cde5cac` 被删、`e945606` 重写时丢了头部使用规则和 `Status` 哨兵，之后长期陈旧而无人发现（还积压了一个与 `feature_list.json` 重复的 feat-010 附录）。现已补齐：`AGENTS.md` Startup Workflow 新增第 4 步按 `Status` 条件读取，Required Artifacts 写明「活动交接时其 Recommended Next Step 覆盖本文件 What's Next」，End of Session 增加收尾后重置为「无活动交接」的义务，`init.sh` Next steps 同步。**启动路径的唯一权威是 `AGENTS.md`**，`session-handoff.md` 的 Next Session Startup 已改为指向它，不要再在两处各写一份步骤。
+- **`validate-harness.mjs` 的 100/100 不能当内容正确性证据**：上述陈旧期间它一直是满分（含「Session handoff template exists」「Session restart markers exist」）。它只检查结构存在性，不读正文是否与事实相符。
 
 - **feat-007 已完成（2026-08-17）**：agent WS 在 HTTP Upgrade 阶段以 `verifyClient` + `timingSafeEqual` 校验 `?token=`，错误与缺失 token 均返回 401，未进入 `connection` 或 runtime；空 `CAICAI_WS_TOKEN` 仍保持仅限 127.0.0.1 的兼容行为。TUI Tab 设置页增加 `ws_token`，`client-core` 统一编码 query 参数。admin 新增 `/settings`，其读取接口仅返回是否已配置；浏览器直连需要的 token 仅从独立 cookie 鉴权 + `no-store` 连接接口即时取得，未编入 `NEXT_PUBLIC_*`、未落 Zustand/localStorage。admin 保存密钥使用默认位于 history 同目录的 `agent-ws-token` 原子替换（0600）；supervisor spawn 与 control WS 都动态读取该值，因此更新后在 `/agent` 重启即可生效。验收：真实 server 入口输出 `{\"missing\":\"error\",\"wrong\":\"error\",\"valid\":\"open\"}`；admin 覆盖文件的环境回退、保存覆盖、0600 权限、清空回退均 passed；admin production build 通过。首次并行执行 build 与 `./init.sh` 曾发生 Next 清理 `.next/types` 的既有竞态，随后串行 `./init.sh` 已通过 typecheck/lint/format，`git diff --check` 通过。运行配置已同步 `.env.example`。
 
