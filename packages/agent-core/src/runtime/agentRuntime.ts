@@ -49,7 +49,7 @@ type MaintenanceRequest = {
 export class AgentRuntime {
     private readonly queue = new EventQueue();
     private readonly fastQueue = new EventQueue();
-    private executionState: ExecutionState = { messages: [], llmCalls: 0 };
+    private readonly executionStates = new Map<Lane, ExecutionState>();
     private readonly agent: ReturnType<typeof getAgent>;
     private readonly fastAgent: ReturnType<typeof getAgent>;
     private running = false;
@@ -197,29 +197,28 @@ export class AgentRuntime {
         this.running = true;
 
         try {
-            while (this.running) {
-                const events = await this.queue.drainWithin(this.heartbeatMs);
-
-                const fastEvents = this.fastQueue.drain();
-
-                if (events.length === 0 && fastEvents.length === 0) {
-                    await this.flushMaintenanceQueue();
-                    await this.onHeartbeat();
-                    continue;
-                }
-
-                await Promise.all([
-                    events.length ? this.handleLaneEvents(events, "deep") : Promise.resolve(),
-                    fastEvents.length ? this.handleLaneEvents(fastEvents, "fast") : Promise.resolve(),
-                ]);
-                this.intake.release([...events, ...fastEvents]);
-                await this.flushMaintenanceQueue();
-            }
+            await Promise.all([this.runLane(this.queue, "deep"), this.runLane(this.fastQueue, "fast")]);
         } catch (error) {
             this.fatalError = this.toError(error, "runtime stopped");
             throw error;
         } finally {
             this.running = false;
+        }
+    }
+
+    private async runLane(queue: EventQueue, lane: Lane): Promise<void> {
+        while (this.running) {
+            const events = await queue.drainWithin(this.heartbeatMs);
+            if (events.length === 0) {
+                if (lane === "deep") {
+                    await this.flushMaintenanceQueue();
+                    await this.onHeartbeat();
+                }
+                continue;
+            }
+            await this.handleLaneEvents(events, lane);
+            this.intake.release(events);
+            await this.flushMaintenanceQueue();
         }
     }
 
@@ -328,7 +327,7 @@ export class AgentRuntime {
             };
             // This positional delta assumes final messages retain the baseline as a prefix; compaction must diff by identity.
             const baselineMessageCount = executionInput.messages.length;
-            this.executionState = executionInput;
+            this.executionStates.set(lane, executionInput);
 
             const finalState = await runAgentStream(
                 lane === "fast" ? this.fastAgent : this.agent,
@@ -337,7 +336,7 @@ export class AgentRuntime {
                 this.emitOutput.bind(this),
             );
             const completedState = finalState ?? executionInput;
-            this.executionState = { messages: completedState.messages, llmCalls: completedState.llmCalls };
+            this.executionStates.set(lane, { messages: completedState.messages, llmCalls: completedState.llmCalls });
 
             await this.history.append({
                 type: "turn.output_committed",
