@@ -3,7 +3,26 @@
 ## Current State
 
 **Last Updated:** 2026-08-19
-**Active Feature:** feat-013（M3-5 MCP host、动态工具与 L3 审批）已完成；下一项为 feat-014（真实外部渠道），需先由用户选择平台并提供相应的授权方式。feat-012 已完成：受限 history_query、conversation digest 契约和 background heartbeat 摘要均已验证并落为 `2659a78` / `cd1e094` / `21eee0f`；状态证据 `cb3b099`。用户已授权将 `@modelcontextprotocol/sdk` 仅加入 apps/server，agent-core 保持不 import MCP 或渠道 SDK。
+**Active Feature:** feat-013（M3-5 MCP host、动态工具与 L3 审批）已完成；下一项 feat-014 的平台已于 2026-08-19 由用户选定为 **QQ 开放平台（api-v2）**，定义与 doneCriteria 已改写（见下节「feat-014 平台选型」），尚未开工，开工前需要用户提供 QQ 机器人 AppID / AppSecret 与沙箱环境。feat-012 已完成：受限 history_query、conversation digest 契约和 background heartbeat 摘要均已验证并落为 `2659a78` / `cd1e094` / `21eee0f`；状态证据 `cb3b099`。用户已授权将 `@modelcontextprotocol/sdk` 仅加入 apps/server，agent-core 保持不 import MCP 或渠道 SDK。
+
+### feat-014 平台选型（2026-08-19，仅文档，未开工）
+
+用户指定首个真实外部渠道改为 **QQ 开放平台机器人（api-v2）**，原定的「个人博客或 bilibili 开放平台」退场。本次只改 `feature_list.json` 的 feat-014、`README.md` 的 M3 章节与本文件，**不含任何实现**。三项由用户当场拍板的决策：
+
+1. **adapter 放仓库内 `apps/adapter-qq`**（而非独立仓库）。依赖方向 `apps/adapter-qq <- protocol, utils`，不依赖 `agent-core`。理由是 `./init.sh` 能覆盖它、契约漂移会被 typecheck 抓到；代价是 QQ SDK 依赖进入本仓库，且落地时必须同步 `AGENTS.md` 依赖表、根 `tsconfig.json` references、`pnpm-workspace.yaml` 与根 `package.json` 脚本。
+2. **入站走官方 WebSocket 网关**（intents 位订阅），不走 Webhook —— Webhook 要公网 HTTPS 回调地址（端口限 80/443/8080/8443）加 Ed25519 签名校验，对本机常驻形态是纯负担。
+3. **首批只做群聊 @（`GROUP_AT_MESSAGE_CREATE`）与单聊（`C2C_MESSAGE_CREATE`）**，QQ 频道（guild）后置 —— 另一套 ID 体系与权限申请路径。
+
+**本次为什么没改 `AGENTS.md`**：依赖表自己写明「以各包 `package.json` 中的 `workspace:*` 条目为准」，`apps/adapter-qq` 尚不存在，先加行会让表与事实不符。该同步义务已写进 feat-014 的第一条 doneCriteria。同理未动 `.env.example`：现有约定是双向 `grep` 比对示例与源码引用（唯一允许的单向差异是 `OPENROUTER_API_KEY`），现在登记 QQ 变量会凭空制造第二个差异。
+
+**接入前已查证的两处现状缺口**（不是本次新引入的，是 QQ 会第一个踩到的）：
+
+- `dropReasonSchema` 含 `"duplicate"`，但全仓无任何代码产生该 reason —— 即 `(channel, platformMessageId)` 去重尚未实现。QQ 按设计会重复推送相同 `msg_id`，这是首个必须补齐它的渠道。
+- README 分流策略里的 `reply.maxChars` / `rateLimitPerMin`（L1 闸门）在代码中不存在（`grep` 无命中）。真实渠道上没有它等于回复侧零限流。
+
+两条都已进入 feat-014 的 doneCriteria，不另立 feature。
+
+平台约束速查（供实现时对照官方文档核实，勿凭此处转述下结论）：`access_token` 有效期 7200s 且不随请求刷新，需过期前续期；被动回复须带 `msg_id`，群聊 5 分钟 / 单聊 60 分钟内有效，同一 `msg_id` 靠递增 `msg_seq` 多次回复；主动消息（不带 `msg_id`）是另一个权限级别且有平台额度。
 
 ### feat-013 提交计划
 
@@ -162,7 +181,7 @@ codex 曾额外加上 `experimental.esmExternals: false`（理由是让产物呈
 
 ### What's Next
 
-1. 按依赖顺序实现 M3：feat-008 ✅ → **009（下一个）** → 010 → 011 → 012 → 013 →（014 / 015 可并行，均依赖 013）。一次只推进一个。feat-009 已有前置实测结论可直接采信，不必重跑：LangGraph 的 `GraphNode` 第二参数确实透传 `RunnableConfig`，`configurable` 在 `invoke` 与 `stream`（`streamMode: "messages"`）下都读得到——探针输出 `{"probe":"invoke","seen":{"turnId":"turn-1","lane":"fast","conversationId":"local:default"}}` 及同形状的 `stream` 结果。因此 `activeTurnId` → `activeTurns: Map<lane, TurnContext>` 的改造路径成立。
+1. M3 按依赖顺序推进：feat-008 ✅ → 009 ✅ → 010 ✅ → 011 ✅ → 012 ✅ → 013 ✅ → **014 / 015 可并行（均依赖 013），下一个二选一**。一次只推进一个。feat-014 已选定 QQ 开放平台，开工前需用户提供 AppID / AppSecret 与沙箱环境，且第一步应是核对官方文档而非采信本文件的转述。
 2. 用户换到支持 kitty 协议的终端后，顺手确认一次 Shift+Enter 真能插入换行 —— 这是 feat-005 唯一未经真实按键确认的行为，代码路径已由探针验证但未在真机按过。若那时发现不工作，先读 Blockers / Risks 里的实测结论，特别是「不要打开 tmux `extended-keys`」这条反向警告。
 3. 改鼠标相关代码前先读 Blockers / Risks 里消费器的现有行为约定。
 4. 若要让 admin 面板可被同网段访问，先解决 Blockers / Risks 里「agent WS 无认证」那条 —— 当前安全边界只有「仅监听 127.0.0.1」。
@@ -248,6 +267,7 @@ pnpm tui
 - [x] **Codex 沙箱无法执行 admin 进程闭环（限制属沙箱，不属本机）**：codex 在其沙箱内的启动命令于 tsx IPC 管道 `/tmp/tsx-1000/16.pipe` 返回 `listen EPERM`，Node/WebSocket 127.0.0.1 listen 同样受限，child_process 的 piped stdout/stderr 也不转发。**本机无此限制** —— Claude 已在本机用隔离端口（admin=39001、ws=39002）与临时数据目录实测通过 start / hello→running / compact / stop，详见 Evidence 表。下次遇到「跑不起来」先分清是沙箱还是本机。
 - [x] **feat-006 运行时验收**：已全部完成。start / running / compact / stop / restart / 崩溃语义由 Claude 在本机隔离端口实测；10MB 日志下 `/logs` 性能、JSONL 字节只读与崩溃 stderr 的 UI 呈现由用户于 2026-08-17 人工验收通过。
 - [x] **admin 的 header 认证为死代码**：已修。`readToken()` 的 `Authorization: Bearer` / `x-caicai-admin-token` 分支因 middleware 只校验 cookie 且 matcher 覆盖 `/api/*` 而永不可达，已连同不可达的手工 cookie 解析一并删除；`isAuthorized` 收窄为只读 cookie，`/api/auth` 改用新的 `verifyToken`。**认证来源现已唯一化**，middleware 与路由层看同一个 cookie。脚本化调用 admin API 只能用 `Cookie: caicaiclaw_admin_token=<token>`。
+- [ ] **两处「设计已定但代码为空」的机制，首个真实渠道会立刻踩到**：① `dropReasonSchema` 里的 `"duplicate"` 无任何生产路径，`(channel, platformMessageId)` 去重未实现；② README 分流策略里的 `reply.maxChars` / `rateLimitPerMin`（L1 闸门）在代码中不存在。本地 `local` 渠道不会暴露它们（不重复投递、无平台限流），QQ 两条都会踩到。已纳入 feat-014 的 doneCriteria，此处保留以免被误读为「已实现」。
 - [ ] **agent WS（默认 8787）无认证**：admin 面板本身有 token，但 agent 的 WebSocket 端口没有 —— 任何能访问本机该端口的页面或进程都可以向 agent 发送输入，而 agent 持有 `exec` 工具。当前依赖「只监听 127.0.0.1」作为唯一边界。本次未扩大范围处理，改动 agent 传输层前应先决定是否引入握手认证。
 
 ## Decisions Made
@@ -258,6 +278,9 @@ pnpm tui
 - **传输层归属 client-core**：transport 提升到 `packages/client-core`，Web 与 TUI 共用，不在各端重复重连与解析逻辑。
 - **TUI 换行只做 Shift+Enter**，需 kitty 键盘协议；`ws_url` 仅进程内生效，不落盘。
   - 2026-08-17 更新：该决策在用户当时的终端（Windows Terminal + tmux 3.4）上不成立，Shift+Enter 无法与 Enter 区分。**用户决策：换用支持 kitty 协议的终端（WezTerm / kitty / Ghostty），代码保持不动。** 被否决的备选是把 Ctrl+J 提升为一等换行键并写进 `Composer` 提示文案 —— 那会让换行在所有终端可用，但引入第二个换行键位和额外的文案维护面。因此本决策原样保留：**换行依赖 kitty 键盘协议是一个明确的、已知的终端要求，不是缺陷**。
+- **首个真实外部渠道选定 QQ 开放平台（api-v2）**，取代原定的「个人博客或 bilibili 开放平台」。adapter 落在仓库内 `apps/adapter-qq`、入站走官方 WebSocket 网关、首批只做群聊 @ 与单聊。
+  - Context: 用户于 2026-08-19 指定平台并逐项确认了这三个选择。QQ 同时压到鉴权时效、重复投递、被动回复窗口三条约束，适合用来证伪「入站 WS 面 + 出站 MCP 面」这套契约。
+  - Alternatives considered: adapter 独立仓库（否决 —— 契约漂移逃出 `./init.sh` 覆盖）；Webhook 入站（否决 —— 需公网 HTTPS 回调与 Ed25519 校验，本机常驻形态得不偿失）；首批带上 QQ 频道（后置 —— 另一套 ID 体系与权限申请路径，会撑大首个渠道的接入面）。
 - **仓库不设 `test` 命令**：测试覆盖率不是完成门槛，行为变更靠与风险相称的手动验收，证据记录在本文件。
 
 ## Evidence of Completion

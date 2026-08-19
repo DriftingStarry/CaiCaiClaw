@@ -246,17 +246,22 @@
         },
         {
             "id": "feat-014",
-            "name": "M3-6 首个真实外部渠道",
-            "description": "按 adapter 形态接入第一个真实外部渠道（个人博客或 bilibili 开放平台），验证入站 WS 面与出站 MCP 面在真实平台约束下成立。",
+            "name": "M3-6 首个真实外部渠道：QQ 开放平台",
+            "description": "按 adapter 形态接入 QQ 开放平台机器人（api-v2）作为第一个真实外部渠道：新增仓库内独立进程 apps/adapter-qq，经官方 WebSocket 网关接入群聊 @ 与单聊两个场景，同时提供出站 MCP 面与入站 WS 面，验证两个契约在真实平台约束（access_token 时效、同一 msg_id 重复投递、被动回复窗口与 msg_seq、主动消息额度）下成立。QQ 频道（guild）与 Webhook 入站方式后置，详见 README 的「首个真实渠道：QQ 开放平台」。",
             "dependencies": [
                 "feat-013"
             ],
             "status": "not-started",
             "doneCriteria": [
-                "adapter 作为独立进程持有平台凭据与连接，同时提供出站 MCP 面与入站 WS 面；核心与 adapter 之间只有 ChannelEvent 与 MCP 工具两个契约",
-                "真实入站事件能进入正确车道并得到回复；出站动作按权限分级执行，公开发布走 L3 审批",
-                "凭据不进入日志、错误信息或事件负载",
-                "./init.sh 通过并记录真实渠道的手动验收"
+                "新增 apps/adapter-qq 独立进程，持有 AppID/AppSecret 并在 access_token（7200s，不随请求刷新）过期前主动续期；核心与 adapter 之间只有 ChannelEvent 与 MCP 工具两个契约，依赖方向为 apps/adapter-qq <- protocol, utils 且不依赖 agent-core，AGENTS.md 依赖表、根 tsconfig.json references、pnpm-workspace.yaml 与根 package.json 脚本同步",
+                "adapter 经官方 WebSocket 网关按 intents 位订阅 GROUP_AT_MESSAGE_CREATE 与 C2C_MESSAGE_CREATE，实现鉴权、心跳、resume 与断线重连，并落 channel.connected / channel.disconnected",
+                "入站归一化为 ChannelEvent：channel=\"qq\"，conversationId 为 qq:group/<group_openid> 或 qq:c2c/<user_openid>，kind 为 mention（群@）或 dm（单聊），platformMessageId 与 replyTo 取平台 msg_id，author.id 用 openid 且 isSelf 由 adapter 按自身 openid 判定，平台原始结构只进 payload（进日志不进 prompt）",
+                "同一 (channel, platformMessageId) 的重复投递在门口被去重，落 input.dropped 且 reason=\"duplicate\"；该 reason 目前存在于枚举但无任何代码产生，本 feature 补齐其生产路径",
+                "被动回复经输出路由投递：runtime 输出的 target.replyTo 由入站事件派生，adapter 据此带 msg_id 与递增 msg_seq 回复；超出被动窗口（群聊 5 分钟 / 单聊 60 分钟）或平台条数上限时明确失败并记录，不静默退化为主动消息",
+                "L1 闸门 reply.maxChars 与 rateLimitPerMin（README 已定但代码尚未实现）落地并对 qq 渠道生效：超长按配置裁剪、超频拒绝并记录，不静默丢弃",
+                "出站动作按权限分级执行：只读查询 L0，被动回复 L1（输出路由 + 上述闸门），主动消息（未带 msg_id）L2 且全量记录，富媒体与广播型发布 L3 走 admin 人工审批；未分级工具仍默认 L3",
+                "凭据不进入日志、错误信息、事件负载与 admin 展示：AppSecret 与 access_token 不出现在 history.jsonl、channel.* / outbound.* 事件及 adapter/server 的错误文本中；adapter 配置只从环境读取并同步 .env.example",
+                "./init.sh 通过，并记录 QQ 沙箱环境下的真实手动验收：群聊 @ 与单聊各至少一次真实往返（入站进入正确车道且回复真的抵达 QQ 客户端）、重复 msg_id 被去重、超窗口回复的失败表现、L3 动作经 admin 审批后才真正投递"
             ]
         },
         {

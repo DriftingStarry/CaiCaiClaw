@@ -1,6 +1,6 @@
 # CaiCaiClaw
 
-使用 TS + Langchain 构建的 agent, 主要用于学习 agent 范式以及满足自己的一些小灵感， 并计划接入我的个人博客，bilibili 开发者平台, etc... 实现 agent 自行探索，自行发布内容，和长期的记忆。
+使用 TS + Langchain 构建的 agent, 主要用于学习 agent 范式以及满足自己的一些小灵感， 并计划接入 QQ 开放平台，我的个人博客，bilibili 开发者平台, etc... 实现 agent 自行探索，自行发布内容，和长期的记忆。
 
 这个仓库将记录本菜菜实现的完整过程 ~~（如果能坚持下去的话）~~
 
@@ -376,6 +376,34 @@ agent 调 L3 tool
 
 history event schema 下沉到 `packages/utils` 的 `./history` subpath export（见 M0 对 utils 的定位）。原因：`apps/admin` 依赖方向不含 `agent-core`，若不下沉，admin 就得维护第二份手写校验 —— 核心改 schema 时面板会整片报「invalid event schema」，表现为「面板全红但 agent 正常」，极易误诊。切分线是「要不要 langchain」：schema 与纯函数 `parseHistoryLine` 归 utils，`BaseMessage` 序列化与 `RawHistoryStore` 留在 `agent-core`。
 
+### 首个真实渠道：QQ 开放平台
+
+**[已定] M3 的第一个真实外部渠道选定 QQ 开放平台机器人（[api-v2](https://bot.q.qq.com/wiki/develop/api-v2/)），首批只做群聊 @ 与单聊两个场景。** 选它是因为它一次压到了三条真实约束：鉴权有时效、平台按设计重复投递、被动回复有硬窗口 —— 正好用来验证入站 WS 面与出站 MCP 面在真实平台下确实成立，而不是只在假 adapter 上成立。
+
+`apps/adapter-qq` 是**仓库内**的独立进程（依赖方向 `apps/adapter-qq <- protocol, utils`，**不依赖 `agent-core`**），持有 AppID / AppSecret 与平台长连接。放进仓库是为了让 `./init.sh` 覆盖它、契约漂移能被 typecheck 抓到；「每渠道一进程、语言自由」的拓扑不变，只是首个 adapter 用 TS 写。
+
+**[已定] 入站走官方 WebSocket 网关**，按 intents 位订阅 `GROUP_AT_MESSAGE_CREATE` 与 `C2C_MESSAGE_CREATE`。不走 Webhook —— 那需要公网可达的 HTTPS 回调地址（端口限 80/443/8080/8443）加 Ed25519 签名校验，对本机常驻运行的形态是纯负担。`access_token` 有效期 7200s 且不随请求刷新，由 adapter 自行在过期前续期。
+
+归一化到 `ChannelEvent`：
+
+| ChannelEvent      | QQ 侧取值                                              |
+| ----------------- | ------------------------------------------------------ |
+| `channel`         | `"qq"`                                                 |
+| `conversationId`  | `qq:group/<group_openid>` 或 `qq:c2c/<user_openid>`    |
+| `kind`            | `mention`（群 @） / `dm`（单聊）                       |
+| `platformMessageId` | 平台 `msg_id`                                        |
+| `replyTo`         | 平台 `msg_id`（被动回复凭据）                          |
+| `author`          | `id` 用 openid；`isSelf` 由 adapter 按自身 openid 判定 |
+| `payload`         | 平台原始结构，只进日志不进 prompt                      |
+
+三条平台约束**不引入新抽象，而是把已定却尚未落地的机制填上**：
+
+- **重复投递** —— 平台会按设计重复推送相同 `msg_id`。去重键 `(channel, platformMessageId)` 早在数据形状里定下，`duplicate` 也早在 drop reason 枚举里，但**至今没有任何代码产生它**；QQ 是第一个真正需要它的渠道。
+- **被动回复窗口** —— 带 `msg_id` 的回复才算被动消息，群聊 5 分钟、单聊 60 分钟内有效，同一 `msg_id` 靠递增 `msg_seq` 多次回复。这正落在「回复来源渠道是输出路由」这条决策上：`target.replyTo` 由入站事件派生，adapter 把它翻译成 `msg_id` + `msg_seq`。**超窗口必须明确失败，不允许静默退化为主动消息** —— 主动消息是另一个权限级别，且有平台额度。
+- **L1 闸门** —— `reply.maxChars` 与 `rateLimitPerMin` 在分流策略里写了但同样尚未实现。到了真实渠道，没有它就等于回复侧没有任何限流。
+
+权限分级在 QQ 上的具体映射：**L0** 只读查询；**L1** 被动回复（输出路由 + 上述闸门）；**L2** 主动消息（未带 `msg_id`，受平台额度，全量记录）；**L3** 富媒体与广播型发布，走 admin 人工审批。未分级工具仍默认 L3。
+
 ### Web 后台（M3 同步交付）
 
 - **队列视图**：`lane_snapshot`（每车道状态 / turnId / conversationId / 排队数 / 本轮起始）与 `intake_snapshot`（每 conversation 的通用槽与保留槽占用、按 reason 分类的 `droppedCount`、最后活动、生效策略）。runtime 在状态迁移时推送，低频轮询兜底，避免断连后面板僵死。
@@ -387,7 +415,7 @@ JSONL 对后台严格只读不变：调试注入与审批决策都走 runtime �
 
 ### 明确不做
 
-同时直播聊天 + 玩游戏、房间级并发、快→深的反向插话（steering）、向量检索。**游戏不是消息渠道** —— 它需要自己 tick 率的感知循环，将来是第三条车道，与聊天**共享记忆与事件日志、不共享循环**。这正是「车道才是并发单元」的由来。
+同时直播聊天 + 玩游戏、房间级并发、快→深的反向插话（steering）、向量检索、QQ 频道（guild）接入、Webhook 入站方式。QQ 频道是另一套 ID 体系与权限申请路径，会让首个渠道的接入面明显变大，等群聊 / 单聊跑通后再谈。**游戏不是消息渠道** —— 它需要自己 tick 率的感知循环，将来是第三条车道，与聊天**共享记忆与事件日志、不共享循环**。这正是「车道才是并发单元」的由来。
 
 ## M4 · Pi 式运行时自我修改
 
