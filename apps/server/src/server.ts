@@ -202,7 +202,6 @@ export function createServer(serverConfig: ServerConfig, model?: AgentConfig["mo
                 const receivedAt = Date.now();
                 const admission = await runtime.enqueue({
                     ...message.event,
-                    author: { ...message.event.author, isSelf: false },
                     receivedAt,
                     requestId: message.requestId,
                 });

@@ -112,6 +112,16 @@ export function applyRawHistoryEvent(state: RawHistoryState, event: RawHistoryEv
         case "input.dropped": {
             if (state.knownInputIds.has(event.inputId)) throw new Error(`duplicate input ${event.inputId}`);
             state.knownInputIds.add(event.inputId);
+            const projection =
+                state.conversations.get(event.event.conversationId) ??
+                ({
+                    recent: [],
+                    lastActivityAt: event.createdAt,
+                    droppedCount: 0,
+                } satisfies RawHistoryConversationProjection);
+            projection.droppedCount += 1;
+            projection.lastActivityAt = event.createdAt;
+            state.conversations.set(event.event.conversationId, projection);
             break;
         }
         case "turn.started": {
