@@ -13,7 +13,8 @@
 - `95d9711`：server 保留 adapter 原始 `author.isSelf`，self_echo admission 可生效；`input.dropped` 回放按 conversation 累计 projection `droppedCount`。
 - `7457530`：fast/background 未配置时打印明确 fallback 日志。
 - `1f5886a`：fast agent 通过 turn context 回调把 defer 事件重新落 accepted 并投 deep queue。fake-model defer probe 通过：fast calls=2（tool call + follow-up）、deep calls=1、accepted=2、fast/deep turn 均出现。
-- 未完成：真实 WS intake disposition/streaming 验收；约 200 条弹幕期间无队头阻塞实测；compact/daydreaming 仅需 deep 空闲的并发验收。上述均需后续真实 runtime/WS 验收，不宣称已完成。
+- `eaa01b5`：run loop 改为 deep/fast 两个独立 lane worker，`executionState` 按 lane 隔离，慢 deep 不再阻塞 fast queue drain。slow deep + 200 个独立 fast conversation 压测通过：deep 约 327ms 完成前，200 个 fast turn 全部完成。注意同一 conversation 的 200 条会按设计合并为一个批次，不以 200 个 done 计数。
+- 未完成：真实 WS intake disposition/streaming 验收；compact/daydreaming 仅需 deep 空闲的并发验收。上述均需后续真实 runtime/WS 验收，不宣称已完成。
 
 ### feat-011 提交计划
 
