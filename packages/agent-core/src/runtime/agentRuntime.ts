@@ -45,6 +45,8 @@ const DEFAULT_COMPACTION_PROMPT_VERSION = "m2-v1";
 const DEFAULT_COMPACTION_SUMMARY_BUDGET = 16_000;
 const DEFAULT_DIGEST_SUMMARY_BUDGET = 2_000;
 const DEFAULT_TOOL_RESULT_PROJECTION_THRESHOLD = 8_000;
+const INBOUND_RATE_WINDOW_MS = 60_000; // 入站速率窗口为每分钟条数。
+const MAX_INBOUND_SAMPLES = 4096;
 const DEFAULT_DAYDREAMING_PROMPT = [
     "Reflect on the current memory and recent conversation context to update the agent's personality and self-narrative.",
     "Return only the complete new contents for Role.md as non-empty plain text.",
@@ -97,6 +99,7 @@ export class AgentRuntime {
     private readonly heartbeatMs: number;
     private readonly onOutput?: RuntimeOutputEmitter;
     private readonly history: RawHistoryStore;
+    private readonly inboundTimestamps = new Map<string, number[]>();
     // Runtime lane state is distinct from history.projection.activeTurns, which maps turn IDs to input IDs.
     private readonly activeTurns = new Map<Lane, TurnContext>();
     private readonly deferredFastTurns = new Set<string>();
@@ -390,6 +393,61 @@ export class AgentRuntime {
         return this.intake.effectivePolicies();
     }
 
+    public get inboundRates(): { channel: string; windowMs: number; count: number }[] {
+        const now = Date.now();
+        this.pruneInboundTimestamps(now);
+        return [...this.inboundTimestamps.entries()].map(([channel, timestamps]) => ({
+            channel,
+            windowMs: INBOUND_RATE_WINDOW_MS,
+            count: timestamps.length,
+        }));
+    }
+
+    // outbound 事件不带 channel，按 toolName 汇总是唯一无歧义的口径；视图可从 mcp__<adapterId>__ 前缀推断归属。
+    public get outboundStats(): {
+        toolName: string;
+        delivered: number;
+        failed: number;
+        lastError?: string;
+        lastErrorAt?: number;
+    }[] {
+        const stats = new Map<
+            string,
+            {
+                toolName: string;
+                delivered: number;
+                failed: number;
+                lastError?: string;
+                lastErrorAt?: number;
+            }
+        >();
+        for (const event of this.history.projection.outboundEvents) {
+            const stat = stats.get(event.toolName) ?? {
+                toolName: event.toolName,
+                delivered: 0,
+                failed: 0,
+            };
+            if (event.type === "delivered") {
+                stat.delivered += 1;
+            } else {
+                stat.failed += 1;
+                if (stat.lastErrorAt === undefined || event.createdAt >= stat.lastErrorAt) {
+                    stat.lastErrorAt = event.createdAt;
+                    if (event.message === undefined) delete stat.lastError;
+                    else stat.lastError = event.message;
+                }
+            }
+            stats.set(event.toolName, stat);
+        }
+        return [...stats.values()].map((stat) => ({
+            toolName: stat.toolName,
+            delivered: stat.delivered,
+            failed: stat.failed,
+            ...(stat.lastError === undefined ? {} : { lastError: stat.lastError }),
+            ...(stat.lastErrorAt === undefined ? {} : { lastErrorAt: stat.lastErrorAt }),
+        }));
+    }
+
     public get channelSnapshots(): ChannelSnapshot[] {
         return [...this.channelStates].map(([channel, state]) => ({
             channel,
@@ -404,6 +462,8 @@ export class AgentRuntime {
     public async enqueue(event: RuntimeInput): Promise<AdmissionResult> {
         this.assertAvailable();
         return await this.runExclusive(async () => {
+            // 速率使用本地 Date.now() 而非 adapter 的 receivedAt：后者可能有时钟偏差，本统计反映本地观测。
+            this.recordInboundTimestamp(event.channel, Date.now());
             const inputId = event.inputId ?? this.createId("input");
             const createdAt = event.receivedAt;
             const normalizedEvent: RuntimeInput = { ...event, inputId };
@@ -441,6 +501,27 @@ export class AgentRuntime {
             (admission.lane === "fast" ? this.fastQueue : this.queue).enqueue(normalizedEvent);
             return admission;
         });
+    }
+
+    private recordInboundTimestamp(channel: string, now: number): void {
+        const timestamps = this.inboundTimestamps.get(channel) ?? [];
+        const cutoff = now - INBOUND_RATE_WINDOW_MS;
+        const recentTimestamps = timestamps.filter((timestamp) => timestamp > cutoff);
+        recentTimestamps.push(now);
+        if (recentTimestamps.length > MAX_INBOUND_SAMPLES) {
+            recentTimestamps.splice(0, recentTimestamps.length - MAX_INBOUND_SAMPLES);
+        }
+        this.inboundTimestamps.set(channel, recentTimestamps);
+    }
+
+    private pruneInboundTimestamps(now: number): void {
+        const cutoff = now - INBOUND_RATE_WINDOW_MS;
+        for (const [channel, timestamps] of this.inboundTimestamps) {
+            const recentTimestamps = timestamps.filter((timestamp) => timestamp > cutoff);
+            if (recentTimestamps.length === 0) this.inboundTimestamps.delete(channel);
+            else if (recentTimestamps.length !== timestamps.length)
+                this.inboundTimestamps.set(channel, recentTimestamps);
+        }
     }
 
     public async run() {
