@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { AdapterPanel } from "../../src/components/AdapterPanel";
 import { ApprovalPanel } from "../../src/components/ApprovalPanel";
 import { ConnectionBadge } from "../../src/components/ConnectionBadge";
+import { DebugToolPanel } from "../../src/components/DebugToolPanel";
 import { InjectEventPanel } from "../../src/components/InjectEventPanel";
 import { LaneQueuePanel } from "../../src/components/LaneQueuePanel";
 import { useAgentClientStore } from "../../src/stores/useAgentClientStore";
@@ -18,6 +19,7 @@ export default function RuntimePage() {
     const channelSnapshot = useAgentClientStore((state) => state.channelSnapshot);
     const connectionStatus = useAgentClientStore((state) => state.connectionStatus);
     const connect = useAgentClientStore((state) => state.connect);
+    const callDebugTool = useAgentClientStore((state) => state.callDebugTool);
     const debugReceipts = useAgentClientStore((state) => state.debugReceipts);
     const disconnect = useAgentClientStore((state) => state.disconnect);
     const errors = useAgentClientStore((state) => state.errors);
@@ -60,6 +62,11 @@ export default function RuntimePage() {
                     <AdapterPanel channelSnapshot={channelSnapshot} />
                     <ApprovalPanel approvalSnapshot={approvalSnapshot} onDecide={decideApproval} />
                     <InjectEventPanel receipts={debugReceipts} onInject={injectEvent} />
+                    <DebugToolPanel
+                        tools={channelSnapshot?.tools ?? []}
+                        receipts={debugReceipts}
+                        onCall={callDebugTool}
+                    />
                 </section>
             </div>
         </main>

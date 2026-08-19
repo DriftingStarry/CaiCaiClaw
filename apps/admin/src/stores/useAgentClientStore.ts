@@ -9,17 +9,21 @@ import {
     type WebSocketFactory,
 } from "@caicaiclaw/client-core";
 import { WS_PROTOCOL_VERSION } from "@caicaiclaw/protocol";
-import { errorMessage } from "@caicaiclaw/utils";
+import { errorMessage, toJsonObject } from "@caicaiclaw/utils";
 import { create } from "zustand";
 import { getOrCreateClientId, setStoredClientId } from "../adapters/ws/clientIdentity";
 
 export type DebugReceipt = {
     requestId: string;
-    kind: "input";
+    kind: "input" | "tool";
     label: string;
     disposition?: "accepted" | "merged" | "dropped";
     reason?: string;
     batchId?: string;
+    permission?: "L0" | "L1" | "L2" | "L3";
+    outcome?: string;
+    approvalId?: string;
+    detail?: string;
     error?: string;
     createdAt: number;
 };
@@ -42,6 +46,7 @@ export type AgentClientStore = ClientState & {
     decideApproval: (approvalId: string, decision: "approve" | "deny") => void;
     debugReceipts: DebugReceipt[];
     injectEvent: (draft: InjectEventDraft) => void;
+    callDebugTool: (input: { toolName: string; argsJson: string; dryRun: boolean }) => void;
 };
 
 let wsClient: CaiCaiWsClient | undefined;
@@ -105,6 +110,17 @@ export const useAgentClientStore = create<AgentClientStore>((set) => ({
                             if (message.type === "error" && message.requestId) {
                                 const requestId = message.requestId;
                                 set((state) => patchDebugReceipt(state, requestId, { error: message.message }));
+                            }
+                            if (message.type === "debug_tool_result" && message.requestId) {
+                                const requestId = message.requestId;
+                                set((state) =>
+                                    patchDebugReceipt(state, requestId, {
+                                        permission: message.permission,
+                                        outcome: message.outcome,
+                                        ...(message.approvalId ? { approvalId: message.approvalId } : {}),
+                                        ...(message.detail ? { detail: message.detail } : {}),
+                                    }),
+                                );
                             }
                             if (message.type === "hello" && message.protocolVersion !== WS_PROTOCOL_VERSION) {
                                 wsClient?.disconnect();
@@ -203,6 +219,72 @@ export const useAgentClientStore = create<AgentClientStore>((set) => ({
                     ...(draft.platformMessageId ? { platformMessageId: draft.platformMessageId } : {}),
                     ...(draft.laneHint ? { laneHint: draft.laneHint } : {}),
                 },
+                requestId,
+            });
+        } catch (error) {
+            set((state) => patchDebugReceipt(state, requestId, { error: errorMessage(error) }));
+        }
+    },
+    callDebugTool: ({ toolName, argsJson, dryRun }) => {
+        const requestId = crypto.randomUUID();
+        const timestamp = Date.now();
+        const label = `${toolName}${dryRun ? " (dry-run)" : ""}`;
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(argsJson);
+        } catch (error) {
+            set((state) => ({
+                ...state,
+                debugReceipts: [
+                    ...state.debugReceipts,
+                    {
+                        requestId,
+                        kind: "tool" as const,
+                        label,
+                        createdAt: timestamp,
+                        error: `args JSON 解析失败：${errorMessage(error)}`,
+                    },
+                ].slice(-MAX_DEBUG_RECEIPTS),
+            }));
+            return;
+        }
+
+        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+            set((state) => ({
+                ...state,
+                debugReceipts: [
+                    ...state.debugReceipts,
+                    {
+                        requestId,
+                        kind: "tool" as const,
+                        label,
+                        createdAt: timestamp,
+                        error: "工具参数必须是非数组 JSON 对象",
+                    },
+                ].slice(-MAX_DEBUG_RECEIPTS),
+            }));
+            return;
+        }
+
+        set((state) => ({
+            ...state,
+            debugReceipts: [
+                ...state.debugReceipts,
+                { requestId, kind: "tool" as const, label, createdAt: timestamp },
+            ].slice(-MAX_DEBUG_RECEIPTS),
+        }));
+
+        if (!wsClient) {
+            set((state) => patchDebugReceipt(state, requestId, { error: "WebSocket 未连接，工具未发送" }));
+            return;
+        }
+
+        try {
+            wsClient.send({
+                type: "debug_tool_call",
+                toolName,
+                args: toJsonObject(parsed),
+                dryRun,
                 requestId,
             });
         } catch (error) {
