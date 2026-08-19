@@ -2,7 +2,7 @@ import { z } from "zod";
 import { channelEventSchema } from "@caicaiclaw/utils/history";
 import type { ChannelEvent } from "@caicaiclaw/utils/history";
 
-export const WS_PROTOCOL_VERSION = 6;
+export const WS_PROTOCOL_VERSION = 7;
 export const MAX_CLIENT_ID_LENGTH = 64;
 export const CLIENT_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
@@ -226,6 +226,99 @@ export const serverDaydreamingResultMessageSchema = z
     })
     .strict();
 
+export const serverLaneSnapshotMessageSchema = z
+    .object({
+        type: z.literal("lane_snapshot"),
+        createdAt: z.number(),
+        lanes: z.array(
+            z.object({
+                lane: laneSchema,
+                busy: z.boolean(),
+                turnId: z.string().min(1).optional(),
+                conversationId: z.string().min(1).optional(),
+                queueDepth: z.number().int().nonnegative(),
+            }),
+        ),
+    })
+    .strict();
+
+export const serverIntakeSnapshotMessageSchema = z
+    .object({
+        type: z.literal("intake_snapshot"),
+        createdAt: z.number(),
+        conversations: z.array(
+            z.object({
+                channel: z.string().min(1),
+                conversationId: z.string().min(1),
+                generalPending: z.number().int().nonnegative(),
+                generalSlots: z.number().int().nonnegative(),
+                priorityPending: z.number().int().nonnegative(),
+                reservedSlots: z.number().int().nonnegative(),
+                lane: laneSchema,
+                oldestReceivedAt: z.number().int().nonnegative(),
+                batchIds: z.array(z.string().min(1)),
+                droppedCount: z.number().int().nonnegative(),
+                droppedByReason: z.record(z.string(), z.number().int().nonnegative()),
+            }),
+        ),
+        policies: z.array(
+            z.object({
+                channel: z.string().min(1),
+                isDefaults: z.boolean(),
+                mode: z.string().min(1),
+                generalSlots: z.number().int().nonnegative(),
+                reservedSlots: z.number().int().nonnegative(),
+                mergeWindowMs: z.number().int().nonnegative(),
+                alwaysKeep: z.array(z.string()),
+                lane: z.record(z.string(), laneSchema),
+                reply: z.object({
+                    maxChars: z.number().int().nonnegative(),
+                    rateLimitPerMin: z.number().int().nonnegative(),
+                }),
+            }),
+        ),
+    })
+    .strict();
+
+export const serverChannelSnapshotMessageSchema = z
+    .object({
+        type: z.literal("channel_snapshot"),
+        createdAt: z.number(),
+        channels: z.array(
+            z.object({
+                channel: z.string().min(1),
+                connected: z.boolean(),
+                selfId: z.string().min(1).optional(),
+                lastReason: z.string().min(1).optional(),
+                lastResumable: z.boolean().optional(),
+                lastChangedAt: z.number().int().nonnegative(),
+            }),
+        ),
+        tools: z.array(
+            z.object({
+                name: z.string().min(1),
+                permission: z.enum(["L0", "L1", "L2", "L3"]),
+            }),
+        ),
+        inboundRates: z.array(
+            z.object({
+                channel: z.string().min(1),
+                windowMs: z.number().int().positive(),
+                count: z.number().int().nonnegative(),
+            }),
+        ),
+        outbound: z.array(
+            z.object({
+                toolName: z.string().min(1),
+                delivered: z.number().int().nonnegative(),
+                failed: z.number().int().nonnegative(),
+                lastError: z.string().min(1).optional(),
+                lastErrorAt: z.number().int().nonnegative().optional(),
+            }),
+        ),
+    })
+    .strict();
+
 export const serverMessageSchema = z.discriminatedUnion("type", [
     serverHelloMessageSchema,
     serverAckMessageSchema,
@@ -242,6 +335,9 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
     serverPongMessageSchema,
     serverCompactResultMessageSchema,
     serverDaydreamingResultMessageSchema,
+    serverLaneSnapshotMessageSchema,
+    serverIntakeSnapshotMessageSchema,
+    serverChannelSnapshotMessageSchema,
 ]);
 
 export type ServerMessage = z.infer<typeof serverMessageSchema>;

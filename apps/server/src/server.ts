@@ -19,6 +19,8 @@ import { fileURLToPath } from "node:url";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { McpToolHost } from "./mcpHost";
 
+const SNAPSHOT_POLL_INTERVAL_MS = 5_000; // 低频轮询是快照推送的兜底路径，不是主路径。
+
 export type RunningServer = {
     close: () => Promise<void>;
     connectMcpAdapter: (adapterId: string, transport: Transport) => Promise<void>;
@@ -101,8 +103,50 @@ export function createServer(
             if (event.type === "done") {
                 scheduleCompactIfDue();
             }
+            if (
+                event.type === "input_accepted" ||
+                event.type === "input_dropped" ||
+                event.type === "turn_start" ||
+                event.type === "done" ||
+                event.type === "error"
+            ) {
+                // 只在状态迁移时推送；assistant_delta/reasoning_delta 是高频流式事件，不能触发快照洪水。
+                buildAndSendSnapshots();
+            }
         },
     });
+
+    function buildAndSendSnapshots(): void {
+        try {
+            const createdAt = Date.now();
+            const mcpSnapshot = mcpHost.snapshot();
+            sendToObservers({
+                type: "lane_snapshot",
+                createdAt,
+                lanes: runtime.laneSnapshots,
+            });
+            sendToObservers({
+                type: "intake_snapshot",
+                createdAt,
+                conversations: runtime.intakeSnapshots,
+                policies: runtime.effectivePolicies,
+            });
+            sendToObservers({
+                type: "channel_snapshot",
+                createdAt,
+                channels: runtime.channelSnapshots,
+                tools: Object.keys(mcpSnapshot.toolsByName).map((name) => ({
+                    name,
+                    // 未声明权限的工具按 runtime 的默认兜底显示为 L3，确保视图呈现实际生效级别。
+                    permission: mcpSnapshot.permissionsByName[name] ?? "L3",
+                })),
+                inboundRates: runtime.inboundRates,
+                outbound: runtime.outboundStats,
+            });
+        } catch (error) {
+            console.error(`[snapshot] push failed: ${safeErrorMessage(error)}`);
+        }
+    }
 
     async function refreshMcpTools(): Promise<void> {
         const snapshot = mcpHost.snapshot();
@@ -201,6 +245,7 @@ export function createServer(
                     // adapter 生命周期落 JSONL：连接状态是事件，不是内存旁路状态。
                     if (connection.role.role === "adapter") {
                         await runtime.recordChannelConnected(connection.role.channel);
+                        buildAndSendSnapshots();
                     }
                     return;
                 }
@@ -285,7 +330,8 @@ export function createServer(
                 // 传输层断开对平台侧是否可 resume 无从判断，交由 adapter 自己汇报，这里只记事实。
                 void runtime
                     .recordChannelDisconnected(role.channel, "adapter websocket closed", false)
-                    .catch((error) => console.error(`[ws:${clientId}/${connectionId}] ${errorMessage(error)}`));
+                    .catch((error) => console.error(`[ws:${clientId}/${connectionId}] ${errorMessage(error)}`))
+                    .finally(() => buildAndSendSnapshots());
             }
         });
 
@@ -304,9 +350,15 @@ export function createServer(
         console.error(`[ws] ${errorMessage(error)}`);
     });
 
+    const snapshotPollTimer = setInterval(() => {
+        if (!closing) buildAndSendSnapshots();
+    }, SNAPSHOT_POLL_INTERVAL_MS);
+    snapshotPollTimer.unref();
+
     return {
         close: async () => {
             closing = true;
+            clearInterval(snapshotPollTimer);
             const serverClosed = new Promise<void>((resolve, reject) => {
                 wss.close((error) => (error ? reject(error) : resolve()));
             });
