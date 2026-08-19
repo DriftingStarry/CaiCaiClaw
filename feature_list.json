@@ -214,14 +214,15 @@
             "dependencies": [
                 "feat-011"
             ],
-            "status": "in-progress",
+            "status": "done",
             "doneCriteria": [
                 "history_query 支持按 conversationId / channel / kind / 时间区间 / authorId 过滤与 offset+limit 分页，缺失与越界返回明确错误，且不能退化为任意文件读取",
                 "heartbeat 为有新活动的 conversation 生成极短 digest 并落 conversation.digested，使用 background model",
                 "深度车道上下文注入的是跨渠道社交近况汇总而非原始弹幕；digest 不自动回写 Memory.md，长期事实仍只能由 daydreaming 写入",
                 "context.compacted 只服务深度车道，快车道 conversation 不进 checkpoint",
                 "./init.sh 通过并记录深度车道能复述近期跨渠道社交活动的验收"
-            ]
+            ],
+            "evidence": "已完成。提交：2659a78 受限 history_query 工具；cd1e094 conversation.digested 契约与回放投影；21eee0f background heartbeat digest、每 conversation 活动 sequence 校验、锁外模型生成/锁内 cutoff recheck、deep-only 社交近况注入与 digestSummaryBudget。./init.sh 通过。packages/agent-core 临时 fake-model probe 输出 {\"digests\":3,\"deepCalls\":6,\"fastCalls\":0}，验证两 conversation digest、后续活动再次摘要、Memory.md 字节不变、回放可用与 deep context 注入；probe 已删除。"
         },
         {
             "id": "feat-013",

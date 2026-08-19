@@ -3,7 +3,7 @@
 ## Current State
 
 **Last Updated:** 2026-08-19
-**Active Feature:** feat-012（M3-4 历史查询工具与社交近况）进行中。feat-011 已完成：intake 与双车道、真实 WS disposition/fast streaming、slow deep 下 200 fast、deep-idle maintenance、并发 checkpoint 的排它 transaction 及重启回放均有证据；提交链至 `c26e880`，状态证据 `cae833e`。本次仅实现只读 history_query、heartbeat digest 与深车道社交近况，不提前接入 MCP/审批。
+**Active Feature:** feat-012（M3-4 历史查询工具与社交近况）已完成。feat-011 已完成：intake 与双车道、真实 WS disposition/fast streaming、slow deep 下 200 fast、deep-idle maintenance、并发 checkpoint 的排它 transaction 及重启回放均有证据；提交链至 `c26e880`，状态证据 `cae833e`。本次仅实现只读 history_query、heartbeat digest 与深车道社交近况，不提前接入 MCP/审批。
 
 ### feat-012 提交计划
 
@@ -12,6 +12,13 @@
 3. **Heartbeat digest 与深上下文**：background model 为活动 conversation 生成有界 digest，深 lane 注入跨渠道社交近况且不写 Memory.md；快车道不进 checkpoint。标题：`feat(agent-core): 注入社交近况并调度 digest`。验证：`./init.sh` 与 fake-model heartbeat/deep-context probe。
 
 拆分依据：受限查询工具独立于 digest；事件 schema 先于调度行为；最终行为单元在契约稳定后接入。
+
+### feat-012 完成证据
+
+- `2659a78`：history_query 结构化过滤、分页与限定 JSONL 读取。
+- `cd1e094`：`conversation.digested` schema、projection 与严格回放。
+- `21eee0f`：background heartbeat digest、每 conversation 活动 sequence 校验、锁外模型生成/锁内 cutoff recheck、deep-only 社交近况注入与 digestSummaryBudget。
+- `./init.sh` 通过；package-scope fake-model probe 输出 `{"digests":3,"deepCalls":6,"fastCalls":0}`，验证两 conversation 摘要、后续活动再次摘要、Memory.md 不变与 deep context 注入；临时 probe 已删除。`fastCalls:0` 来自默认 deep intake policy，未伪造 fast lane 调用证据。
 
 ### feat-011 当前实现证据
 
