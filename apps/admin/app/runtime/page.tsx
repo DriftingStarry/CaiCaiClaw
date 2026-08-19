@@ -2,6 +2,7 @@
 
 import { Alert, Space, Typography } from "antd";
 import { useEffect } from "react";
+import { AdapterPanel } from "../../src/components/AdapterPanel";
 import { ConnectionBadge } from "../../src/components/ConnectionBadge";
 import { LaneQueuePanel } from "../../src/components/LaneQueuePanel";
 import { useAgentClientStore } from "../../src/stores/useAgentClientStore";
@@ -10,6 +11,7 @@ import { useAgentSupervisorPolling, useAgentSupervisorStore } from "../../src/st
 export default function RuntimePage() {
     useAgentSupervisorPolling();
     const clientId = useAgentClientStore((state) => state.clientId);
+    const channelSnapshot = useAgentClientStore((state) => state.channelSnapshot);
     const connectionStatus = useAgentClientStore((state) => state.connectionStatus);
     const connect = useAgentClientStore((state) => state.connect);
     const disconnect = useAgentClientStore((state) => state.disconnect);
@@ -49,6 +51,7 @@ export default function RuntimePage() {
                 {errors.at(-1) ? <Alert type="error" message={errors.at(-1)} showIcon /> : null}
                 <section className="flex flex-col gap-4">
                     <LaneQueuePanel intakeSnapshot={intakeSnapshot} laneSnapshot={laneSnapshot} />
+                    <AdapterPanel channelSnapshot={channelSnapshot} />
                 </section>
             </div>
         </main>
