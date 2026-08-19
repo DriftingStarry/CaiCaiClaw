@@ -63,6 +63,8 @@ export const HISTORY_EVENT_TYPES = [
     "approval.expired",
     "outbound.delivered",
     "outbound.failed",
+    "channel.connected",
+    "channel.disconnected",
     "turn.started",
     "tool.started",
     "tool.completed",
@@ -158,6 +160,29 @@ export const rawHistoryEventSchema = z.discriminatedUnion("type", [
         inputId: z.string().min(1),
         event: channelEventSchema,
         reason: z.enum(["buffer_full", "priority_buffer_full", "lane_drop", "self_echo", "duplicate"]),
+    }),
+    z.object({
+        version: z.literal(HISTORY_VERSION),
+        sequence: z.number().int().positive(),
+        eventId: z.string().min(1),
+        type: z.literal("channel.connected"),
+        createdAt: z.number().int().nonnegative(),
+        channel: z.string().min(1),
+        // adapter 自身在平台上的身份（QQ 为 bot openid），用于回声抑制的 isSelf 判定溯源。
+        selfId: z.string().min(1).optional(),
+        // 本次连接是补发遗漏事件的 resume，还是全新登录态。
+        resumed: z.boolean(),
+    }),
+    z.object({
+        version: z.literal(HISTORY_VERSION),
+        sequence: z.number().int().positive(),
+        eventId: z.string().min(1),
+        type: z.literal("channel.disconnected"),
+        createdAt: z.number().int().nonnegative(),
+        channel: z.string().min(1),
+        reason: z.string().min(1),
+        // 平台语义上是否可 resume；false 表示需要重新登录态或已彻底放弃。
+        resumable: z.boolean(),
     }),
     z.object({
         version: z.literal(HISTORY_VERSION),

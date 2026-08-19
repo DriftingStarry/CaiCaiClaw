@@ -69,6 +69,14 @@ export type RawHistoryConversationProjection = {
     digestCoveredSequence?: number;
 };
 
+export type RawHistoryChannelProjection = {
+    connected: boolean;
+    selfId?: string;
+    lastReason?: string;
+    lastResumable?: boolean;
+    lastChangedAt: number;
+};
+
 export type RawHistoryState = {
     committedTurns: RawHistoryTurn[];
     pendingInputs: Map<string, RawHistoryInput>;
@@ -93,6 +101,8 @@ export type RawHistoryState = {
     approvalUpdates: ApprovalUpdate[];
     outboundEvents: RawHistoryOutboundEvent[];
     conversations: Map<string, RawHistoryConversationProjection>;
+    /** 每个渠道的最新连接状态，供 adapter 视图与回声抑制溯源使用。 */
+    channels: Map<string, RawHistoryChannelProjection>;
     lastSequence: number;
 };
 
@@ -116,6 +126,7 @@ export function createEmptyRawHistoryState(): RawHistoryState {
         approvalUpdates: [],
         outboundEvents: [],
         conversations: new Map(),
+        channels: new Map(),
         lastSequence: 0,
     };
 }
@@ -182,6 +193,24 @@ export function applyRawHistoryEvent(state: RawHistoryState, event: RawHistoryEv
                 approvalId: event.approvalId,
             });
             break;
+        case "channel.connected":
+            state.channels.set(event.channel, {
+                connected: true,
+                ...(event.selfId === undefined ? {} : { selfId: event.selfId }),
+                lastChangedAt: event.createdAt,
+            });
+            break;
+        case "channel.disconnected": {
+            const previous = state.channels.get(event.channel);
+            state.channels.set(event.channel, {
+                connected: false,
+                ...(previous?.selfId === undefined ? {} : { selfId: previous.selfId }),
+                lastReason: event.reason,
+                lastResumable: event.resumable,
+                lastChangedAt: event.createdAt,
+            });
+            break;
+        }
         case "input.accepted": {
             if (state.knownInputIds.has(event.inputId)) {
                 throw new Error(`duplicate input ${event.inputId}`);

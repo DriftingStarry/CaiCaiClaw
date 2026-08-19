@@ -197,6 +197,10 @@ export function createServer(
                         throw new Error("admin connections require CAICAI_ADMIN_TOKEN authentication");
                     }
                     connection.role = toConnectionRole(message);
+                    // adapter 生命周期落 JSONL：连接状态是事件，不是内存旁路状态。
+                    if (connection.role.role === "adapter") {
+                        await runtime.recordChannelConnected(connection.role.channel);
+                    }
                     return;
                 }
 
@@ -275,6 +279,13 @@ export function createServer(
 
         socket.on("close", () => {
             clients.delete(connectionId);
+            const role = connection.role;
+            if (role?.role === "adapter") {
+                // 传输层断开对平台侧是否可 resume 无从判断，交由 adapter 自己汇报，这里只记事实。
+                void runtime
+                    .recordChannelDisconnected(role.channel, "adapter websocket closed", false)
+                    .catch((error) => console.error(`[ws:${clientId}/${connectionId}] ${errorMessage(error)}`));
+            }
         });
 
         socket.on("error", (error) => {

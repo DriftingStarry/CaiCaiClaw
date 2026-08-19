@@ -286,6 +286,36 @@ export class AgentRuntime {
         });
     }
 
+    /**
+     * 记录 adapter 生命周期。渠道连接状态是 JSONL 里的事件，不是内存里的旁路状态——
+     * admin 的 adapter 视图与事后追溯都从这里派生。
+     */
+    public async recordChannelConnected(channel: string, options: { selfId?: string; resumed?: boolean } = {}) {
+        this.assertAvailable();
+        await this.history.append({
+            type: "channel.connected",
+            createdAt: Date.now(),
+            channel,
+            ...(options.selfId === undefined ? {} : { selfId: options.selfId }),
+            resumed: options.resumed ?? false,
+        });
+    }
+
+    public async recordChannelDisconnected(channel: string, reason: string, resumable: boolean) {
+        this.assertAvailable();
+        await this.history.append({
+            type: "channel.disconnected",
+            createdAt: Date.now(),
+            channel,
+            reason: reason || "disconnected",
+            resumable,
+        });
+    }
+
+    public get channelStates() {
+        return this.history.projection.channels;
+    }
+
     public async enqueue(event: RuntimeInput): Promise<AdmissionResult> {
         this.assertAvailable();
         return await this.runExclusive(async () => {
