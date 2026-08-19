@@ -137,6 +137,9 @@ export class AgentRuntime {
 
         this.history.load();
 
+        // 回放出的平台消息 id 预热去重集合，否则重启后平台的重复投递会被放行一次。
+        this.intake.seedSeenPlatformMessages(this.history.projection.seenPlatformMessages);
+
         this.loadSystemPrompt();
 
         this.runtimeToolsByName = {

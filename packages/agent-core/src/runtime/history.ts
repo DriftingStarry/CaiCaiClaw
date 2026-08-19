@@ -1,6 +1,8 @@
 import { AIMessage, BaseMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
+import type { ChannelEvent } from "@caicaiclaw/utils/history";
 import { RawHistoryEvent, RawHistoryInput } from "./historyEvents";
 import { restoreStoredMessages, serializeHistoryMessages } from "./historyMessages";
+import { platformDedupeKey } from "./intake";
 
 const MAX_CONVERSATION_RECENT_MESSAGES = 30;
 const MAX_APPROVAL_UPDATES = 30;
@@ -76,6 +78,11 @@ export type RawHistoryState = {
     knownInputIds: Set<string>;
     knownTurnIds: Set<string>;
     knownEventIds: Set<string>;
+    /**
+     * 已受理或已按去重拒收过的 (channel, platformMessageId)，用于重启后仍能识别平台重复投递。
+     * QQ 等渠道按设计会重复推送相同 msg_id，仅靠进程内状态在重启后会放行一次重复。
+     */
+    seenPlatformMessages: Set<string>;
     failedTurns: Map<string, string>;
     interruptedInputIds: Set<string>;
     interruptedTurnIds: Set<string>;
@@ -99,6 +106,7 @@ export function createEmptyRawHistoryState(): RawHistoryState {
         knownInputIds: new Set(),
         knownTurnIds: new Set(),
         knownEventIds: new Set(),
+        seenPlatformMessages: new Set(),
         failedTurns: new Map(),
         interruptedInputIds: new Set(),
         interruptedTurnIds: new Set(),
@@ -186,6 +194,7 @@ export function applyRawHistoryEvent(state: RawHistoryState, event: RawHistoryEv
             }
 
             state.knownInputIds.add(event.inputId);
+            rememberPlatformMessage(state, event.event);
             state.pendingInputs.set(event.inputId, {
                 inputId: event.inputId,
                 event: event.event,
@@ -201,6 +210,7 @@ export function applyRawHistoryEvent(state: RawHistoryState, event: RawHistoryEv
         case "input.dropped": {
             if (state.knownInputIds.has(event.inputId)) throw new Error(`duplicate input ${event.inputId}`);
             state.knownInputIds.add(event.inputId);
+            rememberPlatformMessage(state, event.event);
             const projection =
                 state.conversations.get(event.event.conversationId) ??
                 ({
@@ -433,6 +443,16 @@ function assertPreservedTurnSuffix(
 function appendApprovalUpdate(state: RawHistoryState, update: ApprovalUpdate): void {
     state.approvalUpdates.push(update);
     if (state.approvalUpdates.length > MAX_APPROVAL_UPDATES) state.approvalUpdates.shift();
+}
+
+/**
+ * 记录 (channel, platformMessageId) 去重键。没有 platformMessageId 的输入（本地、admin 调试）
+ * 无法去重，直接跳过。键由 intake 侧的同一个函数生成，避免两处拼接方式漂移。
+ */
+function rememberPlatformMessage(state: RawHistoryState, event: ChannelEvent): void {
+    const key = platformDedupeKey(event);
+    if (key === undefined) return;
+    state.seenPlatformMessages.add(key);
 }
 
 function toComparableStoredMessages(messages: BaseMessage[]) {

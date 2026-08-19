@@ -25,6 +25,12 @@ const channelPolicySchema = z.object({
     intake: intakeConfigSchema.default(defaultIntakeConfig),
 });
 
+/**
+ * 已见过的 (channel, platformMessageId) 上限。平台按设计会重复推送相同消息 id，
+ * 去重键必须跨 turn 存活；但不能无界增长，故按 FIFO 截断最早的记录。
+ */
+const DEDUPE_CAPACITY = 4096;
+
 export const intakePolicySchema = z.object({
     channels: z.record(z.string(), channelPolicySchema).default({}),
     defaults: z
@@ -41,15 +47,35 @@ export type AdmissionResult =
     | { disposition: "merged"; lane: Lane; batchId: string }
     | { disposition: "dropped"; lane: Lane; reason: DropReason };
 
+/**
+ * 去重键为 (channel, platformMessageId)。没有 platformMessageId 的事件（本地输入、
+ * admin 调试注入）无法去重，返回 undefined 表示跳过该判定而不是当作同一个键。
+ *
+ * 分隔符用 NUL：它不可能出现在 channel 名或平台消息 id 里，避免拼接歧义。
+ * 回放侧（history.ts）必须用同一个函数生成键，否则重启后预热的键永远匹配不上。
+ */
+export function platformDedupeKey(event: { channel: string; platformMessageId?: string }): string | undefined {
+    if (event.platformMessageId === undefined) return undefined;
+    return `${event.channel}\u0000${event.platformMessageId}`;
+}
+
 type Pending = { event: RuntimeInput; lane: Lane; batchId?: string };
 
 export class IntakeController {
     private readonly pending: Pending[] = [];
     private readonly policy: IntakePolicy;
+    private readonly seen = new Set<string>();
     private nextBatch = 1;
 
     public constructor(policy: IntakePolicy = intakePolicySchema.parse({})) {
         this.policy = policy;
+    }
+
+    /**
+     * 用回放得到的 (channel, platformMessageId) 键预热去重集合，使重启后仍能识别平台重复投递。
+     */
+    public seedSeenPlatformMessages(keys: Iterable<string>): void {
+        for (const key of keys) this.remember(key);
     }
 
     public admit(event: RuntimeInput): AdmissionResult {
@@ -57,6 +83,14 @@ export class IntakeController {
         const intake = channel?.intake ?? this.policy.defaults.intake;
         const lane = channel?.lane[event.kind] ?? event.laneHint ?? channel?.lane.chat ?? this.policy.defaults.lane;
         if (event.author.isSelf) return { disposition: "dropped", lane, reason: "self_echo" };
+
+        // 去重先于缓冲判定：重复投递不该占用槽位，也不该因缓冲满而被记成另一种 reason。
+        const dedupeKey = platformDedupeKey(event);
+        if (dedupeKey !== undefined) {
+            if (this.seen.has(dedupeKey)) return { disposition: "dropped", lane, reason: "duplicate" };
+            this.remember(dedupeKey);
+        }
+
         if (intake.mode === "lossless") {
             this.pending.push({ event, lane });
             return { disposition: "accepted", lane };
@@ -106,6 +140,13 @@ export class IntakeController {
         return (this.policy.channels[channelName]?.intake ?? this.policy.defaults.intake).alwaysKeep.includes(
             event.kind,
         );
+    }
+
+    private remember(key: string): void {
+        this.seen.add(key);
+        if (this.seen.size <= DEDUPE_CAPACITY) return;
+        const oldest = this.seen.values().next();
+        if (!oldest.done) this.seen.delete(oldest.value);
     }
 }
 
